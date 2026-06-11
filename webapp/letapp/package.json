@@ -1,0 +1,44 @@
+{
+  "name": "letapp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@iconify/vue": "^5.0.0",
+    "@jsonlee_12138/markdown-it-mermaid": "^0.0.6",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.1.11",
+    "echarts": "^6.0.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-anchor": "^9.2.0",
+    "markdown-it-attrs": "^4.3.1",
+    "markdown-it-container": "^4.0.0",
+    "markdown-it-expand-tabs": "^1.0.13",
+    "markdown-it-footnote": "^4.0.0",
+    "markdown-it-mark": "^4.0.0",
+    "markdown-it-sup": "^2.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "pinia": "^3.0.4",
+    "prismjs": "^1.30.0",
+    "tailwindcss": "^4.1.17",
+    "vue": "^3.5.24"
+  },
+  "devDependencies": {
+    "@types/markdown-it-container": "^2.0.10",
+    "@types/markdown-it-footnote": "^3.0.4",
+    "@types/node": "^24.10.0",
+    "@types/prismjs": "^1.26.5",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "naive-ui": "^2.43.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.11",
+    "vue-router": "^4.6.3",
+    "vue-tsc": "^3.1.3"
+  }
+}
