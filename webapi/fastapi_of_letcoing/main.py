@@ -108,6 +108,21 @@ app.config['IOSCLUB_REDIRECT_URI'] = os.environ.get('IOSCLUB_REDIRECT_URI')
 app.config['OIDC_PROVIDERS'] = _load_oidc_providers_config()
 
 
+@app.get('/')
+def index():
+    return {
+        'service': 'LetCoding API',
+        'status': 'ok',
+        'docs': '/swagger/',
+        'health': '/healthz',
+    }
+
+
+@app.get('/healthz')
+def healthcheck():
+    return {'status': 'ok'}
+
+
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get('Origin')
