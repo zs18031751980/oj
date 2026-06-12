@@ -15,8 +15,16 @@ from core.service_config import setup_services
 from interfaces.service_interfaces import IOIDCService
 
 
-BACKEND_DOTENV_PATH = Path(__file__).resolve().with_name('.env')
-ROOT_DOTENV_PATH = Path(__file__).resolve().parents[2] / '.env'
+CURRENT_FILE_PATH = Path(__file__).resolve()
+BACKEND_DOTENV_PATH = CURRENT_FILE_PATH.with_name('.env')
+
+# In local development the repo root is two levels above this file.
+# In Zeabur the service may be mounted much shallower, so guard the lookup.
+ROOT_DOTENV_PATH = (
+    CURRENT_FILE_PATH.parents[2] / '.env'
+    if len(CURRENT_FILE_PATH.parents) > 2
+    else BACKEND_DOTENV_PATH
+)
 
 if BACKEND_DOTENV_PATH.exists():
     load_dotenv(BACKEND_DOTENV_PATH, override=False)
