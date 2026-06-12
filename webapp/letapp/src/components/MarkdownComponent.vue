@@ -1,53 +1,57 @@
 <script setup lang="ts">
-import {nextTick, ref, watch, computed, onMounted, withDefaults} from "vue";
-import {Icon} from "@iconify/vue";
-
-import MarkdownIt from 'markdown-it'
-import markdownitFootnote from 'markdown-it-footnote'
-import markdownitTaskList from 'markdown-it-task-lists'
-import markdownitAttrs from 'markdown-it-attrs'
-import mdExpandTabs from 'markdown-it-expand-tabs'
-import mdSup from 'markdown-it-sup'
-import mdSub from 'markdown-it-sub'
-import mdMark from 'markdown-it-mark'
-import markdownItAnchor from 'markdown-it-anchor'
-import markdownItContainer from 'markdown-it-container'
-
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, withDefaults } from 'vue';
+import { Icon } from '@iconify/vue';
+import { useRoute } from 'vue-router';
+import MarkdownIt from 'markdown-it';
+import markdownitFootnote from 'markdown-it-footnote';
+import markdownitTaskList from 'markdown-it-task-lists';
+import markdownitAttrs from 'markdown-it-attrs';
+import mdExpandTabs from 'markdown-it-expand-tabs';
+import mdSup from 'markdown-it-sup';
+import mdSub from 'markdown-it-sub';
+import mdMark from 'markdown-it-mark';
+import markdownItAnchor from 'markdown-it-anchor';
+import markdownItContainer from 'markdown-it-container';
 import markdownItMermaid from '@jsonlee_12138/markdown-it-mermaid';
-import Prism from "prismjs"
-import "prismjs/components/prism-bash"
-import "prismjs/components/prism-c"
-import "prismjs/components/prism-cpp"
-import "prismjs/components/prism-css"
-import "prismjs/components/prism-go"
-import "prismjs/components/prism-java"
-import "prismjs/components/prism-json"
-import "prismjs/components/prism-python"
-import "prismjs/components/prism-rust"
-import "prismjs/components/prism-typescript"
-import {useRoute} from "vue-router";
+import Prism from 'prismjs';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-c';
+import 'prismjs/components/prism-cpp';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-go';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-rust';
+import 'prismjs/components/prism-typescript';
 
 interface Content {
-  title: string
-  date: string
-  watch: number
-  content: string,
-  identity?: string
+  title: string;
+  date: string;
+  watch: number;
+  content: string;
+  identity?: string;
+}
+
+interface HeadingItem {
+  id: string;
+  text: string;
+  level: number;
+  href: string;
+  children: HeadingItem[];
 }
 
 const props = withDefaults(defineProps<{
-  content?: Content
-  showNav?: boolean
+  content?: Content;
+  showNav?: boolean;
 }>(), {
-  showNav: true
-})
+  showNav: true,
+});
 
 const route = useRoute();
+const headings = ref<HeadingItem[]>([]);
+const html = ref('');
 
-// 存储标题结构
-const headings = ref<Array<{ id: string; text: string; level: number; href: string; children: any[] }>>([])
-
-// 创建 markdown-it 实例
 const normalizeLanguage = (language: string) => {
   const aliases: Record<string, string> = {
     js: 'javascript',
@@ -56,608 +60,338 @@ const normalizeLanguage = (language: string) => {
     sh: 'bash',
     shell: 'bash',
     cplusplus: 'cpp',
-  }
+  };
 
-  const key = language.trim().toLowerCase()
-  return aliases[key] || key
-}
+  const key = language.trim().toLowerCase();
+  return aliases[key] || key;
+};
 
 const escapeHtml = (value: string) => value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   typographer: true,
   highlight: (code: string, language: string): string => {
-    const normalizedLanguage = normalizeLanguage(language || '')
-    const grammar = Prism.languages[normalizedLanguage]
+    const normalizedLanguage = normalizeLanguage(language || '');
+    const grammar = Prism.languages[normalizedLanguage];
 
     if (!grammar) {
-      return `<pre class="language-text"><code>${escapeHtml(code)}</code></pre>`
+      return `<pre class="language-text"><code>${escapeHtml(code)}</code></pre>`;
     }
 
-    const highlighted = Prism.highlight(code, grammar, normalizedLanguage)
-    return `<pre class="language-${normalizedLanguage}"><code class="language-${normalizedLanguage}">${highlighted}</code></pre>`
-  }
-})
+    const highlighted = Prism.highlight(code, grammar, normalizedLanguage);
+    return `<pre class="language-${normalizedLanguage}"><code class="language-${normalizedLanguage}">${highlighted}</code></pre>`;
+  },
+});
 
-// 使用 anchor 插件
 md.use(markdownItAnchor, {
   permalink: markdownItAnchor.permalink.ariaHidden({
     placement: 'before',
     space: true,
     class: 'apple-link-no-icon',
     renderHref: (href: string) => `${route.path}#${href}`,
-  })
-})
-md.use(markdownitFootnote)
-md.use(markdownitTaskList, {label: false, labelAfter: false})
+  }),
+});
+md.use(markdownitFootnote);
+md.use(markdownitTaskList, { label: false, labelAfter: false });
 md.use(markdownitAttrs, {
-  allowedAttributes: ['id', 'class', 'target', 'src']
-})
-
+  allowedAttributes: ['id', 'class', 'target', 'src', 'alt', 'title'],
+});
 md.use(mdExpandTabs)
-    .use(mdSup)
-    .use(mdSub)
-    .use(mdMark)
-    .use(markdownItMermaid({delay: 100}))
+  .use(mdSup)
+  .use(mdSub)
+  .use(mdMark)
+  .use(markdownItMermaid({ delay: 100 }));
 
-// 配置自定义容器
-const containerOptions = [
-  {
-    name: 'warning',
-    className: 'warning'
-  },
-  {
-    name: 'danger',
-    className: 'danger'
-  },
-  {
-    name: 'tip',
-    className: 'tip'
-  }
-]
-
-containerOptions.forEach(({name, className}) => {
+[
+  { name: 'warning', className: 'warning' },
+  { name: 'danger', className: 'danger' },
+  { name: 'tip', className: 'tip' },
+].forEach(({ name, className }) => {
   md.use(markdownItContainer, name, {
-    validate: (params: string) => {
-      return params.trim().match(new RegExp(`^${name}\\s+(.*)$`))
-    },
+    validate: (params: string) => Boolean(params.trim().match(new RegExp(`^${name}\\s+(.*)$`))),
     render: (tokens: any[], idx: number) => {
-      const m = tokens[idx].info.trim().match(new RegExp(`^${name}\\s+(.*)$`))
+      const match = tokens[idx].info.trim().match(new RegExp(`^${name}\\s+(.*)$`));
       if (tokens[idx].nesting === 1) {
-        return `<div class="${className} custom-block"><p class="custom-block-title">${md.utils.escapeHtml(m[1])}</p>\n`
-      } else {
-        return '</div>\n'
+        return `<div class="${className} custom-block"><p class="custom-block-title">${md.utils.escapeHtml(match?.[1] || '')}</p>\n`;
       }
-    }
-  })
-})
 
-// 解析标题生成导航数据
+      return '</div>\n';
+    },
+  });
+});
+
 const extractHeadings = (markdown: string) => {
-  const tokens = md.parse(markdown, {})
-  const extractedHeadings: Array<{ id: string; text: string; level: number; href: string; children: any[] }> = []
+  const tokens = md.parse(markdown, {});
+  const extractedHeadings: HeadingItem[] = [];
 
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i]!
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token?.type !== 'heading_open') {
+      continue;
+    }
 
-    if (token && token.type === 'heading_open') {
-      const level = parseInt(token.tag.slice(1)) // h1 -> 1, h2 -> 2
-      const nextToken = tokens[i + 1]
+    const level = Number.parseInt(token.tag.slice(1), 10);
+    const nextToken = tokens[i + 1];
 
-      if (nextToken && nextToken.type === 'inline') {
-        const text = nextToken.content
-        // 生成 ID（与 markdown-it-anchor 保持一致）
-        const id = text.toLowerCase()
-            .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
-            .replace(/^-+|-+$/g, '')
+    if (nextToken?.type === 'inline') {
+      const text = nextToken.content;
+      const id = text.toLowerCase()
+        .replace(/[^\w\u4e00-\u9fa5]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 
-        extractedHeadings.push({
-          id,
-          text,
-          level,
-          href: `#${id}`,
-          children: []
-        })
-      }
+      extractedHeadings.push({
+        id,
+        text,
+        level,
+        href: `#${id}`,
+        children: [],
+      });
     }
   }
 
-  return extractedHeadings
-}
+  return extractedHeadings;
+};
 
-// 构建层级结构的标题树
-const buildHeadingTree = (flatHeadings: Array<{ id: string; text: string; level: number; href: string }>) => {
-  const tree: Array<{ id: string; text: string; level: number; href: string; children: any[] }> = []
-  const stack: Array<{ id: string; text: string; level: number; href: string; children: any[] }> = []
+const buildHeadingTree = (flatHeadings: HeadingItem[]) => {
+  const tree: HeadingItem[] = [];
+  const stack: HeadingItem[] = [];
 
-  flatHeadings.forEach(heading => {
-    const item = {...heading, children: []}
+  flatHeadings.forEach((heading) => {
+    const item = { ...heading, children: [] };
 
-    // 找到合适的父级
-<<<<<<< HEAD
-    while (stack.length > 0 && stack[stack.length - 1]!.level >= heading.level) {
-=======
     while (stack.length > 0) {
-      const lastItem = stack[stack.length - 1]
-      if (lastItem && lastItem.level < heading.level) {
-        break
+      const lastItem = stack[stack.length - 1];
+      if (!lastItem || lastItem.level < heading.level) {
+        break;
       }
->>>>>>> 53decede0e914f80980872622980c6cfd01c3018
-      stack.pop()
+
+      stack.pop();
     }
 
     if (stack.length === 0) {
-      tree.push(item)
+      tree.push(item);
     } else {
-<<<<<<< HEAD
-      stack[stack.length - 1]!.children.push(item)
-=======
-      const lastItem = stack[stack.length - 1]
-      if (lastItem) {
-        lastItem.children.push(item)
+      const parent = stack[stack.length - 1];
+      if (parent) {
+        parent.children.push(item);
+      } else {
+        tree.push(item);
       }
->>>>>>> 53decede0e914f80980872622980c6cfd01c3018
     }
 
-    stack.push(item)
-  })
+    stack.push(item);
+  });
 
-  return tree
-}
+  return tree;
+};
 
-// 渲染 markdown 的函数
 const render = async (markdown: string) => {
-  // 提取标题
-  const extractedHeadings = extractHeadings(markdown)
-  headings.value = buildHeadingTree(extractedHeadings)
+  headings.value = buildHeadingTree(extractHeadings(markdown));
+  const renderedHtml = md.render(markdown);
+  await nextTick();
+  setTimeout(() => Prism.highlightAll(), 50);
+  return renderedHtml;
+};
 
-  const html = md.render(markdown)
+watch(
+  () => props.content,
+  async (newValue) => {
+    html.value = newValue ? await render(newValue.content) : '';
+  },
+  { immediate: true },
+);
 
-  // 等待 DOM 更新
-  await nextTick()
+const anchorLinks = computed(() => headings.value);
+const date = computed(() => (props.content?.date ? new Date(props.content.date).toLocaleDateString('zh-CN') : ''));
 
-  // 初始化图表
-  setTimeout(() => {
-    // 代码高亮
-    Prism.highlightAll()
-  }, 50)
-
-  return html
-}
-
-// 使用 computed 代替 ref + watch
-const html = ref('')
-
-watch(() => props.content, async (newValue) => {
-      if (!md || !newValue) return '';
-      html.value = await render(newValue.content);
-    }, {immediate: true}
-)
-
-// 递归渲染导航链接
-const renderAnchorLinks = (items: Array<{
-  id: string;
-  text: string;
-  level: number;
-  href: string;
-  children: any[]
-}>, depth = 0): Array<{ title: string; href: string; children?: Array<{ title: string; href: string }> }> => {
-  return items.map((item: any) => ({
-    title: item.text,
-    href: item.href,
-    children: item.children?.length > 0 ? renderAnchorLinks(item.children, depth + 1) : undefined
-  }))
-}
-
-// 计算导航数据
-const anchorLinks = computed(() => renderAnchorLinks(headings.value))
-const date = computed(() => props.content?.date ? new Date(props.content.date).toLocaleDateString('zh-CN') : '')
-
-// 根据权限值获取显示标签
 const getIdentityLabel = computed(() => {
   const options = [
-    {label: '所有人', value: 'Member'},
-    {label: '部员', value: 'Department'},
-    {label: '部长', value: 'Minister'},
-    {label: '社长', value: 'President'},
-    {label: '创始人', value: 'Founder'}
+    { label: '所有人', value: 'Member' },
+    { label: '部员', value: 'Department' },
+    { label: '部长', value: 'Minister' },
+    { label: '社长', value: 'President' },
+    { label: '创始人', value: 'Founder' },
   ];
-  const option = options.find(item => item.value === props.content?.identity);
-  return option ? option.label : '未知';
+  return options.find((item) => item.value === props.content?.identity)?.label || '未知';
 });
 
-// 根据权限值获取标签样式
 const getIdentityClass = (identity: string) => {
   switch (identity) {
     case 'Member':
-      return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100';
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-100';
     case 'Department':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100';
+      return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-100';
     case 'Minister':
-      return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100';
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-100';
     case 'President':
-      return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100';
+      return 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-100';
     case 'Founder':
-      return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100';
+      return 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-100';
     default:
-      return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
+      return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100';
   }
 };
 
-// 添加处理锚点点击的方法
 const handleAnchorClick = (event: Event, href: string) => {
   event.preventDefault();
-  const targetId = href.substring(1).toLowerCase(); // 移除 # 前缀
-
-  // 对 targetId 进行 URL 编码
-  const encodedTargetId = encodeURIComponent(targetId);
-
-  console.log(targetId)
-
-  // 如果仍然找不到，尝试通过属性选择器查找
-  const targetElement = document.querySelector(`[id="${encodedTargetId}"]`);
+  const targetElement = document.querySelector(href);
 
   if (targetElement) {
-    // 平滑滚动到目标元素
-    targetElement.scrollIntoView({behavior: 'smooth'});
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+};
+
+const handleScroll = () => {
+  const articleHeadings = document.querySelectorAll('.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4, .markdown-content h5, .markdown-content h6');
+  let activeHeadingId = '';
+
+  for (let i = articleHeadings.length - 1; i >= 0; i -= 1) {
+    const heading = articleHeadings[i];
+    if (heading && heading.getBoundingClientRect().top <= 120) {
+      activeHeadingId = heading.id;
+      break;
+    }
+  }
+
+  document.querySelectorAll('.toc-link').forEach((link) => {
+    link.classList.toggle('active', link.getAttribute('href') === `#${activeHeadingId}`);
+  });
 };
 
 onMounted(() => {
-  // 添加滚动监听器以高亮当前活动的锚点
-  const handleScroll = () => {
-    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6')
-    let activeHeadingId = ''
+  window.addEventListener('scroll', handleScroll);
+});
 
-    for (let i = headings.length - 1; i >= 0; i--) {
-      const heading = headings[i]
-<<<<<<< HEAD
-      if (!heading) {
-        continue
-      }
-      const rect = heading.getBoundingClientRect()
-      if (rect.top <= 100) {
-        activeHeadingId = heading.id
-        break
-=======
-      if (heading) {
-        const rect = heading.getBoundingClientRect()
-        if (rect.top <= 100) {
-          activeHeadingId = heading.id
-          break
-        }
->>>>>>> 53decede0e914f80980872622980c6cfd01c3018
-      }
-    }
-
-    // 移除所有活动类
-    document.querySelectorAll('.toc-link').forEach(link => {
-      link.classList.remove('active')
-    })
-
-    // 为当前活动标题添加活动类
-    if (activeHeadingId) {
-      const activeLink = document.querySelector(`.toc-link[href="#${activeHeadingId}"]`)
-      if (activeLink) {
-        activeLink.classList.add('active')
-      }
-    }
-  }
-
-  window.addEventListener('scroll', handleScroll)
-})
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll);
+});
 </script>
 
 <template>
   <div v-if="content" class="flex flex-col md:flex-row">
-    <!-- 文章内容区 -->
     <div class="w-full p-4 md:p-8" :class="[showNav && headings.length > 0 ? 'md:w-4/5' : 'md:w-full']">
-      <article class="prose prose-gray max-w-none dark:prose-invert">
-        <!-- 文章头部 -->
-        <header class="mb-8 border-b border-gray-200 pb-6 dark:border-gray-700">
-          <h1 class="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+      <article class="prose prose-slate max-w-none dark:prose-invert">
+        <header class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
+          <h1 class="mb-4 text-3xl font-black text-slate-950 dark:text-white md:text-4xl">
             {{ content.title }}
           </h1>
-          <div class="flex items-center gap-4 text-gray-500 dark:text-gray-400 text-sm">
+          <div class="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
             <time class="flex items-center gap-1">
-              <Icon icon="mdi:calendar" width="16" height="16"/>
+              <Icon icon="mdi:calendar" width="16" height="16" />
               {{ date }}
             </time>
             <span class="flex items-center gap-1">
-              <Icon icon="mdi:eye" width="16" height="16"/>
+              <Icon icon="mdi:eye" width="16" height="16" />
               {{ content.watch }} 次阅读
             </span>
-            <span v-if="content.identity" class="flex items-center gap-1" :class="getIdentityClass(content.identity)">
+            <span v-if="content.identity" class="rounded-full px-3 py-1 text-xs font-bold" :class="getIdentityClass(content.identity)">
               {{ getIdentityLabel }}
             </span>
           </div>
         </header>
 
-        <!-- 文章内容 -->
         <div class="markdown-content">
           <div v-html="html"></div>
         </div>
       </article>
     </div>
 
-    <!-- 目录导航 -->
-    <div v-if="showNav && headings.length > 0" class="hidden md:block w-1/5 sticky top-8 h-fit self-start p-4">
-      <nav class="toc-nav bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
-        <h3 class="text-sm font-semibold mb-3 text-gray-900 dark:text-white">
-          目录
-        </h3>
+    <aside v-if="showNav && headings.length > 0" class="hidden w-1/5 self-start p-4 md:sticky md:top-24 md:block">
+      <nav class="rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+        <h3 class="mb-3 text-sm font-black text-slate-950 dark:text-white">目录</h3>
         <ul class="space-y-1">
-          <li
-              v-for="link in anchorLinks"
-              :key="link.href"
-              class="toc-item"
-          >
-            <div
-                @click="handleAnchorClick($event, link.href)"
-                class="toc-link block py-1 text-sm link"
-            >
-              {{ link.title }}
-            </div>
-
-            <!-- 子目录 -->
-            <ul v-if="link.children && link.children.length > 0" class="ml-3 mt-1 space-y-1">
-              <li
-                  v-for="subLink in link.children"
-                  :key="subLink.href"
-              >
-                <div
-                    @click="handleAnchorClick($event, subLink.href)"
-                    class="toc-link block py-1 text-xs text-blue-500"
-                >
-                  {{ subLink.title }}
-                </div>
+          <li v-for="link in anchorLinks" :key="link.href">
+            <a :href="link.href" class="toc-link block rounded-lg px-2 py-1 text-sm font-bold" @click="handleAnchorClick($event, link.href)">
+              {{ link.text }}
+            </a>
+            <ul v-if="link.children.length > 0" class="ml-3 mt-1 space-y-1">
+              <li v-for="subLink in link.children" :key="subLink.href">
+                <a :href="subLink.href" class="toc-link block rounded-lg px-2 py-1 text-xs" @click="handleAnchorClick($event, subLink.href)">
+                  {{ subLink.text }}
+                </a>
               </li>
             </ul>
           </li>
         </ul>
       </nav>
-    </div>
+    </aside>
   </div>
 
-  <!-- 空状态 -->
-  <div v-else class="flex flex-col items-center justify-center h-full p-8 text-center">
-    <div
-        class="bg-gray-200 dark:bg-gray-700 border-2 border-dashed rounded-xl w-16 h-16 flex items-center justify-center mb-4">
-      <Icon icon="mdi:file-document-outline" width="32" height="32" class="text-gray-500 dark:text-gray-400"/>
+  <div v-else class="flex h-full flex-col items-center justify-center p-8 text-center">
+    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+      <Icon icon="mdi:file-document-outline" width="32" height="32" class="text-slate-500 dark:text-slate-400" />
     </div>
-    <p class="text-gray-500 dark:text-gray-400 text-lg">
-      请选择一篇文章阅读
-    </p>
+    <p class="text-lg text-slate-500 dark:text-slate-400">请选择一篇文章阅读</p>
   </div>
 </template>
 
 <style scoped>
 @reference 'tailwindcss';
-@import "prismjs/themes/prism-tomorrow.min.css";
+@import 'prismjs/themes/prism-tomorrow.min.css';
 
-/* 自定义块样式 */
 :deep(.custom-block) {
-  @apply rounded-lg p-4 my-4;
+  @apply my-4 rounded-2xl p-4;
 }
 
 :deep(.custom-block-title) {
-  @apply font-bold text-base mb-2;
+  @apply mb-2 text-base font-black;
 }
 
 .markdown-content :deep(.warning) {
-  @apply bg-amber-100 ;
-}
-
-.dark .markdown-content :deep(.warning) {
-  @apply bg-amber-900;
+  @apply bg-amber-100 dark:bg-amber-950;
 }
 
 .markdown-content :deep(.danger) {
-  @apply bg-red-100 ;
-}
-
-.dark .markdown-content :deep( .danger) {
-  @apply bg-red-900;
+  @apply bg-rose-100 dark:bg-rose-950;
 }
 
 .markdown-content :deep(.tip) {
-  @apply bg-blue-50;
-}
-
-.dark .markdown-content :deep(.tip) {
-  @apply bg-blue-900;
+  @apply bg-cyan-50 dark:bg-cyan-950;
 }
 
 .toc-link {
-  @apply text-sky-700 cursor-pointer;
+  @apply text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300;
 }
 
-.toc-link:hover {
-  @apply text-cyan-800;
+.toc-link.active {
+  @apply bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300;
 }
 
-.dark .toc-link {
-  @apply text-sky-300;
-}
-
-.dark .toc-link:hover {
-  @apply text-cyan-400;
-}
-
-/* Markdown 内容样式 */
 .markdown-content :deep(h1),
 .markdown-content :deep(h2),
 .markdown-content :deep(h3),
 .markdown-content :deep(h4),
 .markdown-content :deep(h5),
 .markdown-content :deep(h6) {
-  @apply font-semibold;
+  @apply font-black tracking-tight text-slate-950 dark:text-white;
 }
 
-.markdown-content :deep(h1) {
-  @apply text-3xl mt-8 mb-4;
-}
-
-.markdown-content :deep(h2) {
-  @apply text-2xl mt-6 mb-3;
-}
-
-.markdown-content :deep(h3) {
-  @apply text-xl mt-4 mb-2;
-}
-
-.markdown-content :deep(p) {
-  @apply mb-4 leading-relaxed;
-}
-
-.markdown-content :deep(h1),
-.markdown-content :deep(h2),
-.markdown-content :deep(h3),
-.markdown-content :deep(h4),
-.markdown-content :deep(h5),
-.markdown-content :deep(h6),
-.markdown-content :deep(p) {
-  @apply text-gray-900;
-}
-
-.dark .markdown-content :deep(h1),
-.dark .markdown-content :deep(h2),
-.dark .markdown-content :deep(h3),
-.dark .markdown-content :deep(h4),
-.dark .markdown-content :deep(h5),
-.dark .markdown-content :deep(h6),
-.dark .markdown-content :deep(p) {
-  @apply text-white;
-}
-
-.markdown-content :deep(a) {
-  @apply underline;
-}
-
-.markdown-content :deep(a) {
-  @apply text-blue-600 hover:text-blue-800;
-}
-
-.dark .markdown-content :deep(a) {
-  @apply text-blue-400 hover:text-blue-300;
-}
-
-.markdown-content :deep(strong) {
-  @apply font-semibold;
-}
-
-.markdown-content :deep(em) {
-  @apply italic;
-}
-
-.markdown-content :deep(ul),
-.markdown-content :deep(ol) {
-  @apply pl-6 mb-4;
-}
-
+.markdown-content :deep(p),
 .markdown-content :deep(li) {
-  @apply mb-1;
-}
-
-.markdown-content :deep(ul li) {
-  @apply list-disc;
-}
-
-.markdown-content :deep(ol li) {
-  @apply list-decimal;
-}
-
-.markdown-content :deep(blockquote) {
-  @apply border-l-4 pl-4 ml-2 py-1 my-4;
-}
-
-.markdown-content :deep(blockquote) {
-  @apply border-gray-300 text-gray-600;
-}
-
-.dark .markdown-content :deep(blockquote) {
-  @apply border-gray-600 text-gray-400;
-}
-
-.markdown-content :deep(code) {
-  @apply px-1.5 py-0.5 rounded text-sm font-mono;
-}
-
-.markdown-content :deep(code) {
-  @apply bg-gray-100;
-}
-
-.dark .markdown-content :deep(code) {
-  @apply bg-gray-800;
+  @apply leading-8 text-slate-700 dark:text-slate-200;
 }
 
 .markdown-content :deep(pre) {
-  @apply rounded-lg p-4 my-4 overflow-x-auto;
-}
-
-.markdown-content :deep(pre) {
-  @apply bg-gray-800;
-}
-
-.dark .markdown-content :deep(pre) {
-  @apply bg-gray-900;
-}
-
-.markdown-content :deep(pre code) {
-  @apply bg-transparent p-0 rounded-none;
+  @apply rounded-2xl p-4;
 }
 
 .markdown-content :deep(table) {
-  @apply min-w-full border-collapse my-4;
+  @apply my-4 min-w-full border-collapse;
 }
 
 .markdown-content :deep(th),
 .markdown-content :deep(td) {
-  @apply px-4 py-2;
-}
-
-.markdown-content :deep(th),
-.markdown-content :deep(td) {
-  @apply border border-gray-300;
-}
-
-.dark .markdown-content :deep(th),
-.dark .markdown-content :deep(td) {
-  @apply border border-gray-700;
+  @apply border border-slate-300 px-4 py-2 dark:border-slate-700;
 }
 
 .markdown-content :deep(th) {
-  @apply font-semibold;
-}
-
-.markdown-content :deep(th) {
-  @apply bg-gray-100;
-}
-
-.dark .markdown-content :deep(th) {
-  @apply bg-gray-800;
-}
-
-.markdown-content :deep(img) {
-  @apply rounded-lg mx-auto my-4;
-}
-
-.markdown-content :deep(hr) {
-  @apply my-8;
-}
-
-.markdown-content :deep(hr) {
-  @apply border-gray-300;
-}
-
-.dark .markdown-content :deep(hr) {
-  @apply border-gray-700;
+  @apply bg-slate-100 font-black dark:bg-slate-800;
 }
 </style>

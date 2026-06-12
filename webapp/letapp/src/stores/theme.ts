@@ -1,65 +1,69 @@
-// stores/theme.js
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { darkTheme } from 'naive-ui'
+import { computed, ref } from 'vue';
+import { defineStore } from 'pinia';
+import { darkTheme } from 'naive-ui';
+
+type ThemePreference = 'light' | 'dark' | 'system';
 
 export const useThemeStore = defineStore('theme', () => {
-    const LOCAL_STORAGE_THEME_KEY = 'appThemePreference'
+  const LOCAL_STORAGE_THEME_KEY = 'appThemePreference';
+  const userPreference = ref<ThemePreference>(
+    (localStorage.getItem(LOCAL_STORAGE_THEME_KEY) as ThemePreference | null) || 'system',
+  );
+  const systemPrefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
 
-    const userPreference = ref(localStorage.getItem(LOCAL_STORAGE_THEME_KEY) || 'system')
-    const systemPrefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const updateThemeClass = (dark: boolean) => {
+    document.documentElement.classList.toggle('dark', dark);
+  };
 
-    const isDark = computed({
-        get() {
-            if (userPreference.value === 'dark') return true
-            if (userPreference.value === 'light') return false
-            return systemPrefersDark.value
-        },
-        set(val) {
-            userPreference.value = val ? 'dark' : 'light'
-            localStorage.setItem(LOCAL_STORAGE_THEME_KEY, userPreference.value)
-            updateThemeClass(val)
-        }
-    })
+  const isDark = computed({
+    get() {
+      if (userPreference.value === 'dark') {
+        return true;
+      }
 
-    const theme = computed(() => (isDark.value ? darkTheme : null))
+      if (userPreference.value === 'light') {
+        return false;
+      }
 
-    function updateThemeClass(dark: boolean) {
-        if (dark) {
-            document.documentElement.classList.add('dark')
-        } else {
-            document.documentElement.classList.remove('dark')
-        }
-    }
+      return systemPrefersDark.value;
+    },
+    set(value: boolean) {
+      userPreference.value = value ? 'dark' : 'light';
+      localStorage.setItem(LOCAL_STORAGE_THEME_KEY, userPreference.value);
+      updateThemeClass(value);
+    },
+  });
 
-    function setThemePreference(preference: 'light' | 'dark' | 'system') {
-        userPreference.value = preference
-        localStorage.setItem(LOCAL_STORAGE_THEME_KEY, preference)
-        updateThemeClass(isDark.value)
-    }
+  const theme = computed(() => (isDark.value ? darkTheme : null));
 
-    function toggleTheme() {
-        isDark.value = !isDark.value
-    }
+  const setThemePreference = (preference: ThemePreference) => {
+    userPreference.value = preference;
+    localStorage.setItem(LOCAL_STORAGE_THEME_KEY, preference);
+    updateThemeClass(isDark.value);
+  };
 
-    // 初始化
-    function init() {
-        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-        mediaQuery.addEventListener('change', (e) => {
-            systemPrefersDark.value = e.matches
-            if (userPreference.value === 'system') {
-                updateThemeClass(isDark.value)
-            }
-        })
-        updateThemeClass(isDark.value)
-    }
+  const toggleTheme = () => {
+    isDark.value = !isDark.value;
+  };
 
-    return {
-        isDark,
-        theme,
-        userPreference,
-        setThemePreference,
-        toggleTheme,
-        init
-    }
-})
+  const init = () => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', (event) => {
+      systemPrefersDark.value = event.matches;
+      if (userPreference.value === 'system') {
+        updateThemeClass(isDark.value);
+      }
+    });
+
+    updateThemeClass(isDark.value);
+  };
+
+  return {
+    isDark,
+    theme,
+    userPreference,
+    setThemePreference,
+    toggleTheme,
+    init,
+  };
+});
