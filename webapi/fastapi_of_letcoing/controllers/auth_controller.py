@@ -123,9 +123,10 @@ def _provider_config(provider: str) -> dict:
     return {}
 
 
-def _provider_redirect_uri(provider: str) -> str:
+def _provider_redirect_uri(provider: str, callback_provider: str | None = None) -> str:
     config_service = inject(IConfigService)
     provider_config = _provider_config(provider)
+    callback_provider = callback_provider or provider
     configured_uri = (
         config_service.get_config(f'{provider.upper()}_REDIRECT_URI')
         or provider_config.get('redirect_uri')
@@ -138,13 +139,13 @@ def _provider_redirect_uri(provider: str) -> str:
     if public_backend_url:
         parsed_url = urlparse(str(public_backend_url))
         backend_origin = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
-        return f"{backend_origin.rstrip('/')}/auth/callback/{provider}"
+        return f"{backend_origin.rstrip('/')}/auth/callback/{callback_provider}"
 
     request_base_url = request.url_root.rstrip('/')
     if request_base_url:
-        return f'{request_base_url}/auth/callback/{provider}'
+        return f'{request_base_url}/auth/callback/{callback_provider}'
 
-    return f'/auth/callback/{provider}'
+    return f'/auth/callback/{callback_provider}'
 
 
 @api.route('/login')
@@ -188,9 +189,10 @@ class AuthBrowserLoginController(Resource):
 
         resolved_provider = oidc_service.resolve_provider_name(provider) or provider
         session['oauth_next'] = request.args.get('next', '/')
-        redirect_uri = _provider_redirect_uri(resolved_provider)
+        redirect_uri = _provider_redirect_uri(resolved_provider, provider)
         logger_service.info(
             'Starting OAuth login: '
+            f'requested_provider={provider}, '
             f'provider={resolved_provider}, '
             f'redirect_uri={redirect_uri}, '
             f'request_host={request.host}, '
