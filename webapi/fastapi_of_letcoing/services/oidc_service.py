@@ -9,6 +9,13 @@ from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
 
 
+def _safe_client_id(client_id: Any) -> str:
+    value = str(client_id or '')
+    if len(value) <= 8:
+        return value
+    return f'{value[:4]}...{value[-4:]}'
+
+
 class OIDCService(Injectable, IOIDCService):
     """OAuth/OIDC authentication service.
 
@@ -119,7 +126,15 @@ class OIDCService(Injectable, IOIDCService):
                     api_base_url=normalized_config.get('api_base_url'),
                     client_kwargs=normalized_config.get('client_kwargs', {}),
                 )
-                self._logger_service.info(f'OIDC provider registered: {provider_name}')
+                self._logger_service.info(
+                    'OIDC provider registered: '
+                    f'provider={provider_name}, '
+                    f'client_id={_safe_client_id(normalized_config.get("client_id"))}, '
+                    f'server_metadata_url={server_metadata_url}, '
+                    f'authorize_url={authorize_url}, '
+                    f'access_token_url={access_token_url}, '
+                    f'scope={normalized_config.get("client_kwargs", {}).get("scope")}'
+                )
             except Exception as ex:
                 self._logger_service.error(f'Failed to register OIDC provider: {provider_name}', ex)
 
@@ -139,6 +154,11 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'OAuth provider not found: {resolved_provider}')
                 return None
 
+            self._logger_service.info(
+                'Creating OAuth redirect: '
+                f'provider={resolved_provider}, '
+                f'redirect_uri={redirect_uri}'
+            )
             return client.authorize_redirect(redirect_uri)
         except Exception as ex:
             self._logger_service.error(f'Failed to create OAuth redirect: {provider}', ex)
