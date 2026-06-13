@@ -128,16 +128,17 @@ def _provider_redirect_uri_result(provider: str, callback_provider: Optional[str
     config_service = inject(IConfigService)
     provider_config = _provider_config(provider)
     callback_provider = callback_provider or provider
-    env_key = f'{provider.upper()}_REDIRECT_URI'
-    env_uri = config_service.get_config(env_key)
-    if env_uri:
-        return str(env_uri), env_key
 
     if provider_config.get('redirect_uri'):
         return str(provider_config['redirect_uri']), 'OIDC_PROVIDERS.redirect_uri'
 
     if provider_config.get('callback_url'):
         return str(provider_config['callback_url']), 'OIDC_PROVIDERS.callback_url'
+
+    env_key = f'{provider.upper()}_REDIRECT_URI'
+    env_uri = config_service.get_config(env_key)
+    if env_uri:
+        return str(env_uri), env_key
 
     public_backend_url = config_service.get_config('PUBLIC_BACKEND_URL')
     if public_backend_url:
