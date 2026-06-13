@@ -9,7 +9,7 @@ from flask_restx import Namespace, Resource, fields
 from werkzeug.security import check_password_hash
 
 from core.di_container import inject
-from interfaces.service_interfaces import IConfigService, IJWTService, IOIDCService, IUserService
+from interfaces.service_interfaces import IConfigService, IJWTService, ILoggerService, IOIDCService, IUserService
 from models.auth_models import TokenResponse, UserInfo
 
 
@@ -134,15 +134,15 @@ def _provider_redirect_uri(provider: str) -> str:
     if configured_uri:
         return str(configured_uri)
 
-    request_base_url = request.url_root.rstrip('/')
-    if request_base_url:
-        return f'{request_base_url}/auth/callback/{provider}'
-
     public_backend_url = config_service.get_config('PUBLIC_BACKEND_URL')
     if public_backend_url:
         parsed_url = urlparse(str(public_backend_url))
         backend_origin = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
         return f"{backend_origin.rstrip('/')}/auth/callback/{provider}"
+
+    request_base_url = request.url_root.rstrip('/')
+    if request_base_url:
+        return f'{request_base_url}/auth/callback/{provider}'
 
     return f'/auth/callback/{provider}'
 
@@ -181,6 +181,7 @@ class AuthBrowserLoginController(Resource):
     def get(self, provider: str):
         """Start browser-based OAuth login."""
         oidc_service = inject(IOIDCService)
+        logger_service = inject(ILoggerService)
 
         if not oidc_service.validate_provider(provider):
             return {'success': False, 'error': f'不支持的登录方式：{provider}'}, 400
@@ -188,6 +189,13 @@ class AuthBrowserLoginController(Resource):
         resolved_provider = oidc_service.resolve_provider_name(provider) or provider
         session['oauth_next'] = request.args.get('next', '/')
         redirect_uri = _provider_redirect_uri(resolved_provider)
+        logger_service.info(
+            'Starting OAuth login: '
+            f'provider={resolved_provider}, '
+            f'redirect_uri={redirect_uri}, '
+            f'request_host={request.host}, '
+            f'url_root={request.url_root}'
+        )
         response = oidc_service.get_authorization_redirect(resolved_provider, redirect_uri)
         if not response:
             return {'success': False, 'error': '启动 OAuth 登录失败'}, 500
