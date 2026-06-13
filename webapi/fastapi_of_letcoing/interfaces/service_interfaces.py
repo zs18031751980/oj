@@ -200,7 +200,7 @@ class IOIDCService(ABC):
         pass
 
     @abstractmethod
-    def authorize_callback(self, provider: str) -> Optional[Dict[str, Any]]:
+    def authorize_callback(self, provider: str, redirect_uri: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         处理授权回调
         

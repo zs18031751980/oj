@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from typing import Optional
 from urllib.parse import urlparse, urlunparse, urlencode
 
 from flask import redirect, request, session
@@ -123,29 +124,37 @@ def _provider_config(provider: str) -> dict:
     return {}
 
 
-def _provider_redirect_uri(provider: str, callback_provider: str | None = None) -> str:
+def _provider_redirect_uri_result(provider: str, callback_provider: Optional[str] = None):
     config_service = inject(IConfigService)
     provider_config = _provider_config(provider)
     callback_provider = callback_provider or provider
-    configured_uri = (
-        config_service.get_config(f'{provider.upper()}_REDIRECT_URI')
-        or provider_config.get('redirect_uri')
-        or provider_config.get('callback_url')
-    )
-    if configured_uri:
-        return str(configured_uri)
+    env_key = f'{provider.upper()}_REDIRECT_URI'
+    env_uri = config_service.get_config(env_key)
+    if env_uri:
+        return str(env_uri), env_key
+
+    if provider_config.get('redirect_uri'):
+        return str(provider_config['redirect_uri']), 'OIDC_PROVIDERS.redirect_uri'
+
+    if provider_config.get('callback_url'):
+        return str(provider_config['callback_url']), 'OIDC_PROVIDERS.callback_url'
 
     public_backend_url = config_service.get_config('PUBLIC_BACKEND_URL')
     if public_backend_url:
         parsed_url = urlparse(str(public_backend_url))
         backend_origin = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
-        return f"{backend_origin.rstrip('/')}/auth/callback/{callback_provider}"
+        return f"{backend_origin.rstrip('/')}/auth/callback/{callback_provider}", 'PUBLIC_BACKEND_URL'
 
     request_base_url = request.url_root.rstrip('/')
     if request_base_url:
-        return f'{request_base_url}/auth/callback/{callback_provider}'
+        return f'{request_base_url}/auth/callback/{callback_provider}', 'request.url_root'
 
-    return f'/auth/callback/{callback_provider}'
+    return f'/auth/callback/{callback_provider}', 'relative_fallback'
+
+
+def _provider_redirect_uri(provider: str, callback_provider: Optional[str] = None) -> str:
+    redirect_uri, _source = _provider_redirect_uri_result(provider, callback_provider)
+    return redirect_uri
 
 
 @api.route('/login')
@@ -167,7 +176,9 @@ class AuthLoginController(Resource):
         if not oidc_service.validate_provider(provider):
             return {'success': False, 'error': f'不支持的登录方式：{provider}'}, 400
 
-        authorization_url = oidc_service.get_authorization_url(provider, redirect_uri)
+        resolved_provider = oidc_service.resolve_provider_name(provider) or provider
+        redirect_uri = redirect_uri or _provider_redirect_uri(resolved_provider, provider)
+        authorization_url = oidc_service.get_authorization_url(resolved_provider, redirect_uri)
         if not authorization_url:
             return {'success': False, 'error': '创建授权地址失败'}, 500
 
@@ -189,12 +200,14 @@ class AuthBrowserLoginController(Resource):
 
         resolved_provider = oidc_service.resolve_provider_name(provider) or provider
         session['oauth_next'] = request.args.get('next', '/')
-        redirect_uri = _provider_redirect_uri(resolved_provider, provider)
+        redirect_uri, redirect_uri_source = _provider_redirect_uri_result(resolved_provider, provider)
+        session['oauth_redirect_uri'] = redirect_uri
         logger_service.info(
             'Starting OAuth login: '
             f'requested_provider={provider}, '
             f'provider={resolved_provider}, '
             f'redirect_uri={redirect_uri}, '
+            f'redirect_uri_source={redirect_uri_source}, '
             f'request_host={request.host}, '
             f'url_root={request.url_root}'
         )
@@ -287,6 +300,7 @@ class AuthCallbackController(Resource):
 
         resolved_provider = oidc_service.resolve_provider_name(provider) or provider
         next_path = session.pop('oauth_next', '/')
+        redirect_uri = session.pop('oauth_redirect_uri', None) or _provider_redirect_uri(resolved_provider, provider)
         error = request.args.get('error')
         if error:
             error_description = request.args.get('error_description', '')
@@ -316,7 +330,7 @@ class AuthCallbackController(Resource):
                 )
             )
 
-        auth_result = oidc_service.authorize_callback(resolved_provider)
+        auth_result = oidc_service.authorize_callback(resolved_provider, redirect_uri)
         if not auth_result or not auth_result.get('user_info'):
             if request.args.get('format') == 'json':
                 return {'success': False, 'error': 'OAuth 登录失败，请重试'}, 500

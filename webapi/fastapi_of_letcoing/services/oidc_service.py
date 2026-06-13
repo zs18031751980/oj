@@ -167,7 +167,7 @@ class OIDCService(Injectable, IOIDCService):
             self._logger_service.error(f'Failed to create authorization URL: {provider}', ex)
             return None
 
-    def authorize_callback(self, provider: str) -> Optional[Dict[str, Any]]:
+    def authorize_callback(self, provider: str, redirect_uri: Optional[str] = None) -> Optional[Dict[str, Any]]:
         if not self._oauth:
             return None
 
@@ -182,7 +182,8 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'OAuth provider not found: {resolved_provider}')
                 return None
 
-            token = client.authorize_access_token()
+            kwargs = {'redirect_uri': redirect_uri} if redirect_uri else {}
+            token = client.authorize_access_token(**kwargs)
             user_info = self._get_user_info(resolved_provider, client, token)
             if not user_info:
                 return None
