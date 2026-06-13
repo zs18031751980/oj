@@ -59,15 +59,11 @@ const metrics = [
           </span>
 
           <h1 class="mt-6 max-w-3xl text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-            让写代码这件事，
+            让写代码
             <span class="block bg-gradient-to-r from-cyan-500 via-sky-500 to-amber-400 bg-clip-text text-transparent">
-              更直接、更顺手、更有练习感
+              更便捷
             </span>
           </h1>
-
-          <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300 sm:text-lg">
-            Let Coding 把在线代码编辑、运行反馈和学习资源组合在一起。无论你是在刷题、教学演示，还是准备社团培训内容，都能更快进入状态。
-          </p>
 
           <div class="mt-8 flex flex-wrap gap-4">
             <button class="hero-primary" @click="router.push('/playground')">
@@ -124,17 +120,17 @@ const metrics = [
                   </div>
                 </div>
 
-                <div class="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
+                <div class="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
                   <div class="text-xs font-black uppercase tracking-[0.22em] text-slate-500">支持语言</div>
-                  <div class="mt-4 grid grid-cols-4 gap-3">
+                  <div class="mt-4 grid grid-cols-2 gap-3">
                     <button
                       v-for="language in languages"
                       :key="language.value"
                       type="button"
-                      class="grid place-items-center rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+                      class="grid h-14 min-w-0 place-items-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
                       @click="router.push(`/playground?language=${language.value}`)"
                     >
-                      <Icon :icon="language.icon" class="h-7 w-7" :style="{ color: language.color }" />
+                      <Icon :icon="language.icon" class="h-7 w-7 max-w-full" :style="{ color: language.color }" />
                     </button>
                   </div>
                 </div>

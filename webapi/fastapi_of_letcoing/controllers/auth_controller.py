@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from urllib.parse import urlencode
+from urllib.parse import urlparse, urlunparse, urlencode
 
 from flask import redirect, request, session
 from flask_restx import Namespace, Resource, fields
@@ -134,11 +134,17 @@ def _provider_redirect_uri(provider: str) -> str:
     if configured_uri:
         return str(configured_uri)
 
+    request_base_url = request.url_root.rstrip('/')
+    if request_base_url:
+        return f'{request_base_url}/auth/callback/{provider}'
+
     public_backend_url = config_service.get_config('PUBLIC_BACKEND_URL')
     if public_backend_url:
-        return f"{public_backend_url.rstrip('/')}/auth/callback/{provider}"
+        parsed_url = urlparse(str(public_backend_url))
+        backend_origin = urlunparse((parsed_url.scheme, parsed_url.netloc, '', '', '', ''))
+        return f"{backend_origin.rstrip('/')}/auth/callback/{provider}"
 
-    return request.url_root.rstrip('/') + f'/auth/callback/{provider}'
+    return f'/auth/callback/{provider}'
 
 
 @api.route('/login')

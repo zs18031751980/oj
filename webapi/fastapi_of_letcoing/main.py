@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 from flask import Flask, request
 from flask_restx import Api
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from controllers.auth_controller import api as auth_api
 from controllers.code_controller import api as code_api
@@ -77,6 +78,7 @@ def _load_oidc_providers_config():
     return {}
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 app.config['API_TOKEN'] = os.environ.get('API_TOKEN', '')
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-here')
@@ -85,6 +87,7 @@ app.config['JWT_REFRESH_TOKEN_EXPIRE'] = int(os.environ.get('JWT_REFRESH_TOKEN_E
 app.config['JWT_ALGORITHM'] = os.environ.get('JWT_ALGORITHM', 'HS256')
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or app.config['JWT_SECRET_KEY']
 app.config['FRONTEND_URL'] = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+app.config['PUBLIC_BACKEND_URL'] = os.environ.get('PUBLIC_BACKEND_URL', '')
 app.config['ALLOWED_ORIGINS'] = [
     origin.strip()
     for origin in os.environ.get(
