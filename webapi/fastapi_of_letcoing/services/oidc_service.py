@@ -157,6 +157,17 @@ class OIDCService(Injectable, IOIDCService):
 
         return kwargs
 
+    def _extract_authorization_url(self, authorization_result: Any) -> str:
+        if isinstance(authorization_result, tuple):
+            return str(authorization_result[0]) if authorization_result else ''
+
+        if isinstance(authorization_result, Mapping):
+            url_value = authorization_result.get('url')
+            if url_value:
+                return str(url_value)
+
+        return str(authorization_result or '')
+
     def get_authorization_redirect(self, provider: str, redirect_uri: str):
         """Return a Flask redirect response that starts the OAuth login."""
         if not self._oauth:
@@ -180,24 +191,18 @@ class OIDCService(Injectable, IOIDCService):
                 f'redirect_uri={redirect_uri}, '
                 f'scope={authorization_kwargs.get("scope", "")}'
             )
-            authorization_result = client.create_authorization_url(**authorization_kwargs)
+            response = client.authorize_redirect(**authorization_kwargs)
             authorization_url = (
-                authorization_result[0]
-                if isinstance(authorization_result, tuple)
-                else str(authorization_result)
-            )
-            state = (
-                authorization_result[1]
-                if isinstance(authorization_result, tuple) and len(authorization_result) > 1
+                response.headers.get('Location', '')
+                if hasattr(response, 'headers')
                 else ''
             )
             self._logger_service.info(
                 'Authorization URL created: '
                 f'provider={resolved_provider}, '
-                f'state_length={len(state) if state else 0}, '
                 f'url={authorization_url}'
             )
-            return client.authorize_redirect(**authorization_kwargs)
+            return response
         except Exception as ex:
             self._logger_service.error(f'Failed to create OAuth redirect: {provider}', ex)
             return None
@@ -219,8 +224,8 @@ class OIDCService(Injectable, IOIDCService):
                 return None
 
             kwargs = self._authorization_kwargs(resolved_provider, redirect_uri)
-            uri, _state = client.create_authorization_url(**kwargs)
-            return uri
+            authorization_result = client.create_authorization_url(**kwargs)
+            return self._extract_authorization_url(authorization_result)
         except Exception as ex:
             self._logger_service.error(f'Failed to create authorization URL: {provider}', ex)
             return None
