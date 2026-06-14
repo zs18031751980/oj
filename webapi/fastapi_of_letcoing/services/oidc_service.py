@@ -140,7 +140,12 @@ class OIDCService(Injectable, IOIDCService):
 
     def _authorization_kwargs(self, provider: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
         provider_config = self._normalize_oidc_provider_configs().get(provider, {})
-        client_kwargs = provider_config.get('client_kwargs', {}) if isinstance(provider_config, dict) else {}
+        normalized_config = (
+            self._normalize_provider_config(provider, provider_config)
+            if isinstance(provider_config, dict)
+            else {}
+        )
+        client_kwargs = normalized_config.get('client_kwargs', {})
 
         kwargs: Dict[str, Any] = {}
         if redirect_uri:
@@ -175,7 +180,17 @@ class OIDCService(Injectable, IOIDCService):
                 f'redirect_uri={redirect_uri}, '
                 f'scope={authorization_kwargs.get("scope", "")}'
             )
-            authorization_url, state = client.create_authorization_url(**authorization_kwargs)
+            authorization_result = client.create_authorization_url(**authorization_kwargs)
+            authorization_url = (
+                authorization_result[0]
+                if isinstance(authorization_result, tuple)
+                else str(authorization_result)
+            )
+            state = (
+                authorization_result[1]
+                if isinstance(authorization_result, tuple) and len(authorization_result) > 1
+                else ''
+            )
             self._logger_service.info(
                 'Authorization URL created: '
                 f'provider={resolved_provider}, '
