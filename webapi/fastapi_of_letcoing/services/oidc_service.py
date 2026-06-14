@@ -202,10 +202,19 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'OAuth provider not found: {resolved_provider}')
                 return None
 
-            kwargs = {'redirect_uri': redirect_uri} if redirect_uri else {}
-            token = client.authorize_access_token(**kwargs)
+            # Authlib's Flask integration already persists the redirect URI used
+            # during authorize_redirect() and reuses it while exchanging the code.
+            # Passing redirect_uri again here can collide with the stored value and
+            # raise "got multiple values for keyword argument 'redirect_uri'".
+            token = client.authorize_access_token()
+            self._logger_service.info(
+                'OAuth token received: '
+                f'provider={resolved_provider}, '
+                f'token_keys={",".join(sorted(token.keys())) if isinstance(token, dict) else type(token).__name__}'
+            )
             user_info = self._get_user_info(resolved_provider, client, token)
             if not user_info:
+                self._logger_service.error(f'OAuth callback failed because user info is empty: {resolved_provider}')
                 return None
 
             return {
@@ -216,6 +225,50 @@ class OIDCService(Injectable, IOIDCService):
         except Exception as ex:
             self._logger_service.error(f'Failed to handle OAuth callback: {provider}', ex)
             return None
+
+    def _normalize_user_data(self, user_data: Any) -> Optional[Dict[str, Any]]:
+        if hasattr(user_data, 'to_dict'):
+            return user_data.to_dict()
+
+        if isinstance(user_data, Mapping):
+            return dict(user_data)
+
+        if hasattr(user_data, 'json'):
+            return user_data.json()
+
+        return None
+
+    def _build_oidc_user_info(self, provider: str, user_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        subject = user_data.get('sub') or user_data.get('id') or user_data.get('user_id') or user_data.get('uid')
+        if not subject:
+            self._logger_service.error(
+                'OIDC user info does not include a stable subject: '
+                f'provider={provider}, keys={",".join(sorted(user_data.keys()))}'
+            )
+            return None
+
+        username = (
+            user_data.get('preferred_username')
+            or user_data.get('nickname')
+            or user_data.get('username')
+            or user_data.get('name')
+            or user_data.get('email')
+            or str(subject)
+        )
+        name = user_data.get('name') or user_data.get('nickname') or username
+        return {
+            'id': str(subject),
+            'username': username,
+            'name': name or user_data.get('email') or str(subject),
+            'email': user_data.get('email') or '',
+            'avatar_url': (
+                user_data.get('picture')
+                or user_data.get('avatar')
+                or user_data.get('avatar_url')
+                or ''
+            ),
+            'provider': provider,
+        }
 
     def _get_user_info(self, provider: str, client, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         try:
@@ -248,44 +301,36 @@ class OIDCService(Injectable, IOIDCService):
                     'provider': provider,
                 }
 
+            token_user_data = self._normalize_user_data(token.get('userinfo')) if isinstance(token, dict) else None
+            if token_user_data:
+                self._logger_service.info(
+                    'Using OIDC user info from token payload: '
+                    f'provider={provider}, keys={",".join(sorted(token_user_data.keys()))}'
+                )
+                return self._build_oidc_user_info(provider, token_user_data)
+
+            user_data = None
             if hasattr(client, 'userinfo'):
-                user_data = client.userinfo(token=token)
-            else:
+                try:
+                    user_data = client.userinfo(token=token)
+                except Exception as ex:
+                    self._logger_service.warning(f'OIDC client.userinfo failed for {provider}: {str(ex)}')
+
+            if not user_data:
                 resp = client.get('userinfo', token=token)
                 resp.raise_for_status()
                 user_data = resp.json()
 
-            if hasattr(user_data, 'to_dict'):
-                user_data = user_data.to_dict()
-            elif isinstance(user_data, Mapping):
-                user_data = dict(user_data)
-            elif hasattr(user_data, 'json'):
-                user_data = user_data.json()
-            else:
+            normalized_user_data = self._normalize_user_data(user_data)
+            if not normalized_user_data:
                 self._logger_service.error(f'Unsupported userinfo response type: {type(user_data).__name__}')
                 return None
 
-            username = (
-                user_data.get('preferred_username')
-                or user_data.get('nickname')
-                or user_data.get('username')
-                or user_data.get('email')
-                or ''
+            self._logger_service.info(
+                'OIDC user info received: '
+                f'provider={provider}, keys={",".join(sorted(normalized_user_data.keys()))}'
             )
-            name = user_data.get('name') or user_data.get('nickname') or username
-            return {
-                'id': str(user_data.get('sub') or user_data.get('id') or ''),
-                'username': username,
-                'name': name or user_data.get('email') or '',
-                'email': user_data.get('email') or '',
-                'avatar_url': (
-                    user_data.get('picture')
-                    or user_data.get('avatar')
-                    or user_data.get('avatar_url')
-                    or ''
-                ),
-                'provider': provider,
-            }
+            return self._build_oidc_user_info(provider, normalized_user_data)
         except Exception as ex:
             self._logger_service.error(f'Failed to fetch user info: {provider}', ex)
             return None
