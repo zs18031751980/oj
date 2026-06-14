@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
 from authlib.integrations.flask_client import OAuth
+from flask import redirect
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
@@ -158,15 +159,36 @@ class OIDCService(Injectable, IOIDCService):
         return kwargs
 
     def _extract_authorization_url(self, authorization_result: Any) -> str:
-        if isinstance(authorization_result, tuple):
-            return str(authorization_result[0]) if authorization_result else ''
-
         if isinstance(authorization_result, Mapping):
             url_value = authorization_result.get('url')
             if url_value:
                 return str(url_value)
 
+        if isinstance(authorization_result, tuple):
+            return str(authorization_result[0]) if authorization_result else ''
+
         return str(authorization_result or '')
+
+    def _extract_authorization_state(self, authorization_result: Any) -> str:
+        if isinstance(authorization_result, Mapping):
+            return str(authorization_result.get('state') or '')
+
+        if isinstance(authorization_result, tuple) and len(authorization_result) > 1:
+            return str(authorization_result[1] or '')
+
+        return ''
+
+    def _authorization_data(self, authorization_result: Any) -> Dict[str, Any]:
+        if isinstance(authorization_result, Mapping):
+            return dict(authorization_result)
+
+        if isinstance(authorization_result, tuple):
+            data = {'url': authorization_result[0]} if authorization_result else {}
+            if len(authorization_result) > 1:
+                data['state'] = authorization_result[1]
+            return data
+
+        return {'url': str(authorization_result or '')}
 
     def get_authorization_redirect(self, provider: str, redirect_uri: str):
         """Return a Flask redirect response that starts the OAuth login."""
@@ -191,18 +213,21 @@ class OIDCService(Injectable, IOIDCService):
                 f'redirect_uri={redirect_uri}, '
                 f'scope={authorization_kwargs.get("scope", "")}'
             )
-            response = client.authorize_redirect(**authorization_kwargs)
-            authorization_url = (
-                response.headers.get('Location', '')
-                if hasattr(response, 'headers')
-                else ''
+            authorization_result = client.create_authorization_url(**authorization_kwargs)
+            authorization_url = self._extract_authorization_url(authorization_result)
+            authorization_state = self._extract_authorization_state(authorization_result)
+            authorization_data = self._authorization_data(authorization_result)
+            client.save_authorize_data(
+                redirect_uri=redirect_uri,
+                **authorization_data,
             )
             self._logger_service.info(
                 'Authorization URL created: '
                 f'provider={resolved_provider}, '
+                f'state_length={len(authorization_state)}, '
                 f'url={authorization_url}'
             )
-            return response
+            return redirect(authorization_url)
         except Exception as ex:
             self._logger_service.error(f'Failed to create OAuth redirect: {provider}', ex)
             return None
