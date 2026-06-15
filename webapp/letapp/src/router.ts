@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 import MainLayout from './layouts/MainLayout.vue';
 import AdminLayout from './layouts/AdminLayout.vue';
 import { useAuthStore } from './stores/auth';
-import { OAUTH_LOGIN_URL } from './services/api';
 
 const routes = [
   {
@@ -83,7 +82,7 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth) {
     const authStore = useAuthStore();
     if (!authStore.isAuthenticated) {
-      window.location.href = OAUTH_LOGIN_URL;
+      authStore.startOAuthLogin('iOSClub', to.fullPath, true);
       next(false);
       return;
     }

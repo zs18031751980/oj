@@ -127,6 +127,7 @@ const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
 const inputCollapsed = ref(false);
 const outputCollapsed = ref(false);
+const bottomPanelsCollapsed = ref(false);
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
   languages.find((lang) => lang.value === selectedLanguage.value) ?? defaultLanguage
@@ -194,6 +195,7 @@ const runCode = async () => {
   if (!source.trim()) {
     outputKind.value = 'error';
     output.value = '代码不能为空。\n';
+    bottomPanelsCollapsed.value = false;
     outputCollapsed.value = false;
     return;
   }
@@ -201,6 +203,7 @@ const runCode = async () => {
   isExecuting.value = true;
   output.value = '';
   outputKind.value = 'info';
+  bottomPanelsCollapsed.value = false;
   outputCollapsed.value = false;
 
   try {
@@ -466,7 +469,7 @@ const importCode = () => {
           </div>
         </section>
 
-        <div class="bottom-panels">
+        <div v-show="!bottomPanelsCollapsed" class="bottom-panels">
           <section class="surface-panel">
             <button class="collapse-header" type="button" @click="inputCollapsed = !inputCollapsed">
               <div class="flex items-center gap-2">
@@ -509,6 +512,15 @@ const importCode = () => {
         </div>
       </div>
     </div>
+
+    <button
+      class="floating-collapse-button"
+      type="button"
+      @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
+    >
+      <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
+      <span>{{ bottomPanelsCollapsed ? '展开下方面板' : '收起下方面板' }}</span>
+    </button>
   </div>
 </template>
 
@@ -634,6 +646,10 @@ const importCode = () => {
   @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
 }
 
+.floating-collapse-button {
+  @apply fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
+}
+
 .placeholder-copy {
   @apply text-sm italic text-slate-500;
 }
@@ -683,6 +699,10 @@ const importCode = () => {
 
   .output-box {
     min-height: 140px;
+  }
+
+  .floating-collapse-button {
+    @apply bottom-4 right-4 px-3.5 py-2.5 text-[13px];
   }
 }
 

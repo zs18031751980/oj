@@ -2,13 +2,12 @@
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import { OAUTH_LOGIN_URL } from '../services/api';
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 const goToOauthLogin = () => {
-  window.location.href = OAUTH_LOGIN_URL;
+  authStore.startOAuthLogin('iOSClub', '/learn', true);
 };
 
 const languages = [

@@ -122,10 +122,12 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   const startOAuthLogin = (provider: string, next = '/', remember = true) => {
-    void provider;
-    void next;
     sessionStorage.setItem(OAUTH_REMEMBER_KEY, remember ? '1' : '0');
-    window.location.href = OAUTH_LOGIN_URL;
+    const safeNext = next.startsWith('/') ? next : '/';
+    const loginUrl = new URL(OAUTH_LOGIN_URL);
+    loginUrl.searchParams.set('provider', provider);
+    loginUrl.searchParams.set('next', safeNext);
+    window.location.href = loginUrl.toString();
   };
 
   const startGithubLogin = (next = '/', remember = true) => {
