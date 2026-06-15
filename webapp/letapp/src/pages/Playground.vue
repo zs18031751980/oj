@@ -416,10 +416,6 @@ const importCode = () => {
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
               重置
             </button>
-            <button class="run-button w-full justify-center sm:w-auto" :disabled="isExecuting" @click="runCode">
-              <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-              {{ isExecuting ? '执行中...' : '运行代码' }}
-            </button>
           </div>
         </div>
       </div>
@@ -462,6 +458,13 @@ const importCode = () => {
               @scroll="syncEditorScroll"
               @keydown="handleEditorKeydown"
             ></textarea>
+          </div>
+
+          <div class="editor-runbar">
+            <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+              <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+              {{ isExecuting ? '执行中...' : '运行代码' }}
+            </button>
           </div>
         </section>
 
@@ -593,6 +596,14 @@ const importCode = () => {
   @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
 }
 
+.editor-runbar {
+  @apply flex justify-center border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
+}
+
+.editor-run-button {
+  @apply min-w-[11rem] justify-center;
+}
+
 .editor-highlight,
 .editor-input {
   @apply absolute inset-0 m-0 h-full w-full overflow-auto whitespace-pre-wrap break-normal p-5 font-mono text-sm leading-7;
@@ -670,6 +681,10 @@ const importCode = () => {
     @apply px-4 py-3;
   }
 
+  .editor-runbar {
+    @apply px-4 py-3;
+  }
+
   .editor-shell {
     height: 380px;
   }
@@ -714,6 +729,10 @@ const importCode = () => {
   }
 
   .editor-toolbar {
+    @apply px-4 py-3.5;
+  }
+
+  .editor-runbar {
     @apply px-4 py-3.5;
   }
 
