@@ -125,6 +125,8 @@ const output = ref<string>('');
 const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
+const inputCollapsed = ref(false);
+const outputCollapsed = ref(false);
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
   languages.find((lang) => lang.value === selectedLanguage.value) ?? defaultLanguage
@@ -192,12 +194,14 @@ const runCode = async () => {
   if (!source.trim()) {
     outputKind.value = 'error';
     output.value = '代码不能为空。\n';
+    outputCollapsed.value = false;
     return;
   }
 
   isExecuting.value = true;
   output.value = '';
   outputKind.value = 'info';
+  outputCollapsed.value = false;
 
   try {
     const endpoint = authStore.isAuthenticated ? '/code/run' : '/code/run/public';
@@ -423,7 +427,7 @@ const importCode = () => {
     </div>
 
     <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8">
-      <div class="playground-grid grid items-start gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div class="playground-stack">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -462,34 +466,44 @@ const importCode = () => {
           </div>
         </section>
 
-        <div class="side-panel-stack">
+        <div class="bottom-panels">
           <section class="surface-panel">
-            <div class="panel-header">
+            <button class="collapse-header" type="button" @click="inputCollapsed = !inputCollapsed">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>输入数据</span>
               </div>
-              <div class="text-xs text-slate-500 dark:text-slate-400">Tab 会插入两个空格</div>
+              <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <span>Tab 会插入两个空格</span>
+                <Icon :icon="inputCollapsed ? 'material-symbols:expand-more' : 'material-symbols:expand-less'" class="h-5 w-5" />
+              </div>
+            </button>
+            <div v-show="!inputCollapsed" class="collapse-body">
+              <textarea
+                v-model="stdin"
+                class="plain-textarea panel-textarea"
+                placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                @keydown="handleStdinKeydown"
+              ></textarea>
             </div>
-            <textarea
-              v-model="stdin"
-              class="plain-textarea h-48"
-              placeholder="如果程序需要输入，可以在这里填写测试数据。"
-              @keydown="handleStdinKeydown"
-            ></textarea>
           </section>
 
           <section class="surface-panel">
-            <div class="panel-header">
+            <button class="collapse-header" type="button" @click="outputCollapsed = !outputCollapsed">
               <div class="flex items-center gap-2">
                 <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
                 <span>输出</span>
               </div>
-              <div class="text-xs text-slate-500 dark:text-slate-400">标准输出和错误输出已合并</div>
-            </div>
-            <div class="output-box">
-              <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>
-              <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+              <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <span>标准输出和错误输出已合并</span>
+                <Icon :icon="outputCollapsed ? 'material-symbols:expand-more' : 'material-symbols:expand-less'" class="h-5 w-5" />
+              </div>
+            </button>
+            <div v-show="!outputCollapsed" class="collapse-body">
+              <div class="output-box">
+                <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>
+                <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+              </div>
             </div>
           </section>
         </div>
@@ -510,7 +524,11 @@ const importCode = () => {
 }
 
 .playground-container {
-  max-width: 80rem;
+  max-width: 90rem;
+}
+
+.playground-stack {
+  @apply flex flex-col gap-6;
 }
 
 .toolbar-cluster {
@@ -530,15 +548,23 @@ const importCode = () => {
 }
 
 .surface-panel {
-  @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/15;
+  @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/15;
 }
 
-.side-panel-stack {
-  @apply grid min-w-0 gap-6;
+.bottom-panels {
+  @apply grid gap-4;
 }
 
 .panel-header {
   @apply flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
+}
+
+.collapse-header {
+  @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-100 dark:hover:bg-slate-800/40;
+}
+
+.collapse-body {
+  @apply overflow-hidden;
 }
 
 .editor-toolbar {
@@ -564,7 +590,7 @@ const importCode = () => {
 }
 
 .editor-shell {
-  @apply relative h-[560px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
+  @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
 }
 
 .editor-highlight,
@@ -600,8 +626,12 @@ const importCode = () => {
   tab-size: 2;
 }
 
+.panel-textarea {
+  height: 220px;
+}
+
 .output-box {
-  @apply min-h-[180px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
+  @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
 }
 
 .placeholder-copy {
@@ -627,7 +657,8 @@ const importCode = () => {
     border-radius: 1.35rem;
   }
 
-  .panel-header {
+  .panel-header,
+  .collapse-header {
     @apply px-4 py-3 text-[13px];
   }
 
@@ -636,7 +667,7 @@ const importCode = () => {
   }
 
   .editor-shell {
-    height: 360px;
+    height: 380px;
   }
 
   .editor-highlight,
@@ -646,22 +677,18 @@ const importCode = () => {
     @apply p-4 text-[13px] leading-6;
   }
 
-  .plain-textarea {
-    height: 180px !important;
+  .panel-textarea {
+    height: 160px;
   }
 
   .output-box {
-    min-height: 150px;
+    min-height: 140px;
   }
 }
 
 @media (min-width: 768px) and (max-width: 1366px) {
   .playground-container {
-    max-width: 72rem;
-  }
-
-  .playground-grid {
-    gap: 1.5rem;
+    max-width: 76rem;
   }
 
   .toolbar-cluster {
@@ -673,7 +700,8 @@ const importCode = () => {
     @apply min-h-10 px-4 py-2 text-sm;
   }
 
-  .panel-header {
+  .panel-header,
+  .collapse-header {
     @apply px-4 py-3.5;
   }
 
@@ -682,47 +710,21 @@ const importCode = () => {
   }
 
   .editor-shell {
-    height: 470px;
+    height: 500px;
   }
 
-  .plain-textarea {
-    height: 210px !important;
+  .panel-textarea {
+    height: 180px;
   }
 
   .output-box {
-    min-height: 165px;
+    min-height: 170px;
   }
 }
 
 @media (min-width: 1367px) and (max-width: 1440px) {
   .playground-container {
-    max-width: 78rem;
-  }
-
-  .playground-grid {
-    gap: 1.75rem;
-  }
-
-  .editor-shell {
-    height: 520px;
-  }
-
-  .plain-textarea {
-    height: 220px !important;
-  }
-
-  .output-box {
-    min-height: 175px;
-  }
-}
-
-@media (min-width: 1441px) and (max-width: 1920px) {
-  .playground-container {
-    max-width: 88rem;
-  }
-
-  .playground-grid {
-    gap: 2rem;
+    max-width: 84rem;
   }
 
   .editor-shell {
@@ -730,25 +732,23 @@ const importCode = () => {
   }
 }
 
-@media (min-width: 1921px) {
+@media (min-width: 1441px) and (max-width: 1920px) {
   .playground-container {
     max-width: 96rem;
   }
 
-  .playground-grid {
-    gap: 2.25rem;
+  .editor-shell {
+    height: 640px;
+  }
+}
+
+@media (min-width: 1921px) {
+  .playground-container {
+    max-width: 108rem;
   }
 
   .editor-shell {
-    height: 620px;
-  }
-
-  .plain-textarea {
-    height: 240px !important;
-  }
-
-  .output-box {
-    min-height: 190px;
+    height: 720px;
   }
 }
 
@@ -756,6 +756,10 @@ const importCode = () => {
   .editor-toolbar {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
+  }
+
+  .bottom-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
