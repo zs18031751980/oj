@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
 from authlib.integrations.flask_client import OAuth
-from flask import redirect
+from flask import redirect, request, session
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
@@ -190,6 +190,54 @@ class OIDCService(Injectable, IOIDCService):
 
         return {'url': str(authorization_result or '')}
 
+    def _should_skip_id_token_validation(self, provider: str) -> bool:
+        """Return whether callback handling should avoid parsing the ID token.
+
+        Some self-hosted OIDC providers issue an id_token whose at_hash claim
+        does not match the access_token. Authlib validates that claim inside
+        authorize_access_token(), before this service can fall back to the
+        userinfo endpoint. For custom providers we can safely finish the OAuth
+        code exchange and read userinfo with the returned access token instead.
+        """
+        if provider == 'github':
+            return False
+
+        provider_config = self._normalize_oidc_provider_configs().get(provider, {})
+        if not isinstance(provider_config, dict):
+            return True
+
+        if 'skip_id_token_validation' in provider_config:
+            return bool(provider_config.get('skip_id_token_validation'))
+
+        if 'validate_id_token' in provider_config:
+            return not bool(provider_config.get('validate_id_token'))
+
+        return True
+
+    def _authorize_access_token_without_id_token_validation(self, client) -> Dict[str, Any]:
+        """Exchange the callback code for a token without parsing id_token.
+
+        This mirrors Authlib's FlaskOAuth2App.authorize_access_token() state
+        handling, but intentionally stops before parse_id_token().
+        """
+        if request.method == 'GET':
+            params = {
+                'code': request.args['code'],
+                'state': request.args.get('state'),
+            }
+        else:
+            params = {
+                'code': request.form['code'],
+                'state': request.form.get('state'),
+            }
+
+        state_data = client.framework.get_state_data(session, params.get('state'))
+        client.framework.clear_state_data(session, params.get('state'))
+        params = client._format_state_params(state_data, params)
+        token = client.fetch_access_token(**params)
+        client.token = token
+        return token
+
     def get_authorization_redirect(self, provider: str, redirect_uri: str):
         """Return a Flask redirect response that starts the OAuth login."""
         if not self._oauth:
@@ -274,7 +322,14 @@ class OIDCService(Injectable, IOIDCService):
             # during authorize_redirect() and reuses it while exchanging the code.
             # Passing redirect_uri again here can collide with the stored value and
             # raise "got multiple values for keyword argument 'redirect_uri'".
-            token = client.authorize_access_token()
+            if self._should_skip_id_token_validation(resolved_provider):
+                self._logger_service.warning(
+                    'Skipping OIDC id_token validation and using userinfo endpoint: '
+                    f'provider={resolved_provider}'
+                )
+                token = self._authorize_access_token_without_id_token_validation(client)
+            else:
+                token = client.authorize_access_token()
             self._logger_service.info(
                 'OAuth token received: '
                 f'provider={resolved_provider}, '
