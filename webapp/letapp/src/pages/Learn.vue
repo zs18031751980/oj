@@ -172,6 +172,9 @@ const currentDocTitle = computed(() => {
 });
 
 const isDetailMode = computed(() => Boolean(currentDocTitle.value));
+const currentResource = computed(() => (
+  currentDocTitle.value ? findResourceByTitle(currentDocTitle.value) : undefined
+));
 
 const findResourceByTitle = (title: string) => allResources.find((item) => item.title === title);
 
@@ -187,6 +190,25 @@ const openResource = (resource: LearnResource) => {
 
 const goBackToList = async () => {
   await router.push('/learn');
+};
+
+const downloadCurrentMarkdown = () => {
+  const resource = currentResource.value;
+  const content = selectedResource.value?.content;
+
+  if (!resource || !content) {
+    return;
+  }
+
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = resource.markdownFile;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
 };
 
 const loadMarkdown = async (title: string) => {
@@ -369,6 +391,15 @@ watch(
           >
             <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
             返回学习资源
+          </button>
+
+          <button
+            class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isLoadingDoc || !selectedResource"
+            @click="downloadCurrentMarkdown"
+          >
+            <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
+            导出 Markdown
           </button>
 
           <button
