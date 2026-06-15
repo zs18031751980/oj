@@ -166,11 +166,10 @@ const headerPaddingStyle = computed(() => (
     : undefined
 ));
 
-const contentPaddingStyle = computed(() => (
-  isDesktop.value
-    ? { paddingLeft: `${desktopSidebarWidth.value}px` }
-    : undefined
-));
+const contentPaddingStyle = computed(() => ({
+  ...(isDesktop.value ? { paddingLeft: `${desktopSidebarWidth.value}px` } : {}),
+  '--app-content-left': isDesktop.value ? `${desktopSidebarWidth.value}px` : '0px',
+}));
 
 const updateViewportFlags = () => {
   isDesktop.value = window.innerWidth >= 768;

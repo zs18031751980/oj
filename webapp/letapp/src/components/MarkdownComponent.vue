@@ -377,7 +377,13 @@ onUnmounted(() => {
 }
 
 .markdown-content :deep(pre) {
-  @apply rounded-2xl p-4;
+  @apply rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100;
+}
+
+.markdown-content :deep(pre[class*='language-']),
+.markdown-content :deep(code[class*='language-']) {
+  background: transparent !important;
+  color: inherit;
 }
 
 .markdown-content :deep(table) {

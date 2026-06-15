@@ -32,7 +32,9 @@ interface LanguageOption {
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+
 const highlightedCodeRef = ref<HTMLElement | null>(null);
+const languageMenuRef = ref<HTMLElement | null>(null);
 
 const languagePresets: Record<string, string> = {
   javascript: `function greet(name) {
@@ -97,6 +99,7 @@ const fallbackFileNames: Record<string, string> = {
   swift: 'main',
   kotlin: 'Main',
 };
+
 const extensionMap: Record<string, string> = {
   javascript: 'js',
   python: 'py',
@@ -126,6 +129,7 @@ const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
 const bottomPanelsCollapsed = ref(false);
+const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth);
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
   languages.find((lang) => lang.value === selectedLanguage.value) ?? defaultLanguage
@@ -133,6 +137,38 @@ const currentLanguageInfo = computed<LanguageOption>(() => (
 
 const exportExtension = computed(() => extensionMap[selectedLanguage.value] ?? 'txt');
 const lineCount = computed(() => code.value.split('\n').length);
+
+const bottomPanelSpacer = computed(() => {
+  if (bottomPanelsCollapsed.value) {
+    return '5.5rem';
+  }
+
+  if (viewportWidth.value < 768) {
+    return '39rem';
+  }
+
+  if (viewportWidth.value < 900) {
+    return '30rem';
+  }
+
+  return '23rem';
+});
+
+const floatingButtonBottom = computed(() => {
+  if (bottomPanelsCollapsed.value) {
+    return '1.25rem';
+  }
+
+  if (viewportWidth.value < 768) {
+    return '40rem';
+  }
+
+  if (viewportWidth.value < 900) {
+    return '31rem';
+  }
+
+  return '24rem';
+});
 
 const highlightedCode = computed(() => {
   const language = currentLanguageInfo.value.prism;
@@ -192,7 +228,7 @@ const runCode = async () => {
   const source = code.value;
   if (!source.trim()) {
     outputKind.value = 'error';
-    output.value = '代码不能为空。\n';
+    output.value = '代码不能为空。';
     bottomPanelsCollapsed.value = false;
     return;
   }
@@ -215,11 +251,11 @@ const runCode = async () => {
     });
 
     const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
-    output.value = text || '程序已执行，但没有产生输出。';
+    output.value = text || '程序已运行，但没有产生输出。';
     outputKind.value = result.stderr ? 'error' : 'info';
   } catch (error) {
     outputKind.value = 'error';
-    output.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}\n`;
+    output.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}`;
   } finally {
     isExecuting.value = false;
   }
@@ -262,6 +298,17 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
   }
 };
 
+const updateViewportWidth = () => {
+  viewportWidth.value = window.innerWidth;
+};
+
+const closeLanguageMenuOnOutsideClick = (event: MouseEvent) => {
+  const target = event.target as Node | null;
+  if (languageMenuRef.value && target && !languageMenuRef.value.contains(target)) {
+    isLanguageMenuOpen.value = false;
+  }
+};
+
 const updateExportFileName = (language: string) => {
   const fallback = fallbackFileNames[language] ?? 'code';
   if (!sanitizeFileName(exportFileName.value)) {
@@ -282,22 +329,6 @@ const updateLanguage = (language: string) => {
   updateExportFileName(language);
 };
 
-onMounted(() => {
-  const languageParam = route.query.language as string;
-  if (languageParam && languages.some((lang) => lang.value === languageParam)) {
-    selectedLanguage.value = languageParam;
-    previousLanguage.value = languageParam;
-    code.value = getLanguagePreset(languageParam) || code.value;
-  }
-
-  updateExportFileName(selectedLanguage.value);
-  window.addEventListener('keydown', handleGlobalShortcut);
-});
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleGlobalShortcut);
-});
-
 const saveCode = () => {
   const baseName = sanitizeFileName(exportFileName.value) || fallbackFileNames[selectedLanguage.value] || 'code';
   exportFileName.value = baseName;
@@ -313,7 +344,7 @@ const saveCode = () => {
   URL.revokeObjectURL(objectUrl);
 };
 
-  const resetCode = () => {
+const resetCode = () => {
   code.value = getLanguagePreset(selectedLanguage.value);
   stdin.value = '';
   output.value = '';
@@ -335,6 +366,7 @@ const importCode = () => {
     const reader = new FileReader();
     reader.onload = (readerEvent) => {
       code.value = String(readerEvent.target?.result || '');
+
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const extToLanguage: Record<string, string> = {
         js: 'javascript',
@@ -357,11 +389,34 @@ const importCode = () => {
       const sanitizedImportedName = sanitizeFileName(importedName);
       exportFileName.value = sanitizedImportedName || fallbackFileNames[selectedLanguage.value] || 'code';
     };
+
     reader.readAsText(file);
   };
 
   fileInput.click();
 };
+
+onMounted(() => {
+  const languageParam = route.query.language as string | undefined;
+  if (languageParam && languages.some((lang) => lang.value === languageParam)) {
+    selectedLanguage.value = languageParam;
+    previousLanguage.value = languageParam;
+    code.value = getLanguagePreset(languageParam) || code.value;
+  }
+
+  updateExportFileName(selectedLanguage.value);
+  updateViewportWidth();
+
+  window.addEventListener('keydown', handleGlobalShortcut);
+  window.addEventListener('resize', updateViewportWidth);
+  window.addEventListener('click', closeLanguageMenuOnOutsideClick);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalShortcut);
+  window.removeEventListener('resize', updateViewportWidth);
+  window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
+});
 </script>
 
 <template>
@@ -375,12 +430,12 @@ const importCode = () => {
             </button>
             <div class="min-w-0">
               <h1 class="truncate text-2xl font-black tracking-tight">在线代码编辑器</h1>
-              <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入和统一输出结果显示。</p>
+              <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入，以及统一输出结果显示。</p>
             </div>
           </div>
 
           <div class="toolbar-cluster">
-            <div class="relative w-full sm:w-auto">
+            <div ref="languageMenuRef" class="relative w-full sm:w-auto">
               <button class="toolbar-button w-full min-w-0 justify-between sm:min-w-[170px]" :title="currentLanguageInfo.name" @click="isLanguageMenuOpen = !isLanguageMenuOpen">
                 <span class="flex min-w-0 items-center gap-2">
                   <Icon :icon="currentLanguageInfo.icon" class="h-4 w-4 shrink-0" :style="{ color: currentLanguageInfo.color }" />
@@ -421,7 +476,7 @@ const importCode = () => {
       </div>
     </div>
 
-    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8">
+    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: bottomPanelSpacer }">
       <div class="playground-stack">
         <section class="editor-panel">
           <div class="panel-header">
@@ -443,7 +498,7 @@ const importCode = () => {
               />
             </label>
             <div class="export-hint">
-              保存为
+              <span>保存为</span>
               <span class="export-file-chip">{{ sanitizeFileName(exportFileName) || fallbackFileNames[selectedLanguage] || 'code' }}.{{ exportExtension }}</span>
             </div>
           </div>
@@ -459,22 +514,23 @@ const importCode = () => {
               @keydown="handleEditorKeydown"
             ></textarea>
           </div>
-
-          <div class="editor-runbar">
-            <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
-              <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-              {{ isExecuting ? '执行中...' : '运行代码' }}
-            </button>
-          </div>
         </section>
+      </div>
+    </div>
 
-        <div v-show="!bottomPanelsCollapsed" class="bottom-panels">
+    <div v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
+      <div class="playground-container fixed-panels-inner">
+        <div class="bottom-panels">
           <section class="surface-panel">
-            <div class="collapse-header">
+            <div class="collapse-header input-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>输入数据</span>
               </div>
+              <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+                <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+                {{ isExecuting ? '运行中...' : '运行代码' }}
+              </button>
             </div>
             <div class="collapse-body">
               <textarea
@@ -495,7 +551,10 @@ const importCode = () => {
             </div>
             <div class="collapse-body">
               <div class="output-box">
-                <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>
+                <pre
+                  v-if="output"
+                  :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
+                >{{ output }}</pre>
                 <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
               </div>
             </div>
@@ -507,6 +566,7 @@ const importCode = () => {
     <button
       class="floating-collapse-button"
       type="button"
+      :style="{ bottom: floatingButtonBottom }"
       @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
     >
       <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
@@ -554,6 +614,16 @@ const importCode = () => {
   @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/15;
 }
 
+.fixed-panels-shell {
+  @apply pointer-events-none fixed right-0 bottom-0 z-40;
+  left: var(--app-content-left, 0px);
+}
+
+.fixed-panels-inner {
+  @apply px-4 pb-4 sm:px-6 lg:px-8;
+  pointer-events: auto;
+}
+
 .bottom-panels {
   @apply grid gap-4;
 }
@@ -563,7 +633,11 @@ const importCode = () => {
 }
 
 .collapse-header {
-  @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-100 dark:hover:bg-slate-800/40;
+  @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
+}
+
+.input-header {
+  @apply gap-3;
 }
 
 .collapse-body {
@@ -571,7 +645,7 @@ const importCode = () => {
 }
 
 .editor-toolbar {
-  @apply grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
+  @apply grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-900;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -580,7 +654,7 @@ const importCode = () => {
 }
 
 .export-name-input {
-  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-cyan-900;
+  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-cyan-900;
 }
 
 .export-hint {
@@ -596,12 +670,8 @@ const importCode = () => {
   @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
 }
 
-.editor-runbar {
-  @apply flex justify-center border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
-}
-
 .editor-run-button {
-  @apply min-w-[11rem] justify-center;
+  @apply min-w-[10.75rem] justify-center;
 }
 
 .editor-highlight,
@@ -611,7 +681,18 @@ const importCode = () => {
 }
 
 .editor-highlight {
-  @apply pointer-events-none bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100;
+  @apply pointer-events-none text-slate-900 transition-colors duration-300 dark:text-slate-100;
+}
+
+.editor-highlight[class*='language-'] {
+  background: transparent !important;
+}
+
+.editor-highlight :deep(code),
+.editor-highlight :deep([class*='language-']),
+.editor-highlight :deep(.token) {
+  background: transparent !important;
+  text-shadow: none !important;
 }
 
 .editor-highlight :deep(code) {
@@ -643,14 +724,16 @@ const importCode = () => {
 
 .output-box {
   @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
+  max-height: 220px;
+  overflow: auto;
 }
 
 .floating-collapse-button {
-  @apply fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
+  @apply fixed right-5 z-50 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
 }
 
 .placeholder-copy {
-  @apply text-sm italic text-slate-500;
+  @apply text-sm italic text-slate-500 dark:text-slate-400;
 }
 
 @media (max-width: 767px) {
@@ -681,10 +764,6 @@ const importCode = () => {
     @apply px-4 py-3;
   }
 
-  .editor-runbar {
-    @apply px-4 py-3;
-  }
-
   .editor-shell {
     height: 380px;
   }
@@ -696,16 +775,18 @@ const importCode = () => {
     @apply p-4 text-[13px] leading-6;
   }
 
-  .panel-textarea {
+  .panel-textarea,
+  .output-box {
     height: 160px;
+    max-height: 160px;
   }
 
-  .output-box {
-    min-height: 140px;
+  .fixed-panels-inner {
+    @apply px-4 pb-4;
   }
 
   .floating-collapse-button {
-    @apply bottom-4 right-4 px-3.5 py-2.5 text-[13px];
+    @apply right-4 px-3.5 py-2.5 text-[13px];
   }
 }
 
@@ -732,20 +813,14 @@ const importCode = () => {
     @apply px-4 py-3.5;
   }
 
-  .editor-runbar {
-    @apply px-4 py-3.5;
-  }
-
   .editor-shell {
     height: 500px;
   }
 
-  .panel-textarea {
-    height: 180px;
-  }
-
+  .panel-textarea,
   .output-box {
-    min-height: 170px;
+    height: 180px;
+    max-height: 180px;
   }
 }
 
