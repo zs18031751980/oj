@@ -386,6 +386,49 @@ onUnmounted(() => {
   color: inherit;
 }
 
+:global(html:not(.dark)) .markdown-content :deep(pre),
+:global(html:not(.dark)) .markdown-content :deep(pre[class*='language-']),
+:global(html:not(.dark)) .markdown-content :deep(code[class*='language-']) {
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.comment),
+:global(html:not(.dark)) .markdown-content :deep(.token.prolog),
+:global(html:not(.dark)) .markdown-content :deep(.token.doctype),
+:global(html:not(.dark)) .markdown-content :deep(.token.cdata) {
+  color: #64748b !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.punctuation),
+:global(html:not(.dark)) .markdown-content :deep(.token.operator) {
+  color: #334155 !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.keyword),
+:global(html:not(.dark)) .markdown-content :deep(.token.selector),
+:global(html:not(.dark)) .markdown-content :deep(.token.atrule) {
+  color: #7c3aed !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.string),
+:global(html:not(.dark)) .markdown-content :deep(.token.attr-value),
+:global(html:not(.dark)) .markdown-content :deep(.token.char),
+:global(html:not(.dark)) .markdown-content :deep(.token.inserted) {
+  color: #059669 !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.function),
+:global(html:not(.dark)) .markdown-content :deep(.token.class-name) {
+  color: #2563eb !important;
+}
+
+:global(html:not(.dark)) .markdown-content :deep(.token.number),
+:global(html:not(.dark)) .markdown-content :deep(.token.boolean),
+:global(html:not(.dark)) .markdown-content :deep(.token.constant) {
+  color: #ea580c !important;
+}
+
 .markdown-content :deep(table) {
   @apply my-4 min-w-full border-collapse;
 }

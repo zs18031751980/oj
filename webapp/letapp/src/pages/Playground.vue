@@ -736,6 +736,79 @@ onUnmounted(() => {
   @apply text-sm italic text-slate-500 dark:text-slate-400;
 }
 
+:global(html:not(.dark)) .editor-panel,
+:global(html:not(.dark)) .surface-panel,
+:global(html:not(.dark)) .editor-shell,
+:global(html:not(.dark)) .plain-textarea,
+:global(html:not(.dark)) .output-box {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .panel-header,
+:global(html:not(.dark)) .collapse-header {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .editor-toolbar {
+  background-color: #f8fafc !important;
+}
+
+:global(html:not(.dark)) .export-name-field,
+:global(html:not(.dark)) .export-hint,
+:global(html:not(.dark)) .placeholder-copy {
+  color: #475569 !important;
+}
+
+:global(html:not(.dark)) .export-file-chip {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'],
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] code,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.comment,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.prolog,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.doctype,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.cdata {
+  color: #64748b !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.punctuation,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.operator {
+  color: #334155 !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.keyword,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.selector,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.atrule {
+  color: #7c3aed !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.string,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.attr-value,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.char,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.inserted {
+  color: #059669 !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.function,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.class-name {
+  color: #2563eb !important;
+}
+
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.number,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.boolean,
+:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.constant {
+  color: #ea580c !important;
+}
+
 @media (max-width: 767px) {
   .playground-container {
     max-width: 100%;
