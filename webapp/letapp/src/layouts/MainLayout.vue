@@ -274,3 +274,71 @@ onUnmounted(() => {
   transform: translateY(-8px) scale(0.98);
 }
 </style>
+
+<style>
+html:not(.dark) .sidebar-link {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 20px rgba(148, 163, 184, 0.18) !important;
+}
+
+html:not(.dark) .sidebar-link:hover {
+  background-color: #eef6ff !important;
+  border-color: #7dd3fc !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .sidebar-link * {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .router-link-active.sidebar-link {
+  background-color: #e0f2fe !important;
+  border-color: #38bdf8 !important;
+  color: #0f172a !important;
+  box-shadow: 0 12px 24px rgba(14, 165, 233, 0.18) !important;
+}
+
+html:not(.dark) .router-link-active.sidebar-link * {
+  color: #0f172a !important;
+}
+
+html.dark .sidebar-link {
+  background-color: #020617 !important;
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28) !important;
+}
+
+html.dark .sidebar-link:hover {
+  background-color: #0f172a !important;
+  border-color: #334155 !important;
+  color: #ffffff !important;
+}
+
+html.dark .sidebar-link * {
+  color: #f8fafc !important;
+}
+
+html.dark .router-link-active.sidebar-link {
+  background-color: #082f49 !important;
+  border-color: #22d3ee !important;
+  color: #ecfeff !important;
+  box-shadow: 0 12px 24px rgba(8, 145, 178, 0.24) !important;
+}
+
+html.dark .router-link-active.sidebar-link * {
+  color: #ecfeff !important;
+}
+
+html:not(.dark) .menu-link,
+html:not(.dark) .menu-link * {
+  color: #0f172a !important;
+}
+
+html.dark .menu-link,
+html.dark .menu-link * {
+  color: #f8fafc !important;
+}
+</style>
