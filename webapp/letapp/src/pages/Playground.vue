@@ -121,8 +121,8 @@ const previousLanguage = ref<string>(defaultLanguage.value);
 const isLanguageMenuOpen = ref(false);
 const code = ref<string>(getLanguagePreset(defaultLanguage.value));
 const stdin = ref<string>('');
-const stdout = ref<string>('');
-const stderr = ref<string>('');
+const output = ref<string>('');
+const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
 
@@ -190,13 +190,14 @@ const handleTabInsertion = (event: KeyboardEvent, targetRef: { value: string }) 
 const runCode = async () => {
   const source = code.value;
   if (!source.trim()) {
-    stderr.value = '代码不能为空。\n';
+    outputKind.value = 'error';
+    output.value = '代码不能为空。\n';
     return;
   }
 
   isExecuting.value = true;
-  stdout.value = '';
-  stderr.value = '';
+  output.value = '';
+  outputKind.value = 'info';
 
   try {
     const endpoint = authStore.isAuthenticated ? '/code/run' : '/code/run/public';
@@ -210,10 +211,12 @@ const runCode = async () => {
       }),
     });
 
-    stdout.value = result.stdout || result.message || '';
-    stderr.value = result.stderr || '';
+    const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
+    output.value = text;
+    outputKind.value = result.stderr ? 'error' : 'info';
   } catch (error) {
-    stderr.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}\n`;
+    outputKind.value = 'error';
+    output.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}\n`;
   } finally {
     isExecuting.value = false;
   }
@@ -310,8 +313,8 @@ const saveCode = () => {
 const resetCode = () => {
   code.value = getLanguagePreset(selectedLanguage.value);
   stdin.value = '';
-  stdout.value = '';
-  stderr.value = '';
+  output.value = '';
+  outputKind.value = 'info';
 };
 
 const importCode = () => {
@@ -477,26 +480,13 @@ const importCode = () => {
           <section class="surface-panel">
             <div class="panel-header">
               <div class="flex items-center gap-2">
-                <Icon icon="material-symbols:output" class="h-5 w-5 text-emerald-500" />
-                <span>标准输出</span>
+                <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
+                <span>输出</span>
               </div>
             </div>
             <div class="output-box">
-              <pre v-if="stdout" class="text-emerald-400">{{ stdout }}</pre>
-              <div v-else class="placeholder-copy">运行结果会显示在这里。</div>
-            </div>
-          </section>
-
-          <section class="surface-panel">
-            <div class="panel-header">
-              <div class="flex items-center gap-2">
-                <Icon icon="material-symbols:error" class="h-5 w-5 text-rose-500" />
-                <span>错误输出</span>
-              </div>
-            </div>
-            <div class="output-box">
-              <pre v-if="stderr" class="text-rose-400">{{ stderr }}</pre>
-              <div v-else class="placeholder-copy">如果程序报错，这里会展示详细信息。</div>
+              <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>
+              <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
             </div>
           </section>
         </div>

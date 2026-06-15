@@ -39,7 +39,7 @@ const recentExecutions = [
             <div class="mt-3 flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-300">
               <Icon icon="material-symbols:trending-up" class="h-4 w-4" />
               {{ stat.trend }}
-              <span class="font-medium text-slate-400">较上月</span>
+              <span class="font-medium text-slate-400">较上周</span>
             </div>
           </div>
           <div :class="['grid h-14 w-14 place-items-center rounded-2xl', stat.color]">

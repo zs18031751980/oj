@@ -20,7 +20,7 @@ const languages = [
 const features = [
   {
     icon: 'material-symbols:flash-on',
-    title: '开箱即写',
+    title: '开箱即用',
     description: '打开浏览器就能开始写代码，适合练题、上课演示和快速验证想法。',
   },
   {
@@ -36,7 +36,7 @@ const features = [
   {
     icon: 'material-symbols:verified-user',
     title: '统一身份登录',
-    description: '接入社团认证体系，登录后可保留会话并拓展更多个性化功能。',
+    description: '接入社团认证体系，登录后可保留会话并扩展更多个性化功能。',
   },
 ];
 

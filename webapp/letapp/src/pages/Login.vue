@@ -37,7 +37,7 @@ const handleLogout = async () => {
             Let Coding Access
           </div>
 
-          <h1 class="mt-8 text-4xl font-black tracking-tight">登录之后，你就能把练习和身份体系接起来。</h1>
+          <h1 class="mt-8 text-4xl font-black tracking-tight">登录之后，你就能把练习和身份体系连接起来。</h1>
           <p class="mt-5 text-base leading-8 text-slate-300">
             这里使用社团统一认证登录。登录完成后会自动回到你刚才访问的页面，不需要手动再跳一次。
           </p>
