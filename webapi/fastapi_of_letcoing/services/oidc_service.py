@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from authlib.integrations.flask_client import OAuth
 from flask import redirect, request, session
+import requests
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
@@ -29,6 +30,7 @@ class OIDCService(Injectable, IOIDCService):
         self._config_service = config_service
         self._logger_service = logger_service
         self._oauth: Optional[OAuth] = None
+        self._metadata_timeout = max(int(self._config_service.get_timeout()), 5)
 
     def resolve_provider_name(self, provider: str) -> Optional[str]:
         """Resolve a provider name case-insensitively."""
@@ -109,6 +111,8 @@ class OIDCService(Injectable, IOIDCService):
             server_metadata_url = normalized_config.get('server_metadata_url')
             access_token_url = normalized_config.get('access_token_url')
             authorize_url = normalized_config.get('authorize_url')
+            token_endpoint = normalized_config.get('access_token_url') or normalized_config.get('token_url')
+            userinfo_endpoint = normalized_config.get('userinfo_endpoint')
 
             if not server_metadata_url and not (access_token_url and authorize_url):
                 self._logger_service.warning(
@@ -116,15 +120,24 @@ class OIDCService(Injectable, IOIDCService):
                 )
                 continue
 
+            resolved_metadata = self._fetch_server_metadata(server_metadata_url) if server_metadata_url else None
+            if resolved_metadata:
+                authorize_url = authorize_url or resolved_metadata.get('authorization_endpoint')
+                token_endpoint = token_endpoint or resolved_metadata.get('token_endpoint')
+                userinfo_endpoint = userinfo_endpoint or resolved_metadata.get('userinfo_endpoint')
+                normalized_config['server_metadata'] = resolved_metadata
+
             try:
                 self._oauth.register(
                     provider_name,
                     client_id=normalized_config['client_id'],
                     client_secret=normalized_config['client_secret'],
-                    server_metadata_url=server_metadata_url,
-                    access_token_url=access_token_url,
+                    server_metadata=normalized_config.get('server_metadata'),
+                    server_metadata_url=server_metadata_url if not resolved_metadata else None,
+                    access_token_url=token_endpoint or access_token_url,
                     authorize_url=authorize_url,
                     api_base_url=normalized_config.get('api_base_url'),
+                    userinfo_endpoint=userinfo_endpoint,
                     client_kwargs=normalized_config.get('client_kwargs', {}),
                 )
                 self._logger_service.info(
@@ -138,6 +151,32 @@ class OIDCService(Injectable, IOIDCService):
                 )
             except Exception as ex:
                 self._logger_service.error(f'Failed to register OIDC provider: {provider_name}', ex)
+
+    def _fetch_server_metadata(self, server_metadata_url: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not server_metadata_url:
+            return None
+
+        try:
+            response = requests.get(server_metadata_url, timeout=self._metadata_timeout)
+            response.raise_for_status()
+            metadata = response.json()
+            if not isinstance(metadata, dict):
+                self._logger_service.warning(
+                    f'OIDC metadata is not a JSON object: {server_metadata_url}'
+                )
+                return None
+
+            self._logger_service.info(
+                'OIDC metadata prefetched: '
+                f'url={server_metadata_url}, '
+                f'keys={",".join(sorted(metadata.keys()))}'
+            )
+            return metadata
+        except Exception as ex:
+            self._logger_service.warning(
+                f'Failed to prefetch OIDC metadata, will fall back to runtime fetch: {server_metadata_url} ({str(ex)})'
+            )
+            return None
 
     def _authorization_kwargs(self, provider: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
         provider_config = self._normalize_oidc_provider_configs().get(provider, {})
