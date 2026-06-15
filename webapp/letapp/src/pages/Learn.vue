@@ -323,14 +323,8 @@ watch(
               <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
                 {{ path.description }}
               </p>
-              <ul class="mt-6 space-y-3">
-                <li v-for="point in path.points" :key="point" class="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
-                  <Icon icon="material-symbols:check-circle" class="mt-0.5 h-5 w-5 text-cyan-500" />
-                  <span>{{ point }}</span>
-                </li>
-              </ul>
               <button
-                class="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                class="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                 @click="openResource(path)"
               >
                 <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
@@ -444,7 +438,7 @@ watch(
 }
 
 .path-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-slate-50 p-6 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
+  @apply rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
 }
 
 .pill {
