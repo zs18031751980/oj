@@ -80,7 +80,9 @@ class OIDCService(Injectable, IOIDCService):
             client_kwargs = {}
 
         if not client_kwargs.get('scope'):
-            client_kwargs['scope'] = 'openid profile email'
+            # Match the provider's own OAuth login page default scope so the
+            # issued token can be reused to create the authorization session.
+            client_kwargs['scope'] = 'openid profile role'
 
         if not client_kwargs.get('token_endpoint_auth_method'):
             client_kwargs['token_endpoint_auth_method'] = 'client_secret_post'
