@@ -2,9 +2,14 @@
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { OAUTH_LOGIN_URL } from '../services/api';
 
 const router = useRouter();
 const authStore = useAuthStore();
+
+const goToOauthLogin = () => {
+  window.location.href = OAUTH_LOGIN_URL;
+};
 
 const languages = [
   { name: 'JavaScript', value: 'javascript', icon: 'vscode-icons:file-type-js-official', color: '#f7df1e' },
@@ -74,7 +79,7 @@ const metrics = [
               <Icon icon="material-symbols:play-arrow" class="h-5 w-5" />
               进入在线编辑器
             </button>
-            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push({ path: '/login', query: { next: '/learn' } })">
+            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : goToOauthLogin()">
               <Icon :icon="authStore.isAuthenticated ? 'material-symbols:school' : 'mdi:login'" class="h-5 w-5" />
               {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
             </button>
@@ -176,7 +181,7 @@ const metrics = [
             <button class="hero-primary" @click="router.push('/playground')">
               现在开始写代码
             </button>
-            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push({ path: '/login', query: { next: '/learn' } })">
+            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : goToOauthLogin()">
               {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
             </button>
           </div>

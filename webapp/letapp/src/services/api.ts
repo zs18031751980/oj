@@ -1,4 +1,5 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:6173';
+export const OAUTH_LOGIN_URL = import.meta.env.VITE_OAUTH_LOGIN_URL || 'https://www.xauat.site/oauth-login';
 
 export interface UserInfo {
   id: string;

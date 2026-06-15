@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import { useAuthStore } from '../stores/auth';
+import { OAUTH_LOGIN_URL } from '../services/api';
 
 const route = useRoute();
 const router = useRouter();
@@ -25,12 +26,7 @@ onMounted(async () => {
     const errorMessage = error instanceof Error ? error.message : '登录失败，请稍后重试';
     statusText.value = errorMessage;
     message.error(errorMessage);
-    await router.replace({
-      path: '/login',
-      query: {
-        next: sanitizeNext(route.query.next),
-      },
-    });
+    window.location.href = OAUTH_LOGIN_URL;
   }
 });
 </script>

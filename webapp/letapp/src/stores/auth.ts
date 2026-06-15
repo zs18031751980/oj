@@ -1,12 +1,12 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import {
-  API_BASE_URL,
   ApiError,
   apiRequest,
   clearAuthStorageMode,
   getAuthStorage,
   getAuthStorageMode,
+  OAUTH_LOGIN_URL,
   setAuthStorageMode,
   type AuthStorageMode,
   type TokenResponse,
@@ -122,9 +122,10 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   const startOAuthLogin = (provider: string, next = '/', remember = true) => {
+    void provider;
+    void next;
     sessionStorage.setItem(OAUTH_REMEMBER_KEY, remember ? '1' : '0');
-    const safeNext = next.startsWith('/') ? next : '/';
-    window.location.href = `${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}?next=${encodeURIComponent(safeNext)}`;
+    window.location.href = OAUTH_LOGIN_URL;
   };
 
   const startGithubLogin = (next = '/', remember = true) => {
