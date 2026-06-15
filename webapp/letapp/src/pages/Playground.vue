@@ -583,7 +583,7 @@ onUnmounted(() => {
 @reference 'tailwindcss';
 
 .glass-icon-button {
-  @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100;
 }
 
 .playground-container {
@@ -599,7 +599,7 @@ onUnmounted(() => {
 }
 
 .toolbar-button {
-  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100;
 }
 
 .run-button {
@@ -607,11 +607,11 @@ onUnmounted(() => {
 }
 
 .editor-panel {
-  @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
+  @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60;
 }
 
 .surface-panel {
-  @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/15;
+  @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50;
 }
 
 .fixed-panels-shell {
@@ -620,7 +620,7 @@ onUnmounted(() => {
 }
 
 .fixed-panels-inner {
-  @apply px-4 pb-4 sm:px-6 lg:px-8;
+  @apply mx-auto w-full px-4 pb-4 sm:px-6 lg:px-8;
   pointer-events: auto;
 }
 
@@ -629,11 +629,11 @@ onUnmounted(() => {
 }
 
 .panel-header {
-  @apply flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
+  @apply flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800;
 }
 
 .collapse-header {
-  @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
+  @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800;
 }
 
 .input-header {
@@ -645,29 +645,29 @@ onUnmounted(() => {
 }
 
 .editor-toolbar {
-  @apply grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-900;
+  @apply grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4;
   grid-template-columns: minmax(0, 1fr);
 }
 
 .export-name-field {
-  @apply flex min-w-0 flex-col gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400;
+  @apply flex min-w-0 flex-col gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500;
 }
 
 .export-name-input {
-  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:ring-cyan-900;
+  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200;
 }
 
 .export-hint {
-  @apply flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400;
+  @apply flex flex-wrap items-center gap-2 text-sm text-slate-500;
 }
 
 .export-file-chip {
-  @apply inline-flex max-w-full items-center rounded-full bg-slate-900 px-3 py-1 font-mono text-xs text-cyan-200 dark:bg-slate-800;
+  @apply inline-flex max-w-full items-center rounded-full bg-slate-900 px-3 py-1 font-mono text-xs text-cyan-200;
   overflow-wrap: anywhere;
 }
 
 .editor-shell {
-  @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
+  @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300;
 }
 
 .editor-run-button {
@@ -681,7 +681,7 @@ onUnmounted(() => {
 }
 
 .editor-highlight {
-  @apply pointer-events-none text-slate-900 transition-colors duration-300 dark:text-slate-100;
+  @apply pointer-events-none text-slate-900 transition-colors duration-300;
 }
 
 .editor-highlight[class*='language-'] {
@@ -702,7 +702,7 @@ onUnmounted(() => {
 }
 
 .editor-input {
-  @apply resize-none border-none bg-transparent text-transparent caret-slate-950 outline-none transition-colors duration-300 dark:caret-white;
+  @apply resize-none border-none bg-transparent text-transparent caret-slate-950 outline-none transition-colors duration-300;
 }
 
 .editor-input::selection {
@@ -714,7 +714,7 @@ onUnmounted(() => {
 }
 
 .plain-textarea {
-  @apply w-full resize-none border-none bg-white p-5 font-mono text-sm text-slate-800 outline-none transition-colors duration-300 placeholder:text-slate-400 focus:ring-0 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600;
+  @apply w-full resize-none border-none bg-white p-5 font-mono text-sm text-slate-800 outline-none transition-colors duration-300 placeholder:text-slate-400 focus:ring-0;
   tab-size: 2;
 }
 
@@ -723,7 +723,7 @@ onUnmounted(() => {
 }
 
 .output-box {
-  @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
+  @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300;
   max-height: 220px;
   overflow: auto;
 }
@@ -733,96 +733,7 @@ onUnmounted(() => {
 }
 
 .placeholder-copy {
-  @apply text-sm italic text-slate-500 dark:text-slate-400;
-}
-
-:global(html:not(.dark)) .editor-panel,
-:global(html:not(.dark)) .surface-panel,
-:global(html:not(.dark)) .editor-shell,
-:global(html:not(.dark)) .editor-shell::before,
-:global(html:not(.dark)) .plain-textarea,
-:global(html:not(.dark)) .output-box {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-}
-
-:global(html:not(.dark)) .panel-header,
-:global(html:not(.dark)) .collapse-header {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-}
-
-:global(html:not(.dark)) .editor-toolbar {
-  background-color: #f8fafc !important;
-}
-
-:global(html:not(.dark)) .export-name-input {
-  background-color: #ffffff !important;
-  border-color: #cbd5e1 !important;
-  color: #0f172a !important;
-}
-
-:global(html:not(.dark)) .export-name-field,
-:global(html:not(.dark)) .export-hint,
-:global(html:not(.dark)) .placeholder-copy {
-  color: #475569 !important;
-}
-
-:global(html:not(.dark)) .export-file-chip {
-  background-color: #e2e8f0 !important;
-  color: #0f172a !important;
-}
-
-:global(html:not(.dark)) .editor-input,
-:global(html:not(.dark)) .plain-textarea {
-  caret-color: #0f172a !important;
-}
-
-:global(html:not(.dark)) .output-box pre {
-  color: inherit !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'],
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] code,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token {
-  background: #ffffff !important;
-  color: #0f172a !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.comment,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.prolog,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.doctype,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.cdata {
-  color: #64748b !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.punctuation,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.operator {
-  color: #334155 !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.keyword,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.selector,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.atrule {
-  color: #7c3aed !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.string,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.attr-value,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.char,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.inserted {
-  color: #059669 !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.function,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.class-name {
-  color: #2563eb !important;
-}
-
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.number,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.boolean,
-:global(html:not(.dark)) pre.editor-highlight[class*='language-'] .token.constant {
-  color: #ea580c !important;
+  @apply text-sm italic text-slate-500;
 }
 
 @media (max-width: 767px) {
@@ -952,5 +863,164 @@ onUnmounted(() => {
   .bottom-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+</style>
+
+<style>
+html.dark .glass-icon-button,
+html.dark .toolbar-button {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark .glass-icon-button:hover,
+html.dark .toolbar-button:hover {
+  background-color: #1e293b !important;
+}
+
+html.dark .editor-panel,
+html.dark .surface-panel {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .panel-header,
+html.dark .collapse-header {
+  border-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+html.dark .editor-toolbar {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+}
+
+html.dark .export-name-field,
+html.dark .export-hint,
+html.dark .placeholder-copy {
+  color: #94a3b8 !important;
+}
+
+html.dark .export-name-input {
+  border-color: #334155 !important;
+  background-color: #020617 !important;
+  color: #f8fafc !important;
+  caret-color: #ffffff !important;
+}
+
+html.dark .export-name-input::placeholder {
+  color: #475569 !important;
+}
+
+html.dark .export-file-chip {
+  background-color: #1e293b !important;
+  color: #a5f3fc !important;
+}
+
+html.dark .editor-shell,
+html.dark .plain-textarea,
+html.dark .output-box {
+  background-color: #020617 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .editor-highlight {
+  color: #f8fafc !important;
+}
+
+html.dark .editor-input,
+html.dark .plain-textarea {
+  caret-color: #ffffff !important;
+}
+
+html:not(.dark) .editor-panel,
+html:not(.dark) .surface-panel,
+html:not(.dark) .editor-shell,
+html:not(.dark) .editor-shell::before,
+html:not(.dark) .plain-textarea,
+html:not(.dark) .output-box {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .panel-header,
+html:not(.dark) .collapse-header {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .editor-toolbar {
+  background-color: #f8fafc !important;
+}
+
+html:not(.dark) .export-name-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .export-name-field,
+html:not(.dark) .export-hint,
+html:not(.dark) .placeholder-copy {
+  color: #475569 !important;
+}
+
+html:not(.dark) .export-file-chip {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .editor-input,
+html:not(.dark) .plain-textarea {
+  caret-color: #0f172a !important;
+}
+
+html:not(.dark) .output-box pre {
+  color: inherit !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'],
+html:not(.dark) pre.editor-highlight[class*='language-'] code,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.comment,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.prolog,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.doctype,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.cdata {
+  color: #64748b !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.punctuation,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.operator {
+  color: #334155 !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.keyword,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.selector,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.atrule {
+  color: #7c3aed !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.string,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.attr-value,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.char,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.inserted {
+  color: #059669 !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.function,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.class-name {
+  color: #2563eb !important;
+}
+
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.number,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.boolean,
+html:not(.dark) pre.editor-highlight[class*='language-'] .token.constant {
+  color: #ea580c !important;
 }
 </style>

@@ -402,19 +402,19 @@ watch(
 }
 
 .category-chip-idle {
-  @apply border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  @apply border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:bg-slate-50;
 }
 
 .category-chip-active {
-  @apply border-cyan-300 bg-cyan-50 text-cyan-700 shadow-lg shadow-cyan-100 dark:border-cyan-900 dark:bg-cyan-950/50 dark:text-cyan-300 dark:shadow-black/0;
+  @apply border-cyan-300 bg-cyan-50 text-cyan-700 shadow-lg shadow-cyan-100;
 }
 
 .course-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
+  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
 }
 
 .path-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-slate-50 p-6 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg dark:border-slate-800 dark:bg-slate-950 dark:hover:border-cyan-700;
+  @apply rounded-[1.75rem] border border-slate-200 bg-slate-50 p-6 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
 }
 
 .pill {
@@ -422,37 +422,81 @@ watch(
 }
 
 .pill.cyan {
-  @apply bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300;
+  @apply bg-cyan-100 text-cyan-700;
 }
 
 .pill.slate {
-  @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300;
+  @apply bg-slate-100 text-slate-600;
+}
+</style>
+
+<style>
+html.dark .category-chip-idle {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
 }
 
-:global(html:not(.dark)) .path-card {
+html.dark .category-chip-idle:hover {
+  background-color: #1e293b !important;
+}
+
+html.dark .category-chip-active {
+  border-color: #083344 !important;
+  background-color: rgba(8, 51, 68, 0.5) !important;
+  color: #67e8f9 !important;
+  box-shadow: none !important;
+}
+
+html.dark .course-card {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .path-card {
+  border-color: #1e293b !important;
+  background-color: #020617 !important;
+}
+
+html.dark .path-card:hover {
+  border-color: #155e75 !important;
+}
+
+html.dark .pill.cyan {
+  background-color: #083344 !important;
+  color: #67e8f9 !important;
+}
+
+html.dark .pill.slate {
+  background-color: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+html:not(.dark) .path-card {
   background-color: #f8fafc !important;
   border-color: #e2e8f0 !important;
   color: #0f172a !important;
 }
 
-:global(html:not(.dark)) .course-card {
+html:not(.dark) .course-card {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
   color: #0f172a !important;
 }
 
-:global(html:not(.dark)) .path-card p,
-:global(html:not(.dark)) .course-card p {
+html:not(.dark) .path-card p,
+html:not(.dark) .course-card p {
   color: #475569 !important;
 }
 
-:global(html:not(.dark)) .path-card li,
-:global(html:not(.dark)) .course-card .mt-6 {
+html:not(.dark) .path-card li,
+html:not(.dark) .course-card .mt-6 {
   color: #334155 !important;
 }
 
-:global(html:not(.dark)) .path-card button,
-:global(html:not(.dark)) .course-card button {
+html:not(.dark) .path-card button,
+html:not(.dark) .course-card button {
   background-color: #0f172a !important;
   color: #ffffff !important;
 }
