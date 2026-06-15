@@ -428,4 +428,32 @@ watch(
 .pill.slate {
   @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300;
 }
+
+:global(html:not(.dark)) .path-card {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .course-card {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .path-card p,
+:global(html:not(.dark)) .course-card p {
+  color: #475569 !important;
+}
+
+:global(html:not(.dark)) .path-card li,
+:global(html:not(.dark)) .course-card .mt-6 {
+  color: #334155 !important;
+}
+
+:global(html:not(.dark)) .path-card button,
+:global(html:not(.dark)) .course-card button {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
 </style>

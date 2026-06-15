@@ -739,6 +739,7 @@ onUnmounted(() => {
 :global(html:not(.dark)) .editor-panel,
 :global(html:not(.dark)) .surface-panel,
 :global(html:not(.dark)) .editor-shell,
+:global(html:not(.dark)) .editor-shell::before,
 :global(html:not(.dark)) .plain-textarea,
 :global(html:not(.dark)) .output-box {
   background-color: #ffffff !important;
@@ -755,6 +756,12 @@ onUnmounted(() => {
   background-color: #f8fafc !important;
 }
 
+:global(html:not(.dark)) .export-name-input {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
 :global(html:not(.dark)) .export-name-field,
 :global(html:not(.dark)) .export-hint,
 :global(html:not(.dark)) .placeholder-copy {
@@ -764,6 +771,15 @@ onUnmounted(() => {
 :global(html:not(.dark)) .export-file-chip {
   background-color: #e2e8f0 !important;
   color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .editor-input,
+:global(html:not(.dark)) .plain-textarea {
+  caret-color: #0f172a !important;
+}
+
+:global(html:not(.dark)) .output-box pre {
+  color: inherit !important;
 }
 
 :global(html:not(.dark)) pre.editor-highlight[class*='language-'],
