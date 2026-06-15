@@ -240,7 +240,7 @@ onUnmounted(() => {
 }
 
 .sidebar-link {
-  @apply flex h-13 items-center gap-3 rounded-2xl text-sm font-bold text-slate-950 transition hover:bg-slate-100 hover:text-slate-950 dark:text-white dark:hover:bg-slate-800 dark:hover:text-white;
+  @apply flex h-13 items-center gap-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-950 shadow-sm shadow-slate-200/60 transition hover:bg-slate-100 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:shadow-black/20 dark:hover:bg-slate-800 dark:hover:text-white;
 }
 
 .router-link-active.sidebar-link {
@@ -272,5 +272,27 @@ onUnmounted(() => {
 .fade-scale-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.98);
+}
+</style>
+
+<style>
+html:not(.dark) .sidebar-link,
+html:not(.dark) .sidebar-link * {
+  color: #0f172a !important;
+}
+
+html.dark .sidebar-link,
+html.dark .sidebar-link * {
+  color: #f8fafc !important;
+}
+
+html:not(.dark) .router-link-active.sidebar-link,
+html:not(.dark) .router-link-active.sidebar-link * {
+  color: #ffffff !important;
+}
+
+html.dark .router-link-active.sidebar-link,
+html.dark .router-link-active.sidebar-link * {
+  color: #0f172a !important;
 }
 </style>
