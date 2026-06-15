@@ -125,8 +125,6 @@ const output = ref<string>('');
 const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
-const inputCollapsed = ref(false);
-const outputCollapsed = ref(false);
 const bottomPanelsCollapsed = ref(false);
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
@@ -196,7 +194,6 @@ const runCode = async () => {
     outputKind.value = 'error';
     output.value = '代码不能为空。\n';
     bottomPanelsCollapsed.value = false;
-    outputCollapsed.value = false;
     return;
   }
 
@@ -204,7 +201,6 @@ const runCode = async () => {
   output.value = '';
   outputKind.value = 'info';
   bottomPanelsCollapsed.value = false;
-  outputCollapsed.value = false;
 
   try {
     const endpoint = authStore.isAuthenticated ? '/code/run' : '/code/run/public';
@@ -317,7 +313,7 @@ const saveCode = () => {
   URL.revokeObjectURL(objectUrl);
 };
 
-const resetCode = () => {
+  const resetCode = () => {
   code.value = getLanguagePreset(selectedLanguage.value);
   stdin.value = '';
   output.value = '';
@@ -471,17 +467,13 @@ const importCode = () => {
 
         <div v-show="!bottomPanelsCollapsed" class="bottom-panels">
           <section class="surface-panel">
-            <button class="collapse-header" type="button" @click="inputCollapsed = !inputCollapsed">
+            <div class="collapse-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>输入数据</span>
               </div>
-              <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <span>Tab 会插入两个空格</span>
-                <Icon :icon="inputCollapsed ? 'material-symbols:expand-more' : 'material-symbols:expand-less'" class="h-5 w-5" />
-              </div>
-            </button>
-            <div v-show="!inputCollapsed" class="collapse-body">
+            </div>
+            <div class="collapse-body">
               <textarea
                 v-model="stdin"
                 class="plain-textarea panel-textarea"
@@ -492,17 +484,13 @@ const importCode = () => {
           </section>
 
           <section class="surface-panel">
-            <button class="collapse-header" type="button" @click="outputCollapsed = !outputCollapsed">
+            <div class="collapse-header">
               <div class="flex items-center gap-2">
                 <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
                 <span>输出</span>
               </div>
-              <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                <span>标准输出和错误输出已合并</span>
-                <Icon :icon="outputCollapsed ? 'material-symbols:expand-more' : 'material-symbols:expand-less'" class="h-5 w-5" />
-              </div>
-            </button>
-            <div v-show="!outputCollapsed" class="collapse-body">
+            </div>
+            <div class="collapse-body">
               <div class="output-box">
                 <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>
                 <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
@@ -519,7 +507,7 @@ const importCode = () => {
       @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
     >
       <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
-      <span>{{ bottomPanelsCollapsed ? '展开下方面板' : '收起下方面板' }}</span>
+      <span>{{ bottomPanelsCollapsed ? '展开' : '收起' }}</span>
     </button>
   </div>
 </template>
