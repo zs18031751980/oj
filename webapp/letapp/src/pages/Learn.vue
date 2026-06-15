@@ -527,7 +527,18 @@ html:not(.dark) .course-card .mt-6 {
 
 html:not(.dark) .path-card button,
 html:not(.dark) .course-card button {
-  background-color: #0f172a !important;
+  background-color: #0ea5e9 !important;
+  color: #ffffff !important;
+}
+
+html:not(.dark) .course-card button,
+html:not(.dark) .course-card button * {
+  color: #ffffff !important;
+}
+
+html.dark .path-card button,
+html.dark .course-card button {
+  background-color: #0ea5e9 !important;
   color: #ffffff !important;
 }
 </style>

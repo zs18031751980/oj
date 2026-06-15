@@ -244,7 +244,7 @@ onUnmounted(() => {
 }
 
 .router-link-active.sidebar-link {
-  @apply bg-slate-950 text-white shadow-lg shadow-slate-900/15 dark:bg-white dark:text-slate-950;
+  @apply border-cyan-300 bg-white shadow-md shadow-cyan-100 dark:border-cyan-500/50 dark:bg-slate-950 dark:shadow-cyan-950/20;
 }
 
 .primary-pill {
@@ -272,27 +272,5 @@ onUnmounted(() => {
 .fade-scale-leave-to {
   opacity: 0;
   transform: translateY(-8px) scale(0.98);
-}
-</style>
-
-<style>
-html:not(.dark) .sidebar-link,
-html:not(.dark) .sidebar-link * {
-  color: #0f172a !important;
-}
-
-html.dark .sidebar-link,
-html.dark .sidebar-link * {
-  color: #f8fafc !important;
-}
-
-html:not(.dark) .router-link-active.sidebar-link,
-html:not(.dark) .router-link-active.sidebar-link * {
-  color: #ffffff !important;
-}
-
-html.dark .router-link-active.sidebar-link,
-html.dark .router-link-active.sidebar-link * {
-  color: #0f172a !important;
 }
 </style>
