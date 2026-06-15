@@ -54,13 +54,13 @@
 
       <n-layout>
         <n-layout-header
-          class="fixed left-0 right-0 top-0 z-40 border-b border-white/60 bg-white/86 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/86 dark:shadow-black/20 md:left-24"
-          :class="[
-            sidebarExpanded ? 'md:left-72' : 'md:left-24',
-            { 'header-compact': isScrolled },
-          ]"
+          class="fixed left-0 right-0 top-0 z-40 border-b border-white/60 bg-white/86 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/86 dark:shadow-black/20"
+          :class="{ 'header-compact': isScrolled }"
         >
-          <div class="h-auto min-h-20 w-full px-3 py-3 sm:px-4 lg:px-6">
+          <div
+            class="h-auto min-h-20 w-full px-3 py-3 sm:px-4 lg:px-6"
+            :style="headerPaddingStyle"
+          >
             <div class="flex min-h-14 w-full min-w-0 items-center justify-between gap-3">
               <router-link to="/" class="flex min-w-0 items-center gap-3 md:hidden" @click="closeMenu">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-950 dark:bg-white">
@@ -69,7 +69,7 @@
                 <span class="truncate text-base font-black">Let Coding</span>
               </router-link>
 
-              <div class="ml-auto flex min-w-0 shrink items-center justify-end gap-2 sm:gap-3">
+              <div class="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
                 <div class="relative shrink-0">
                   <button class="icon-button" aria-label="打开导航菜单" @click.stop="menuVisible = !menuVisible">
                     <Icon :icon="menuVisible ? 'material-symbols:close-rounded' : 'material-symbols:menu-rounded'" class="h-6 w-6" />
@@ -106,7 +106,7 @@
                 <button v-if="!authStore.isAuthenticated" class="primary-pill shrink-0" @click="startClubLogin">
                   登录
                 </button>
-                <button v-else class="secondary-pill min-w-0 shrink" @click="handleLogout">
+                <button v-else class="secondary-pill shrink-0" @click="handleLogout">
                   <span class="truncate">退出 {{ authStore.displayName }}</span>
                 </button>
               </div>
@@ -114,7 +114,7 @@
           </div>
         </n-layout-header>
 
-        <n-layout-content class="transition-all duration-300" :class="sidebarExpanded ? 'md:pl-72' : 'md:pl-24'">
+        <n-layout-content class="transition-all duration-300" :style="contentPaddingStyle">
           <div class="pt-20">
             <router-view />
           </div>
@@ -125,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { NLayout, NLayoutContent, NLayoutHeader } from 'naive-ui';
 import { Icon } from '@iconify/vue';
@@ -139,6 +139,9 @@ const navItems = [
   { label: '学习资源', to: '/learn', icon: 'material-symbols:school-rounded' },
 ];
 
+const DESKTOP_EXPANDED_WIDTH = 288;
+const DESKTOP_COLLAPSED_WIDTH = 96;
+
 const router = useRouter();
 const themeStore = useThemeStore();
 const authStore = useAuthStore();
@@ -148,6 +151,30 @@ const { toggleTheme } = themeStore;
 const sidebarExpanded = ref(true);
 const menuVisible = ref(false);
 const isScrolled = ref(false);
+const isDesktop = ref(false);
+
+const desktopSidebarWidth = computed(() => (
+  sidebarExpanded.value ? DESKTOP_EXPANDED_WIDTH : DESKTOP_COLLAPSED_WIDTH
+));
+
+const headerPaddingStyle = computed(() => (
+  isDesktop.value
+    ? {
+        paddingLeft: `${desktopSidebarWidth.value + 16}px`,
+        paddingRight: '16px',
+      }
+    : undefined
+));
+
+const contentPaddingStyle = computed(() => (
+  isDesktop.value
+    ? { paddingLeft: `${desktopSidebarWidth.value}px` }
+    : undefined
+));
+
+const updateViewportFlags = () => {
+  isDesktop.value = window.innerWidth >= 768;
+};
 
 const toggleSidebar = () => {
   sidebarExpanded.value = !sidebarExpanded.value;
@@ -189,13 +216,16 @@ const handleWindowClick = (event: MouseEvent) => {
 };
 
 onMounted(() => {
+  updateViewportFlags();
   window.addEventListener('scroll', handleScroll);
   window.addEventListener('click', handleWindowClick);
+  window.addEventListener('resize', updateViewportFlags);
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
   window.removeEventListener('click', handleWindowClick);
+  window.removeEventListener('resize', updateViewportFlags);
 });
 </script>
 
@@ -223,7 +253,7 @@ onUnmounted(() => {
 }
 
 .secondary-pill {
-  @apply inline-flex h-11 max-w-[34vw] items-center rounded-full bg-slate-100 px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 sm:max-w-[18rem] sm:px-5;
+  @apply inline-flex h-11 max-w-[16rem] items-center rounded-full bg-slate-100 px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 sm:px-5;
 }
 
 .icon-button {
