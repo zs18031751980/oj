@@ -275,7 +275,7 @@ onUnmounted(() => {
 <template>
   <div v-if="content" class="flex flex-col md:flex-row">
     <div class="w-full p-4 md:p-8" :class="[showNav && headings.length > 0 ? 'md:w-4/5' : 'md:w-full']">
-      <article class="prose prose-slate max-w-none dark:prose-invert">
+      <article class="markdown-article prose prose-slate max-w-none dark:prose-invert">
         <header class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
           <h1 class="mb-4 text-3xl font-black text-slate-950 dark:text-white md:text-4xl">
             {{ content.title }}
@@ -440,5 +440,76 @@ onUnmounted(() => {
 
 .markdown-content :deep(th) {
   @apply bg-slate-100 font-black dark:bg-slate-800;
+}
+</style>
+
+<style>
+html:not(.dark) .markdown-article {
+  color: #0f172a;
+}
+
+html.dark .markdown-article {
+  color: #f8fafc;
+}
+
+html:not(.dark) .markdown-article .markdown-content,
+html.dark .markdown-article .markdown-content {
+  color: inherit;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span, strong, em),
+html:not(.dark) .markdown-article header,
+html:not(.dark) .markdown-article header time,
+html:not(.dark) .markdown-article header span,
+html:not(.dark) .markdown-article .toc-link {
+  color: #0f172a;
+}
+
+html.dark .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span, strong, em),
+html.dark .markdown-article header,
+html.dark .markdown-article header time,
+html.dark .markdown-article header span,
+html.dark .markdown-article .toc-link {
+  color: #f8fafc;
+}
+
+html:not(.dark) .markdown-article .toc-link {
+  color: #475569;
+}
+
+html.dark .markdown-article .toc-link {
+  color: #cbd5e1;
+}
+
+html:not(.dark) .markdown-article .toc-link.active {
+  color: #0e7490;
+}
+
+html.dark .markdown-article .toc-link.active {
+  color: #67e8f9;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: #020617;
+}
+
+html.dark .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: #ffffff;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(a, a:visited) {
+  color: #0891b2;
+}
+
+html.dark .markdown-article .markdown-content :is(a, a:visited) {
+  color: #67e8f9;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(code):not(pre code) {
+  color: #0f172a;
+}
+
+html.dark .markdown-article .markdown-content :is(code):not(pre code) {
+  color: #f8fafc;
 }
 </style>
