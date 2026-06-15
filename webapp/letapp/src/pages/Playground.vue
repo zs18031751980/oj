@@ -87,8 +87,34 @@ const languages: LanguageOption[] = [
 ];
 
 const defaultLanguage = languages[0]!;
+const fallbackFileNames: Record<string, string> = {
+  javascript: 'script',
+  python: 'script',
+  java: 'Main',
+  cpp: 'main',
+  go: 'main',
+  rust: 'main',
+  swift: 'main',
+  kotlin: 'Main',
+};
+const extensionMap: Record<string, string> = {
+  javascript: 'js',
+  python: 'py',
+  java: 'java',
+  cpp: 'cpp',
+  go: 'go',
+  rust: 'rs',
+  swift: 'swift',
+  kotlin: 'kt',
+};
 
 const getLanguagePreset = (language: string) => languagePresets[language] ?? '';
+
+const sanitizeFileName = (value: string) => (
+  value
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '')
+    .trim()
+);
 
 const selectedLanguage = ref<string>(defaultLanguage.value);
 const previousLanguage = ref<string>(defaultLanguage.value);
@@ -98,10 +124,13 @@ const stdin = ref<string>('');
 const stdout = ref<string>('');
 const stderr = ref<string>('');
 const isExecuting = ref(false);
+const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
   languages.find((lang) => lang.value === selectedLanguage.value) ?? defaultLanguage
 ));
+
+const exportExtension = computed(() => extensionMap[selectedLanguage.value] ?? 'txt');
 
 const highlightedCode = computed(() => {
   const language = currentLanguageInfo.value.prism;
@@ -110,14 +139,58 @@ const highlightedCode = computed(() => {
   return grammar ? Prism.highlight(source, grammar, language) : Prism.util.encode(source);
 });
 
-const syncEditorScroll = (event: Event) => {
-  const target = event.target as HTMLTextAreaElement;
+const lineCount = computed(() => code.value.split('\n').length);
+
+const syncEditorScrollFromTextarea = (target: HTMLTextAreaElement) => {
   if (!highlightedCodeRef.value) {
     return;
   }
 
   highlightedCodeRef.value.scrollTop = target.scrollTop;
   highlightedCodeRef.value.scrollLeft = target.scrollLeft;
+};
+
+const syncEditorScroll = (event: Event) => {
+  syncEditorScrollFromTextarea(event.target as HTMLTextAreaElement);
+};
+
+const insertTabAtCursor = (event: KeyboardEvent, targetRef: { value: string }) => {
+  const target = event.target as HTMLTextAreaElement | null;
+  if (!target) {
+    return;
+  }
+
+  event.preventDefault();
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
+  const value = targetRef.value;
+  targetRef.value = `${value.slice(0, start)}\t${value.slice(end)}`;
+
+  requestAnimationFrame(() => {
+    target.selectionStart = start + 1;
+    target.selectionEnd = start + 1;
+    target.focus();
+    syncEditorScrollFromTextarea(target);
+  });
+};
+
+const handleEditorKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Tab') {
+    insertTabAtCursor(event, code);
+  }
+};
+
+const handleStdinKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Tab') {
+    insertTabAtCursor(event, stdin);
+  }
+};
+
+const updateExportFileName = (language: string) => {
+  const fallback = fallbackFileNames[language] ?? 'code';
+  if (!sanitizeFileName(exportFileName.value)) {
+    exportFileName.value = fallback;
+  }
 };
 
 const updateLanguage = (language: string) => {
@@ -129,6 +202,8 @@ const updateLanguage = (language: string) => {
   if (currentCode.trim() === '' || currentCode === getLanguagePreset(previousLanguage.value)) {
     code.value = getLanguagePreset(language);
   }
+
+  updateExportFileName(language);
 };
 
 onMounted(() => {
@@ -138,6 +213,8 @@ onMounted(() => {
     previousLanguage.value = languageParam;
     code.value = getLanguagePreset(languageParam) || code.value;
   }
+
+  updateExportFileName(selectedLanguage.value);
 });
 
 const runCode = async () => {
@@ -173,23 +250,14 @@ const runCode = async () => {
 };
 
 const saveCode = () => {
-  const languageMap: Record<string, { ext: string; name: string }> = {
-    javascript: { ext: 'js', name: 'script' },
-    python: { ext: 'py', name: 'script' },
-    java: { ext: 'java', name: 'Main' },
-    cpp: { ext: 'cpp', name: 'main' },
-    go: { ext: 'go', name: 'main' },
-    rust: { ext: 'rs', name: 'main' },
-    swift: { ext: 'swift', name: 'main' },
-    kotlin: { ext: 'kt', name: 'Main' },
-  };
+  const baseName = sanitizeFileName(exportFileName.value) || fallbackFileNames[selectedLanguage.value] || 'code';
+  exportFileName.value = baseName;
 
-  const langInfo = languageMap[selectedLanguage.value] || { ext: 'txt', name: 'code' };
   const blob = new Blob([code.value], { type: 'text/plain;charset=utf-8' });
   const link = document.createElement('a');
   const objectUrl = URL.createObjectURL(blob);
   link.href = objectUrl;
-  link.download = `${langInfo.name}.${langInfo.ext}`;
+  link.download = `${baseName}.${exportExtension.value}`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -235,6 +303,10 @@ const importCode = () => {
         selectedLanguage.value = detectedLanguage;
         previousLanguage.value = detectedLanguage;
       }
+
+      const importedName = file.name.replace(/\.[^.]+$/, '');
+      const sanitizedImportedName = sanitizeFileName(importedName);
+      exportFileName.value = sanitizedImportedName || fallbackFileNames[selectedLanguage.value] || 'code';
     };
     reader.readAsText(file);
   };
@@ -310,8 +382,22 @@ const importCode = () => {
               <Icon icon="material-symbols:code" class="h-5 w-5 text-cyan-500" />
               <span>代码编辑区</span>
             </div>
-            <div class="text-sm text-slate-500 dark:text-slate-400">{{ code.split('\n').length }} 行</div>
+            <div class="text-sm text-slate-500 dark:text-slate-400">{{ lineCount }} 行</div>
           </div>
+
+          <div class="editor-toolbar">
+            <label class="export-name-field">
+              <span>导出文件名</span>
+              <input
+                v-model="exportFileName"
+                type="text"
+                class="export-name-input"
+                :placeholder="fallbackFileNames[selectedLanguage] || 'code'"
+              />
+            </label>
+            <div class="export-hint">将保存为 `{{ sanitizeFileName(exportFileName) || fallbackFileNames[selectedLanguage] || 'code' }}.{{ exportExtension }}`</div>
+          </div>
+
           <div class="editor-shell">
             <pre ref="highlightedCodeRef" :class="`editor-highlight language-${currentLanguageInfo.prism}`"><code v-html="highlightedCode"></code></pre>
             <textarea
@@ -320,6 +406,7 @@ const importCode = () => {
               class="editor-input"
               placeholder="在这里输入你的代码..."
               @scroll="syncEditorScroll"
+              @keydown="handleEditorKeydown"
             ></textarea>
           </div>
         </section>
@@ -331,8 +418,14 @@ const importCode = () => {
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>标准输入</span>
               </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">按 Tab 会插入真实制表符</div>
             </div>
-            <textarea v-model="stdin" class="plain-textarea h-48" placeholder="需要的话，可以在这里输入测试数据。"></textarea>
+            <textarea
+              v-model="stdin"
+              class="plain-textarea h-48"
+              placeholder="需要的话，可以在这里输入测试数据。"
+              @keydown="handleStdinKeydown"
+            ></textarea>
           </section>
 
           <section class="surface-panel">
@@ -397,6 +490,22 @@ const importCode = () => {
   @apply flex items-center justify-between border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
 }
 
+.editor-toolbar {
+  @apply flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
+}
+
+.export-name-field {
+  @apply flex min-w-[220px] flex-1 flex-col gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400;
+}
+
+.export-name-input {
+  @apply rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-cyan-900;
+}
+
+.export-hint {
+  @apply text-sm text-slate-500 dark:text-slate-400;
+}
+
 .editor-shell {
   @apply relative h-[560px] overflow-hidden bg-slate-950;
 }
@@ -425,6 +534,7 @@ const importCode = () => {
 
 .plain-textarea {
   @apply w-full resize-none border-none bg-slate-50 p-5 font-mono text-sm text-slate-800 outline-none focus:ring-0 dark:bg-slate-950 dark:text-slate-100;
+  tab-size: 2;
 }
 
 .output-box {
