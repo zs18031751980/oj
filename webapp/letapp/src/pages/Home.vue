@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
@@ -25,7 +25,7 @@ const features = [
   {
     icon: 'material-symbols:flash-on',
     title: '打开即写',
-    description: '进入页面就能练习代码，适合课堂演示、算法练习和快速验证想法。',
+    description: '进入页面就能练代码，适合课堂演示、算法练习和快速验证想法。',
   },
   {
     icon: 'material-symbols:terminal',
@@ -44,34 +44,28 @@ const features = [
   },
 ];
 
-const metrics = [
-  { value: '8+', label: '常用语言模板' },
-  { value: '1s', label: '进入编辑器速度' },
-  { value: '24/7', label: '随时开始练习' },
-];
 </script>
 
 <template>
   <main class="overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <section class="relative isolate">
       <div class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)]"></div>
-      <div class="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-24">
-        <div class="flex flex-col justify-center">
+      <div class="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8 lg:py-24">
+        <div class="flex flex-col justify-center self-center">
           <span class="inline-flex w-fit items-center gap-2 rounded-full border border-cyan-200/80 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-700 shadow-sm shadow-cyan-100/80 backdrop-blur dark:border-cyan-400/20 dark:bg-slate-900/80 dark:text-cyan-300 dark:shadow-black/0">
             <span class="h-2 w-2 rounded-full bg-cyan-400"></span>
             Let Coding Online Judge
           </span>
 
           <h1 class="mt-6 max-w-3xl text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-            让写代码
+            璁╁啓浠ｇ爜
             <span class="block bg-gradient-to-r from-cyan-500 via-sky-500 to-amber-400 bg-clip-text text-transparent">
-              更直接、更顺手
+              鏇寸洿鎺ャ€佹洿椤烘墜
             </span>
           </h1>
 
           <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-            把在线编辑、运行输出、学习资源和社团登录整合到一个页面体系里。无论你是在做课堂练习、刷题，还是沿着学习路径系统推进，都可以少切工具、直接开始。
-          </p>
+            鎶婂湪绾跨紪杈戙€佽繍琛岃緭鍑恒€佸涔犺祫婧愬拰绀惧洟鐧诲綍鏁村悎鍒颁竴涓〉闈綋绯婚噷銆傛棤璁轰綘鏄湪鍋氳鍫傜粌涔犮€佸埛棰橈紝杩樻槸娌跨潃瀛︿範璺緞绯荤粺鎺ㄨ繘锛岄兘鍙互灏戝垏宸ュ叿銆佺洿鎺ュ紑濮嬨€?          </p>
 
           <div class="mt-8 flex flex-wrap gap-4">
             <button class="hero-primary" @click="router.push('/playground')">
@@ -84,12 +78,6 @@ const metrics = [
             </button>
           </div>
 
-          <div class="mt-10 grid grid-cols-3 gap-4">
-            <div v-for="metric in metrics" :key="metric.label" class="rounded-3xl border border-white/80 bg-white/75 px-4 py-5 shadow-lg shadow-slate-200/70 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 dark:shadow-black/20">
-              <div class="text-2xl font-black text-slate-950 dark:text-white">{{ metric.value }}</div>
-              <div class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ metric.label }}</div>
-            </div>
-          </div>
         </div>
 
         <div class="relative flex items-center justify-center">
@@ -122,14 +110,14 @@ const metrics = [
 
               <div class="space-y-4">
                 <div class="rounded-[1.5rem] bg-cyan-500 px-5 py-5 text-slate-950 shadow-lg shadow-cyan-500/25">
-                  <div class="text-xs font-black uppercase tracking-[0.22em]">运行结果</div>
+                  <div class="text-xs font-black uppercase tracking-[0.22em]">杩愯缁撴灉</div>
                   <div class="mt-3 rounded-2xl bg-slate-950 px-4 py-4 font-mono text-sm text-emerald-300">
                     Hello, Let Coding!
                   </div>
                 </div>
 
                 <div class="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
-                  <div class="text-xs font-black uppercase tracking-[0.22em] text-slate-500">支持语言</div>
+                  <div class="text-xs font-black uppercase tracking-[0.22em] text-slate-500">鏀寔璇█</div>
                   <div class="mt-4 grid grid-cols-2 gap-3">
                     <button
                       v-for="language in languages"
@@ -172,7 +160,7 @@ const metrics = [
               从打开页面到运行第一段代码，只差一次点击。
             </h2>
             <p class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-              想立即写代码，就直接进入编辑器；想先看路线和资料，就去学习资源页按路径推进。两个入口现在是连通的，切换起来会轻松很多。
+              想立刻写代码，就直接进入编辑器；想先看路径和资料，就去学习资源页按路线推进。两个入口现在是连通的，切换起来会轻松很多。
             </p>
           </div>
 
@@ -202,10 +190,42 @@ const metrics = [
 }
 
 .feature-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
+  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
 }
 
 .feature-icon {
-  @apply grid h-14 w-14 place-items-center rounded-2xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300;
+  @apply grid h-14 w-14 place-items-center rounded-2xl bg-cyan-100 text-cyan-700;
+}
+</style>
+
+<style>
+html.dark .feature-card {
+  border-color: #1e293b !important;
+  background-color: #0f172a !important;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .feature-card p {
+  color: #cbd5e1 !important;
+}
+
+html.dark .feature-icon {
+  background-color: #083344 !important;
+  color: #67e8f9 !important;
+}
+
+html:not(.dark) .feature-card {
+  border-color: #e2e8f0 !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+html:not(.dark) .feature-card p {
+  color: #475569 !important;
+}
+
+html:not(.dark) .feature-icon {
+  background-color: #cffafe !important;
+  color: #0e7490 !important;
 }
 </style>
