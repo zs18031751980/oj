@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import Prism from 'prismjs';
@@ -187,45 +187,6 @@ const handleTabInsertion = (event: KeyboardEvent, targetRef: { value: string }) 
   updateTextareaValue(target, targetRef, '  ');
 };
 
-const handleEditorKeydown = (event: KeyboardEvent) => {
-  handleTabInsertion(event, code);
-};
-
-const handleStdinKeydown = (event: KeyboardEvent) => {
-  handleTabInsertion(event, stdin);
-};
-
-const updateExportFileName = (language: string) => {
-  const fallback = fallbackFileNames[language] ?? 'code';
-  if (!sanitizeFileName(exportFileName.value)) {
-    exportFileName.value = fallback;
-  }
-};
-
-const updateLanguage = (language: string) => {
-  previousLanguage.value = selectedLanguage.value;
-  selectedLanguage.value = language;
-  isLanguageMenuOpen.value = false;
-
-  const currentCode = code.value;
-  if (currentCode.trim() === '' || currentCode === getLanguagePreset(previousLanguage.value)) {
-    code.value = getLanguagePreset(language);
-  }
-
-  updateExportFileName(language);
-};
-
-onMounted(() => {
-  const languageParam = route.query.language as string;
-  if (languageParam && languages.some((lang) => lang.value === languageParam)) {
-    selectedLanguage.value = languageParam;
-    previousLanguage.value = languageParam;
-    code.value = getLanguagePreset(languageParam) || code.value;
-  }
-
-  updateExportFileName(selectedLanguage.value);
-});
-
 const runCode = async () => {
   const source = code.value;
   if (!source.trim()) {
@@ -257,6 +218,79 @@ const runCode = async () => {
     isExecuting.value = false;
   }
 };
+
+const handleEditorKeydown = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+    event.preventDefault();
+    if (!isExecuting.value) {
+      void runCode();
+    }
+    return;
+  }
+
+  handleTabInsertion(event, code);
+};
+
+const handleStdinKeydown = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+    event.preventDefault();
+    if (!isExecuting.value) {
+      void runCode();
+    }
+    return;
+  }
+
+  handleTabInsertion(event, stdin);
+};
+
+const handleGlobalShortcut = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !isExecuting.value) {
+    const target = event.target as HTMLElement | null;
+    const isEditable = target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT';
+    if (isEditable) {
+      return;
+    }
+
+    event.preventDefault();
+    void runCode();
+  }
+};
+
+const updateExportFileName = (language: string) => {
+  const fallback = fallbackFileNames[language] ?? 'code';
+  if (!sanitizeFileName(exportFileName.value)) {
+    exportFileName.value = fallback;
+  }
+};
+
+const updateLanguage = (language: string) => {
+  previousLanguage.value = selectedLanguage.value;
+  selectedLanguage.value = language;
+  isLanguageMenuOpen.value = false;
+
+  const currentCode = code.value;
+  if (currentCode.trim() === '' || currentCode === getLanguagePreset(previousLanguage.value)) {
+    code.value = getLanguagePreset(language);
+  }
+
+  updateExportFileName(language);
+};
+
+onMounted(() => {
+  const languageParam = route.query.language as string;
+  if (languageParam && languages.some((lang) => lang.value === languageParam)) {
+    selectedLanguage.value = languageParam;
+    previousLanguage.value = languageParam;
+    code.value = getLanguagePreset(languageParam) || code.value;
+  }
+
+  updateExportFileName(selectedLanguage.value);
+  window.addEventListener('keydown', handleGlobalShortcut);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalShortcut);
+});
 
 const saveCode = () => {
   const baseName = sanitizeFileName(exportFileName.value) || fallbackFileNames[selectedLanguage.value] || 'code';
@@ -326,8 +360,8 @@ const importCode = () => {
 
 <template>
   <div class="min-h-screen bg-[linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_32%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
-    <div class="sticky top-16 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/75">
-      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+    <div class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/75">
+      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
         <div class="flex items-center gap-4">
           <button class="glass-icon-button" @click="router.back()">
             <Icon icon="material-symbols:arrow-back" class="h-5 w-5" />
@@ -338,7 +372,7 @@ const importCode = () => {
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="toolbar-cluster">
           <div class="relative">
             <button class="toolbar-button min-w-[160px] justify-between" :title="currentLanguageInfo.name" @click="isLanguageMenuOpen = !isLanguageMenuOpen">
               <span class="flex items-center gap-2">
@@ -384,7 +418,7 @@ const importCode = () => {
     </div>
 
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div class="grid items-start gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -482,12 +516,17 @@ const importCode = () => {
   @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 
+.toolbar-cluster {
+  @apply flex flex-wrap items-center gap-3 xl:gap-4;
+}
+
 .toolbar-button {
   @apply inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 
 .run-button {
   @apply inline-flex items-center gap-2 rounded-2xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70;
+  margin-left: 0.4rem;
 }
 
 .editor-panel {
