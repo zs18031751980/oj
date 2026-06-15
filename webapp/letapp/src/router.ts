@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import MainLayout from './layouts/MainLayout.vue';
 import AdminLayout from './layouts/AdminLayout.vue';
+import { useAuthStore } from './stores/auth';
 
 const routes = [
   {
@@ -23,7 +24,7 @@ const routes = [
       {
         path: '/learn',
         name: 'Learn',
-        meta: { title: '学习资源 - Let Coding' },
+        meta: { title: '学习资源 - Let Coding', requiresAuth: true },
         component: () => import('./pages/Learn.vue'),
       },
     ],
@@ -77,6 +78,20 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   document.title = (to.meta.title as string) || 'Let Coding';
+
+  if (to.meta.requiresAuth) {
+    const authStore = useAuthStore();
+    if (!authStore.isAuthenticated) {
+      next({
+        path: '/login',
+        query: {
+          next: to.fullPath,
+        },
+      });
+      return;
+    }
+  }
+
   next();
 });
 

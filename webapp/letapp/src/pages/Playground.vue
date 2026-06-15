@@ -36,7 +36,7 @@ const highlightedCodeRef = ref<HTMLElement | null>(null);
 
 const languagePresets: Record<string, string> = {
   javascript: `function greet(name) {
-  return \`Hello, ${name}!\`;
+  return \`Hello, \${name}!\`;
 }
 
 const message = greet('Let Coding');

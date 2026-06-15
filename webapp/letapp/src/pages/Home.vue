@@ -74,9 +74,9 @@ const metrics = [
               <Icon icon="material-symbols:play-arrow" class="h-5 w-5" />
               进入在线编辑器
             </button>
-            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push('/login')">
+            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push({ path: '/login', query: { next: '/learn' } })">
               <Icon :icon="authStore.isAuthenticated ? 'material-symbols:school' : 'mdi:login'" class="h-5 w-5" />
-              {{ authStore.isAuthenticated ? '查看学习资源' : '登录后查看学习资源' }}
+              {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
             </button>
           </div>
 
@@ -176,8 +176,8 @@ const metrics = [
             <button class="hero-primary" @click="router.push('/playground')">
               现在开始写代码
             </button>
-            <button class="hero-secondary" @click="router.push('/learn')">
-              浏览学习内容
+            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push({ path: '/login', query: { next: '/learn' } })">
+              {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
             </button>
           </div>
         </div>
