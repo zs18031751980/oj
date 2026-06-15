@@ -2,11 +2,11 @@
   <div class="min-h-screen bg-slate-50 text-slate-950 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-50">
     <n-layout has-sider class="min-h-screen bg-transparent">
       <aside
-        class="fixed left-0 top-0 z-50 flex h-screen flex-col border-r border-white/70 bg-white/88 shadow-2xl shadow-slate-200/60 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-black/30"
+        class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-white/70 bg-white/88 shadow-2xl shadow-slate-200/60 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-black/30 md:flex"
         :class="sidebarExpanded ? 'w-72' : 'w-24'"
       >
         <div class="flex h-20 items-center justify-between px-5" :class="sidebarExpanded ? 'gap-3' : 'justify-center'">
-          <router-link to="/" class="group flex items-center gap-3 overflow-hidden" @click="closeMenu">
+          <router-link to="/" class="group flex min-w-0 items-center gap-3 overflow-hidden" @click="closeMenu">
             <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-950 shadow-lg shadow-cyan-500/15 dark:bg-white">
               <img src="/assets/logo.png" alt="Let Coding Logo" class="h-8 w-8 transition-transform group-hover:scale-110" />
             </span>
@@ -54,55 +54,67 @@
 
       <n-layout>
         <n-layout-header
-          class="fixed right-0 top-0 z-40 border-b border-white/60 bg-white/80 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/78 dark:shadow-black/20"
-          :class="[sidebarExpanded ? 'left-72' : 'left-24', { 'header-compact': isScrolled }]"
+          class="fixed left-0 right-0 top-0 z-40 border-b border-white/60 bg-white/86 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/86 dark:shadow-black/20 md:left-24"
+          :class="[
+            sidebarExpanded ? 'md:left-72' : 'md:left-24',
+            { 'header-compact': isScrolled },
+          ]"
         >
-          <div class="h-20 px-4 sm:px-6 lg:px-10">
-            <div class="flex h-full items-center justify-end gap-2 pr-2 sm:gap-3 sm:pr-4">
-              <div class="relative shrink-0">
-                <button class="icon-button" aria-label="打开导航菜单" @click.stop="menuVisible = !menuVisible">
-                  <Icon :icon="menuVisible ? 'material-symbols:close-rounded' : 'material-symbols:menu-rounded'" class="h-6 w-6" />
+          <div class="h-auto min-h-20 w-full px-3 py-3 sm:px-4 lg:px-6">
+            <div class="flex min-h-14 w-full min-w-0 items-center justify-between gap-3">
+              <router-link to="/" class="flex min-w-0 items-center gap-3 md:hidden" @click="closeMenu">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-950 dark:bg-white">
+                  <img src="/assets/logo.png" alt="Let Coding Logo" class="h-7 w-7" />
+                </span>
+                <span class="truncate text-base font-black">Let Coding</span>
+              </router-link>
+
+              <div class="ml-auto flex min-w-0 shrink items-center justify-end gap-2 sm:gap-3">
+                <div class="relative shrink-0">
+                  <button class="icon-button" aria-label="打开导航菜单" @click.stop="menuVisible = !menuVisible">
+                    <Icon :icon="menuVisible ? 'material-symbols:close-rounded' : 'material-symbols:menu-rounded'" class="h-6 w-6" />
+                  </button>
+
+                  <transition name="fade-scale">
+                    <div
+                      v-if="menuVisible"
+                      class="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-[min(18rem,calc(100vw-1.5rem))] rounded-[1.75rem] border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40"
+                    >
+                      <button
+                        v-for="item in navItems"
+                        :key="`${item.to}-menu`"
+                        type="button"
+                        class="menu-link"
+                        @click="navigateFromMenu(item.to)"
+                      >
+                        <Icon :icon="item.icon" class="h-5 w-5" />
+                        <span>{{ item.label }}</span>
+                      </button>
+                    </div>
+                  </transition>
+                </div>
+
+                <button
+                  class="icon-button shrink-0"
+                  :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+                  @click="mainToggleTheme"
+                >
+                  <Icon v-if="!isDark" icon="material-symbols:light-mode" class="h-5 w-5 text-amber-500" />
+                  <Icon v-else icon="material-symbols:dark-mode" class="h-5 w-5 text-cyan-300" />
                 </button>
 
-                <transition name="fade-scale">
-                  <div
-                    v-if="menuVisible"
-                    class="absolute right-0 top-[calc(100%+0.75rem)] z-50 w-64 rounded-[1.75rem] border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40"
-                  >
-                    <button
-                      v-for="item in navItems"
-                      :key="`${item.to}-menu`"
-                      type="button"
-                      class="menu-link"
-                      @click="navigateFromMenu(item.to)"
-                    >
-                      <Icon :icon="item.icon" class="h-5 w-5" />
-                      <span>{{ item.label }}</span>
-                    </button>
-                  </div>
-                </transition>
+                <button v-if="!authStore.isAuthenticated" class="primary-pill shrink-0" @click="startClubLogin">
+                  登录
+                </button>
+                <button v-else class="secondary-pill min-w-0 shrink" @click="handleLogout">
+                  <span class="truncate">退出 {{ authStore.displayName }}</span>
+                </button>
               </div>
-
-              <button
-                class="icon-button shrink-0"
-                :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
-                @click="mainToggleTheme"
-              >
-                <Icon v-if="!isDark" icon="material-symbols:light-mode" class="h-5 w-5 text-amber-500" />
-                <Icon v-else icon="material-symbols:dark-mode" class="h-5 w-5 text-cyan-300" />
-              </button>
-
-              <button v-if="!authStore.isAuthenticated" class="primary-pill shrink-0" @click="startClubLogin">
-                登录
-              </button>
-              <button v-else class="secondary-pill shrink-0" @click="handleLogout">
-                退出 {{ authStore.displayName }}
-              </button>
             </div>
           </div>
         </n-layout-header>
 
-        <n-layout-content class="transition-all duration-300" :class="sidebarExpanded ? 'pl-72' : 'pl-24'">
+        <n-layout-content class="transition-all duration-300" :class="sidebarExpanded ? 'md:pl-72' : 'md:pl-24'">
           <div class="pt-20">
             <router-view />
           </div>
@@ -207,15 +219,15 @@ onUnmounted(() => {
 }
 
 .primary-pill {
-  @apply inline-flex items-center rounded-full bg-cyan-500 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition hover:-translate-y-0.5 hover:bg-cyan-300;
+  @apply inline-flex h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition hover:-translate-y-0.5 hover:bg-cyan-300 sm:px-5;
 }
 
 .secondary-pill {
-  @apply inline-flex max-w-[18rem] items-center rounded-full bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+  @apply inline-flex h-11 max-w-[34vw] items-center rounded-full bg-slate-100 px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700 sm:max-w-[18rem] sm:px-5;
 }
 
 .icon-button {
-  @apply grid h-11 w-11 place-items-center rounded-full text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800;
+  @apply grid h-11 w-11 shrink-0 place-items-center rounded-full text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 
 .menu-link {

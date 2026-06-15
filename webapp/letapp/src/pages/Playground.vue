@@ -364,64 +364,66 @@ const importCode = () => {
 <template>
   <div class="min-h-screen bg-[linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_32%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
     <div class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/75">
-      <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
-        <div class="flex items-center gap-4">
-          <button class="glass-icon-button" @click="router.back()">
-            <Icon icon="material-symbols:arrow-back" class="h-5 w-5" />
-          </button>
-          <div>
-            <h1 class="text-2xl font-black tracking-tight">在线代码编辑器</h1>
-            <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入和统一输出结果显示。</p>
-          </div>
-        </div>
-
-        <div class="toolbar-cluster">
-          <div class="relative">
-            <button class="toolbar-button min-w-[160px] justify-between" :title="currentLanguageInfo.name" @click="isLanguageMenuOpen = !isLanguageMenuOpen">
-              <span class="flex items-center gap-2">
-                <Icon :icon="currentLanguageInfo.icon" class="h-4 w-4" :style="{ color: currentLanguageInfo.color }" />
-                <span>{{ currentLanguageInfo.name }}</span>
-              </span>
-              <Icon icon="material-symbols:arrow-drop-down" class="h-5 w-5 transition-transform" :class="{ 'rotate-180': isLanguageMenuOpen }" />
+      <div class="playground-container mx-auto flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex min-w-0 items-start gap-4">
+            <button class="glass-icon-button shrink-0" @click="router.back()">
+              <Icon icon="material-symbols:arrow-back" class="h-5 w-5" />
             </button>
-
-            <div v-if="isLanguageMenuOpen" class="absolute right-0 top-full z-50 mt-2 w-60 rounded-3xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-200/80 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40">
-              <button
-                v-for="lang in languages"
-                :key="lang.value"
-                type="button"
-                class="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-slate-800"
-                @click="updateLanguage(lang.value)"
-              >
-                <Icon :icon="lang.icon" class="h-4 w-4" :style="{ color: lang.color }" />
-                <span>{{ lang.name }}</span>
-                <span v-if="selectedLanguage === lang.value" class="ml-auto h-2.5 w-2.5 rounded-full bg-cyan-400"></span>
-              </button>
+            <div class="min-w-0">
+              <h1 class="truncate text-2xl font-black tracking-tight">在线代码编辑器</h1>
+              <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入和统一输出结果显示。</p>
             </div>
           </div>
 
-          <button class="toolbar-button" @click="importCode">
-            <Icon icon="material-symbols:upload" class="h-4 w-4" />
-            导入
-          </button>
-          <button class="toolbar-button" @click="saveCode">
-            <Icon icon="material-symbols:download" class="h-4 w-4" />
-            导出
-          </button>
-          <button class="toolbar-button" @click="resetCode">
-            <Icon icon="material-symbols:refresh" class="h-4 w-4" />
-            重置
-          </button>
-          <button class="run-button" :disabled="isExecuting" @click="runCode">
-            <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-            {{ isExecuting ? '执行中...' : '运行代码' }}
-          </button>
+          <div class="toolbar-cluster">
+            <div class="relative w-full sm:w-auto">
+              <button class="toolbar-button w-full min-w-0 justify-between sm:min-w-[170px]" :title="currentLanguageInfo.name" @click="isLanguageMenuOpen = !isLanguageMenuOpen">
+                <span class="flex min-w-0 items-center gap-2">
+                  <Icon :icon="currentLanguageInfo.icon" class="h-4 w-4 shrink-0" :style="{ color: currentLanguageInfo.color }" />
+                  <span class="truncate">{{ currentLanguageInfo.name }}</span>
+                </span>
+                <Icon icon="material-symbols:arrow-drop-down" class="h-5 w-5 shrink-0 transition-transform" :class="{ 'rotate-180': isLanguageMenuOpen }" />
+              </button>
+
+              <div v-if="isLanguageMenuOpen" class="absolute right-0 top-full z-50 mt-2 w-full min-w-[15rem] rounded-3xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-200/80 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/40 sm:w-60">
+                <button
+                  v-for="lang in languages"
+                  :key="lang.value"
+                  type="button"
+                  class="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-bold transition hover:bg-slate-100 dark:hover:bg-slate-800"
+                  @click="updateLanguage(lang.value)"
+                >
+                  <Icon :icon="lang.icon" class="h-4 w-4 shrink-0" :style="{ color: lang.color }" />
+                  <span>{{ lang.name }}</span>
+                  <span v-if="selectedLanguage === lang.value" class="ml-auto h-2.5 w-2.5 rounded-full bg-cyan-400"></span>
+                </button>
+              </div>
+            </div>
+
+            <button class="toolbar-button flex-1 sm:flex-none" @click="importCode">
+              <Icon icon="material-symbols:upload" class="h-4 w-4" />
+              导入
+            </button>
+            <button class="toolbar-button flex-1 sm:flex-none" @click="saveCode">
+              <Icon icon="material-symbols:download" class="h-4 w-4" />
+              导出
+            </button>
+            <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
+              <Icon icon="material-symbols:refresh" class="h-4 w-4" />
+              重置
+            </button>
+            <button class="run-button w-full justify-center sm:w-auto" :disabled="isExecuting" @click="runCode">
+              <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+              {{ isExecuting ? '执行中...' : '运行代码' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div class="grid items-start gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8">
+      <div class="playground-grid grid items-start gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -507,17 +509,20 @@ const importCode = () => {
   @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 
+.playground-container {
+  max-width: 80rem;
+}
+
 .toolbar-cluster {
-  @apply flex flex-wrap items-center gap-3 xl:gap-4;
+  @apply flex w-full flex-wrap items-stretch gap-3 xl:w-auto xl:justify-end;
 }
 
 .toolbar-button {
-  @apply inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
 }
 
 .run-button {
-  @apply inline-flex items-center gap-2 rounded-2xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70;
-  margin-left: 0.4rem;
+  @apply inline-flex min-h-11 items-center gap-2 rounded-2xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-70;
 }
 
 .editor-panel {
@@ -559,7 +564,7 @@ const importCode = () => {
 }
 
 .editor-shell {
-  @apply relative h-[560px] overflow-hidden bg-slate-950;
+  @apply relative h-[560px] overflow-hidden bg-white transition-colors duration-300 dark:bg-slate-950;
 }
 
 .editor-highlight,
@@ -569,7 +574,7 @@ const importCode = () => {
 }
 
 .editor-highlight {
-  @apply pointer-events-none bg-transparent text-slate-100;
+  @apply pointer-events-none bg-transparent text-slate-900 transition-colors duration-300 dark:text-slate-100;
 }
 
 .editor-highlight :deep(code) {
@@ -579,24 +584,172 @@ const importCode = () => {
 }
 
 .editor-input {
-  @apply resize-none border-none bg-transparent text-transparent caret-white outline-none;
+  @apply resize-none border-none bg-transparent text-transparent caret-slate-950 outline-none transition-colors duration-300 dark:caret-white;
 }
 
 .editor-input::selection {
+  background: rgba(8, 145, 178, 0.22);
+}
+
+:global(.dark) .editor-input::selection {
   background: rgba(34, 211, 238, 0.28);
 }
 
 .plain-textarea {
-  @apply w-full resize-none border-none bg-slate-50 p-5 font-mono text-sm text-slate-800 outline-none focus:ring-0 dark:bg-slate-950 dark:text-slate-100;
+  @apply w-full resize-none border-none bg-white p-5 font-mono text-sm text-slate-800 outline-none transition-colors duration-300 placeholder:text-slate-400 focus:ring-0 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-600;
   tab-size: 2;
 }
 
 .output-box {
-  @apply min-h-[180px] bg-slate-950 p-5 font-mono text-sm text-slate-100;
+  @apply min-h-[180px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100;
 }
 
 .placeholder-copy {
   @apply text-sm italic text-slate-500;
+}
+
+@media (max-width: 767px) {
+  .playground-container {
+    max-width: 100%;
+  }
+
+  .glass-icon-button {
+    @apply h-10 w-10 rounded-xl;
+  }
+
+  .toolbar-button,
+  .run-button {
+    @apply min-h-10 rounded-xl px-3 py-2 text-sm;
+  }
+
+  .editor-panel,
+  .surface-panel {
+    border-radius: 1.35rem;
+  }
+
+  .panel-header {
+    @apply px-4 py-3 text-[13px];
+  }
+
+  .editor-toolbar {
+    @apply px-4 py-3;
+  }
+
+  .editor-shell {
+    height: 360px;
+  }
+
+  .editor-highlight,
+  .editor-input,
+  .plain-textarea,
+  .output-box {
+    @apply p-4 text-[13px] leading-6;
+  }
+
+  .plain-textarea {
+    height: 180px !important;
+  }
+
+  .output-box {
+    min-height: 150px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1366px) {
+  .playground-container {
+    max-width: 72rem;
+  }
+
+  .playground-grid {
+    gap: 1.5rem;
+  }
+
+  .toolbar-cluster {
+    gap: 0.65rem;
+  }
+
+  .toolbar-button,
+  .run-button {
+    @apply min-h-10 px-4 py-2 text-sm;
+  }
+
+  .panel-header {
+    @apply px-4 py-3.5;
+  }
+
+  .editor-toolbar {
+    @apply px-4 py-3.5;
+  }
+
+  .editor-shell {
+    height: 470px;
+  }
+
+  .plain-textarea {
+    height: 210px !important;
+  }
+
+  .output-box {
+    min-height: 165px;
+  }
+}
+
+@media (min-width: 1367px) and (max-width: 1440px) {
+  .playground-container {
+    max-width: 78rem;
+  }
+
+  .playground-grid {
+    gap: 1.75rem;
+  }
+
+  .editor-shell {
+    height: 520px;
+  }
+
+  .plain-textarea {
+    height: 220px !important;
+  }
+
+  .output-box {
+    min-height: 175px;
+  }
+}
+
+@media (min-width: 1441px) and (max-width: 1920px) {
+  .playground-container {
+    max-width: 88rem;
+  }
+
+  .playground-grid {
+    gap: 2rem;
+  }
+
+  .editor-shell {
+    height: 560px;
+  }
+}
+
+@media (min-width: 1921px) {
+  .playground-container {
+    max-width: 96rem;
+  }
+
+  .playground-grid {
+    gap: 2.25rem;
+  }
+
+  .editor-shell {
+    height: 620px;
+  }
+
+  .plain-textarea {
+    height: 240px !important;
+  }
+
+  .output-box {
+    min-height: 190px;
+  }
 }
 
 @media (min-width: 900px) {
