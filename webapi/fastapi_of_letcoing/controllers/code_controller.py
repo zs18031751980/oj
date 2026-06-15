@@ -9,22 +9,22 @@ from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
 from models.glot_models import CodeExecutionRequest
 
 
-api = Namespace('code', description='浠ｇ爜鎵ц鐩稿叧鎿嶄綔')
+api = Namespace('code', description='代码运行相关接口')
 
 code_execution_model = api.model('CodeExecution', {
-    'code': fields.String(required=True, description='瑕佹墽琛岀殑浠ｇ爜'),
-    'language': fields.String(default='javascript', description='缂栫▼璇█'),
-    'stdin': fields.String(description='鏍囧噯杈撳叆'),
+    'code': fields.String(required=True, description='要运行的代码'),
+    'language': fields.String(default='javascript', description='编程语言'),
+    'stdin': fields.String(description='标准输入'),
 })
 
 response_model = api.model('CodeExecutionResponse', {
-    'stdout': fields.String(description='鏍囧噯杈撳嚭'),
-    'stderr': fields.String(description='鏍囧噯閿欒'),
-    'message': fields.String(description='鎵ц缁撴灉淇℃伅'),
+    'stdout': fields.String(description='标准输出'),
+    'stderr': fields.String(description='错误输出'),
+    'message': fields.String(description='执行消息'),
 })
 
 error_model = api.model('ErrorResponse', {
-    'error': fields.String(description='閿欒淇℃伅'),
+    'error': fields.String(description='错误信息'),
 })
 
 
@@ -35,7 +35,7 @@ def _parse_execution_request():
     stdin = model.get('stdin', '')
 
     if not code.strip():
-        return None, ({'error': '浠ｇ爜涓嶈兘涓虹┖'}, 400)
+        return None, ({'error': '代码不能为空'}, 400)
 
     return CodeExecutionRequest(
         code=code,
@@ -52,7 +52,7 @@ def _execute_code(execution_request: CodeExecutionRequest):
         return None, ({'error': result.stderr}, 400)
 
     return {
-        'message': '浠ｇ爜鎵ц鎴愬姛',
+        'message': '执行成功',
         'stdout': result.stdout,
         'stderr': result.stderr,
     }, None
@@ -68,7 +68,7 @@ class CodeExecutionController(Resource):
     @AuthMiddleware.require_auth
     @RateLimitMiddleware.rate_limit(max_requests=100, window_seconds=3600)
     def post(self):
-        """鎵ц浠ｇ爜锛堥渶瑕佽璇侊級"""
+        """执行登录用户的代码运行请求"""
         current_user = getattr(g, 'current_user', None)
 
         execution_request, error_response = _parse_execution_request()
@@ -96,7 +96,7 @@ class PublicCodeExecutionController(Resource):
     @api.response(400, 'Bad Request', error_model)
     @RateLimitMiddleware.rate_limit(max_requests=20, window_seconds=3600)
     def post(self):
-        """鎵ц浠ｇ爜锛堝叕鍏辨帴鍙ｏ紝鏃犻渶璁よ瘉锛岄檺鍒惰緝涓ワ級"""
+        """执行游客代码运行请求"""
         execution_request, error_response = _parse_execution_request()
         if error_response:
             return error_response

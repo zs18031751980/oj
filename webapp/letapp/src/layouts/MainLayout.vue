@@ -57,9 +57,9 @@
           class="fixed right-0 top-0 z-40 border-b border-white/60 bg-white/80 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/78 dark:shadow-black/20"
           :class="[sidebarExpanded ? 'left-72' : 'left-24', { 'header-compact': isScrolled }]"
         >
-          <div class="h-20 px-4 sm:px-6 lg:px-8">
-            <div class="flex h-full items-center justify-end gap-3">
-              <div class="relative">
+          <div class="h-20 px-4 sm:px-6 lg:px-10">
+            <div class="flex h-full items-center justify-end gap-2 pr-2 sm:gap-3 sm:pr-4">
+              <div class="relative shrink-0">
                 <button class="icon-button" aria-label="打开导航菜单" @click.stop="menuVisible = !menuVisible">
                   <Icon :icon="menuVisible ? 'material-symbols:close-rounded' : 'material-symbols:menu-rounded'" class="h-6 w-6" />
                 </button>
@@ -83,16 +83,20 @@
                 </transition>
               </div>
 
-              <button class="icon-button" :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'" @click="mainToggleTheme">
+              <button
+                class="icon-button shrink-0"
+                :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+                @click="mainToggleTheme"
+              >
                 <Icon v-if="!isDark" icon="material-symbols:light-mode" class="h-5 w-5 text-amber-500" />
                 <Icon v-else icon="material-symbols:dark-mode" class="h-5 w-5 text-cyan-300" />
               </button>
 
-              <button v-if="!authStore.isAuthenticated" class="primary-pill" @click="startClubLogin">
+              <button v-if="!authStore.isAuthenticated" class="primary-pill shrink-0" @click="startClubLogin">
                 登录
               </button>
-              <button v-else class="secondary-pill" @click="handleLogout">
-                退出: {{ authStore.displayName }}
+              <button v-else class="secondary-pill shrink-0" @click="handleLogout">
+                退出 {{ authStore.displayName }}
               </button>
             </div>
           </div>
@@ -207,7 +211,7 @@ onUnmounted(() => {
 }
 
 .secondary-pill {
-  @apply inline-flex items-center rounded-full bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+  @apply inline-flex max-w-[18rem] items-center rounded-full bg-slate-100 px-5 py-2.5 text-sm font-bold text-slate-800 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
 }
 
 .icon-button {

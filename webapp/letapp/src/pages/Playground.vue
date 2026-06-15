@@ -212,7 +212,7 @@ const runCode = async () => {
     });
 
     const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
-    output.value = text;
+    output.value = text || '程序已执行，但没有产生输出。';
     outputKind.value = result.stderr ? 'error' : 'info';
   } catch (error) {
     outputKind.value = 'error';
@@ -371,7 +371,7 @@ const importCode = () => {
           </button>
           <div>
             <h1 class="text-2xl font-black tracking-tight">在线代码编辑器</h1>
-            <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入和结果回显。</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入和统一输出结果显示。</p>
           </div>
         </div>
 
@@ -465,14 +465,14 @@ const importCode = () => {
             <div class="panel-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                <span>标准输入</span>
+                <span>输入数据</span>
               </div>
               <div class="text-xs text-slate-500 dark:text-slate-400">Tab 会插入两个空格</div>
             </div>
             <textarea
               v-model="stdin"
               class="plain-textarea h-48"
-              placeholder="需要的话，可以在这里输入测试数据。"
+              placeholder="如果程序需要输入，可以在这里填写测试数据。"
               @keydown="handleStdinKeydown"
             ></textarea>
           </section>
@@ -483,6 +483,7 @@ const importCode = () => {
                 <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
                 <span>输出</span>
               </div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">标准输出和错误输出已合并</div>
             </div>
             <div class="output-box">
               <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ output }}</pre>

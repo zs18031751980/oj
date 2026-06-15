@@ -8,7 +8,6 @@ import markdownitTaskList from 'markdown-it-task-lists';
 import markdownitAttrs from 'markdown-it-attrs';
 import mdExpandTabs from 'markdown-it-expand-tabs';
 import mdSup from 'markdown-it-sup';
-import mdSub from 'markdown-it-sub';
 import mdMark from 'markdown-it-mark';
 import markdownItAnchor from 'markdown-it-anchor';
 import markdownItContainer from 'markdown-it-container';
@@ -105,7 +104,6 @@ md.use(markdownitAttrs, {
 });
 md.use(mdExpandTabs)
   .use(mdSup)
-  .use(mdSub)
   .use(mdMark)
   .use(markdownItMermaid({ delay: 100 }));
 
@@ -328,7 +326,7 @@ onUnmounted(() => {
     <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
       <Icon icon="mdi:file-document-outline" width="32" height="32" class="text-slate-500 dark:text-slate-400" />
     </div>
-    <p class="text-lg text-slate-500 dark:text-slate-400">请选择一篇文章阅读</p>
+    <p class="text-lg text-slate-500 dark:text-slate-400">请选择一篇资料开始阅读</p>
   </div>
 </template>
 

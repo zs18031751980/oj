@@ -20,30 +20,30 @@ const languages = [
 const features = [
   {
     icon: 'material-symbols:flash-on',
-    title: '开箱即用',
-    description: '打开浏览器就能开始写代码，适合练题、上课演示和快速验证想法。',
+    title: '打开即写',
+    description: '进入页面就能练习代码，适合课堂演示、算法练习和快速验证想法。',
   },
   {
     icon: 'material-symbols:terminal',
-    title: '实时运行反馈',
-    description: '支持标准输入输出与错误日志展示，调试过程更直接，不用反复切换工具。',
+    title: '输出即时可见',
+    description: '运行结果和报错集中展示，调试时不用反复切换窗口。',
   },
   {
     icon: 'material-symbols:school',
-    title: '学习资源整合',
-    description: '把练习入口、课程资源和学习路径放到同一站点里，方便从入门一路进阶。',
+    title: '学习资源联动',
+    description: '从学习路径、推荐课程到编辑器练习，一条链路直接贯通。',
   },
   {
     icon: 'material-symbols:verified-user',
-    title: '统一身份登录',
-    description: '接入社团认证体系，登录后可保留会话并扩展更多个性化功能。',
+    title: '统一认证接入',
+    description: '保留社团登录体验，后续扩展个人化功能和学习记录也更顺手。',
   },
 ];
 
 const metrics = [
   { value: '8+', label: '常用语言模板' },
   { value: '1s', label: '进入编辑器速度' },
-  { value: '24/7', label: '随时可练习' },
+  { value: '24/7', label: '随时开始练习' },
 ];
 </script>
 
@@ -61,9 +61,13 @@ const metrics = [
           <h1 class="mt-6 max-w-3xl text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
             让写代码
             <span class="block bg-gradient-to-r from-cyan-500 via-sky-500 to-amber-400 bg-clip-text text-transparent">
-              更便捷
+              更直接、更顺手
             </span>
           </h1>
+
+          <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
+            把在线编辑、运行输出、学习资源和社团登录整合到一个页面体系里。无论你是在做课堂练习、刷题，还是沿着学习路径系统推进，都可以少切工具、直接开始。
+          </p>
 
           <div class="mt-8 flex flex-wrap gap-4">
             <button class="hero-primary" @click="router.push('/playground')">
@@ -107,7 +111,7 @@ const metrics = [
                 <pre class="overflow-auto font-mono leading-7"><code><span class="text-cyan-300">#include</span> &lt;iostream&gt;
 
 <span class="text-sky-300">int</span> main() {
-  <span class="text-violet-300">std::cout</span> &lt;&lt; <span class="text-amber-300">"Hello, Let Coding!"</span> &lt;&lt; <span class="text-amber-300">'\n'</span>;
+  <span class="text-violet-300">std::cout</span> &lt;&lt; <span class="text-amber-300">"Hello, Let Coding!"</span> &lt;&lt; <span class="text-amber-300">'\\n'</span>;
   <span class="text-pink-300">return</span> 0;
 }</code></pre>
               </div>
@@ -164,7 +168,7 @@ const metrics = [
               从打开页面到运行第一段代码，只差一次点击。
             </h2>
             <p class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-              如果你已经准备好练题或试代码，可以直接进入编辑器；如果想先找学习路线，也可以去资源页慢慢挑。
+              想立即写代码，就直接进入编辑器；想先看路线和资料，就去学习资源页按路径推进。两个入口现在是连通的，切换起来会轻松很多。
             </p>
           </div>
 
