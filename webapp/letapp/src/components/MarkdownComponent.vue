@@ -25,9 +25,9 @@ import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-typescript';
 
 interface Content {
-  title: string;
-  date: string;
-  watch: number;
+  title?: string;
+  date?: string;
+  watch?: number;
   content: string;
   identity?: string;
 }
@@ -208,6 +208,7 @@ watch(
 
 const anchorLinks = computed(() => headings.value);
 const date = computed(() => (props.content?.date ? new Date(props.content.date).toLocaleDateString('zh-CN') : ''));
+const hasHeaderMeta = computed(() => Boolean(props.content?.title || props.content?.date || props.content?.watch || props.content?.identity));
 
 const getIdentityLabel = computed(() => {
   const options = [
@@ -276,7 +277,7 @@ onUnmounted(() => {
   <div v-if="content" class="flex flex-col md:flex-row">
     <div class="w-full p-4 md:p-8" :class="[showNav && headings.length > 0 ? 'md:w-4/5' : 'md:w-full']">
       <article class="markdown-article prose prose-slate max-w-none dark:prose-invert">
-        <header class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
+        <header v-if="hasHeaderMeta" class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
           <h1 class="mb-4 text-3xl font-black text-slate-950 dark:text-white md:text-4xl">
             {{ content.title }}
           </h1>

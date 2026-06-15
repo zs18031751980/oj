@@ -28,9 +28,9 @@ interface LearningPath {
 }
 
 interface MarkdownContent {
-  title: string;
-  date: string;
-  watch: number;
+  title?: string;
+  date?: string;
+  watch?: number;
   content: string;
 }
 
@@ -176,6 +176,8 @@ const currentResource = computed(() => (
   currentDocTitle.value ? findResourceByTitle(currentDocTitle.value) : undefined
 ));
 
+const currentMarkdownFile = computed(() => currentResource.value?.markdownFile || '');
+
 const findResourceByTitle = (title: string) => allResources.find((item) => item.title === title);
 
 const getResourceLink = (resource: LearnResource) => {
@@ -193,10 +195,10 @@ const goBackToList = async () => {
 };
 
 const downloadCurrentMarkdown = () => {
-  const resource = currentResource.value;
   const content = selectedResource.value?.content;
+  const markdownFile = currentMarkdownFile.value;
 
-  if (!resource || !content) {
+  if (!markdownFile || !content) {
     return;
   }
 
@@ -204,7 +206,7 @@ const downloadCurrentMarkdown = () => {
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = objectUrl;
-  link.download = resource.markdownFile;
+  link.download = markdownFile;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -231,9 +233,6 @@ const loadMarkdown = async (title: string) => {
 
     const markdown = await response.text();
     selectedResource.value = {
-      title: resource.title,
-      date: new Date().toISOString(),
-      watch: 1,
       content: markdown,
     };
   } catch (error) {
