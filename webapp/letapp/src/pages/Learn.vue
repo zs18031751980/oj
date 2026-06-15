@@ -160,11 +160,7 @@ const docError = ref('');
 
 const allResources = [...learningPaths, ...courses];
 
-const filteredCourses = computed(() => (
-  selectedCategory.value === 'all'
-    ? courses
-    : courses.filter((course) => course.category === selectedCategory.value)
-));
+const filteredCourses = computed(() => courses);
 
 const currentDocTitle = computed(() => {
   const raw = route.query.doc;
@@ -268,23 +264,23 @@ watch(
   <div class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
     <template v-if="!isDetailMode">
       <section class="border-b border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
-        <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div class="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
               <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Learning Hub</p>
               <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">把学习路径、推荐课程和练习入口连成一条线。</h1>
-              <p class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
+              <p v-if="false" class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
                 点击下方按钮后会新开页面进入对应资料，不再在当前页面下方直接展示内容。
               </p>
             </div>
 
-            <button class="inline-flex w-fit items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
+            <button class="inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
               <Icon icon="material-symbols:code" class="h-5 w-5" />
               先去写点代码
             </button>
           </div>
 
-          <div class="mt-8 flex flex-wrap gap-3">
+          <div v-if="false" class="mt-8 flex flex-wrap gap-3">
             <button
               v-for="category in categories"
               :key="category.id"
