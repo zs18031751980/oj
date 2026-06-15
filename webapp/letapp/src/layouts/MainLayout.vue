@@ -7,7 +7,7 @@
       >
         <div class="flex h-20 items-center justify-between px-5" :class="sidebarExpanded ? 'gap-3' : 'justify-center'">
           <router-link to="/" class="group flex min-w-0 items-center gap-3 overflow-hidden" @click="closeMenu">
-            <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-slate-950 shadow-lg shadow-cyan-500/15 dark:bg-white">
+            <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white shadow-lg shadow-cyan-500/15 dark:bg-slate-950">
               <img src="/assets/logo.png" alt="Let Coding Logo" class="h-8 w-8 transition-transform group-hover:scale-110" />
             </span>
             <div v-if="sidebarExpanded" class="min-w-0">
@@ -63,7 +63,7 @@
           >
             <div class="flex min-h-14 w-full min-w-0 items-center justify-between gap-3">
               <router-link to="/" class="flex min-w-0 items-center gap-3 md:hidden" @click="closeMenu">
-                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-950 dark:bg-white">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white dark:bg-slate-950">
                   <img src="/assets/logo.png" alt="Let Coding Logo" class="h-7 w-7" />
                 </span>
                 <span class="truncate text-base font-black">Let Coding</span>
@@ -240,7 +240,7 @@ onUnmounted(() => {
 }
 
 .sidebar-link {
-  @apply flex h-13 items-center gap-3 rounded-2xl text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white;
+  @apply flex h-13 items-center gap-3 rounded-2xl text-sm font-bold text-slate-950 transition hover:bg-slate-100 hover:text-slate-950 dark:text-white dark:hover:bg-slate-800 dark:hover:text-white;
 }
 
 .router-link-active.sidebar-link {

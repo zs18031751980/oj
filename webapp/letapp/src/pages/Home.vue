@@ -58,14 +58,15 @@ const features = [
           </span>
 
           <h1 class="mt-6 max-w-3xl text-4xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
-            璁╁啓浠ｇ爜
+            让代码
             <span class="block bg-gradient-to-r from-cyan-500 via-sky-500 to-amber-400 bg-clip-text text-transparent">
-              鏇寸洿鎺ャ€佹洿椤烘墜
+              更直接、更顺手
             </span>
           </h1>
 
           <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-            鎶婂湪绾跨紪杈戙€佽繍琛岃緭鍑恒€佸涔犺祫婧愬拰绀惧洟鐧诲綍鏁村悎鍒颁竴涓〉闈綋绯婚噷銆傛棤璁轰綘鏄湪鍋氳鍫傜粌涔犮€佸埛棰橈紝杩樻槸娌跨潃瀛︿範璺緞绯荤粺鎺ㄨ繘锛岄兘鍙互灏戝垏宸ュ叿銆佺洿鎺ュ紑濮嬨€?          </p>
+            把在线编程、运行输出、学习资源和社团登录整合到一个页面里。无论你是在做课堂练习、刷题，还是沿着学习路径系统推进，都可以少切工具，直接开始。
+          </p>
 
           <div class="mt-8 flex flex-wrap gap-4">
             <button class="hero-primary" @click="router.push('/playground')">
@@ -110,14 +111,14 @@ const features = [
 
               <div class="space-y-4">
                 <div class="rounded-[1.5rem] bg-cyan-500 px-5 py-5 text-slate-950 shadow-lg shadow-cyan-500/25">
-                  <div class="text-xs font-black uppercase tracking-[0.22em]">杩愯缁撴灉</div>
+                  <div class="text-xs font-black uppercase tracking-[0.22em]">运行结果</div>
                   <div class="mt-3 rounded-2xl bg-slate-950 px-4 py-4 font-mono text-sm text-emerald-300">
                     Hello, Let Coding!
                   </div>
                 </div>
 
                 <div class="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-950">
-                  <div class="text-xs font-black uppercase tracking-[0.22em] text-slate-500">鏀寔璇█</div>
+                  <div class="text-xs font-black uppercase tracking-[0.22em] text-slate-500">支持语言</div>
                   <div class="mt-4 grid grid-cols-2 gap-3">
                     <button
                       v-for="language in languages"
