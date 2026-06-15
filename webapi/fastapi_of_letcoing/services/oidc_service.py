@@ -128,6 +128,11 @@ class OIDCService(Injectable, IOIDCService):
                 normalized_config['server_metadata'] = resolved_metadata
 
             try:
+                effective_server_metadata_url = server_metadata_url if not resolved_metadata else 'prefetched'
+                effective_access_token_url = token_endpoint or access_token_url
+                effective_authorize_url = authorize_url
+                effective_userinfo_endpoint = userinfo_endpoint
+
                 self._oauth.register(
                     provider_name,
                     client_id=normalized_config['client_id'],
@@ -144,9 +149,10 @@ class OIDCService(Injectable, IOIDCService):
                     'OIDC provider registered: '
                     f'provider={provider_name}, '
                     f'client_id={_safe_client_id(normalized_config.get("client_id"))}, '
-                    f'server_metadata_url={server_metadata_url}, '
-                    f'authorize_url={authorize_url}, '
-                    f'access_token_url={access_token_url}, '
+                    f'server_metadata_source={effective_server_metadata_url}, '
+                    f'authorize_url={effective_authorize_url}, '
+                    f'access_token_url={effective_access_token_url}, '
+                    f'userinfo_endpoint={effective_userinfo_endpoint}, '
                     f'scope={normalized_config.get("client_kwargs", {}).get("scope")}'
                 )
             except Exception as ex:

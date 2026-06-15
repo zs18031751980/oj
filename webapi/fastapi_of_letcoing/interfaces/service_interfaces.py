@@ -292,7 +292,7 @@ class IUserService(ABC):
         根据第三方登录信息查找或创建用户
         
         Args:
-            provider: 登录提供商 (如 'github', 'api.xauat.site/sso/signup')
+            provider: 登录提供商 (如 'github', 'oidc-provider')
             provider_id: 提供商的用户ID
             user_info: 用户信息字典
             
