@@ -9,7 +9,9 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const authStore = useAuthStore();
+
 const statusText = ref('正在完成登录，请稍候...');
+const detailText = ref('');
 const retryNext = ref('/');
 const loginFailed = ref(false);
 
@@ -24,15 +26,21 @@ const retryLogin = () => {
 
 onMounted(async () => {
   retryNext.value = sanitizeNext(route.query.next);
+
   try {
     authStore.completeOAuthCallback(route.query);
     message.success('登录成功');
     await router.replace(retryNext.value);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : '登录失败，请稍后重试';
-    statusText.value = errorMessage.includes('timeout') || errorMessage.includes('超时')
-      ? '登录请求超时，请稍后重试。'
-      : errorMessage;
+    const errorMessage = error instanceof Error ? error.message : '登录失败，请稍后重试。';
+    const provider = Array.isArray(route.query.provider)
+      ? String(route.query.provider[0] ?? '')
+      : String(route.query.provider ?? '');
+
+    statusText.value = errorMessage;
+    detailText.value = provider
+      ? `登录提供方：${provider}。如果持续失败，说明问题很可能出在第三方统一认证页面或其会话服务。`
+      : '如果持续失败，说明问题很可能出在第三方统一认证页面或其会话服务。';
     loginFailed.value = true;
     message.error(errorMessage);
   }
@@ -48,6 +56,9 @@ onMounted(async () => {
         :class="loginFailed ? 'text-rose-500' : 'animate-spin text-cyan-500'"
       />
       <span class="text-sm font-bold">{{ statusText }}</span>
+      <p v-if="detailText" class="max-w-md text-xs leading-6 text-slate-500 dark:text-slate-400">
+        {{ detailText }}
+      </p>
       <div v-if="loginFailed" class="flex flex-wrap justify-center gap-3">
         <NButton type="primary" @click="retryLogin">重新登录</NButton>
         <NButton tertiary @click="router.push('/')">返回首页</NButton>

@@ -17,6 +17,8 @@ const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_INFO_KEY = 'user_info';
 const OAUTH_REMEMBER_KEY = 'oauth_login_remember';
+const OAUTH_PROVIDER_KEY = 'oauth_login_provider';
+const OAUTH_NEXT_KEY = 'oauth_login_next';
 
 type SessionPayload = TokenResponse | {
   access_token: string;
@@ -66,7 +68,31 @@ const clearStoredSession = () => {
   }
 
   sessionStorage.removeItem(OAUTH_REMEMBER_KEY);
+  sessionStorage.removeItem(OAUTH_PROVIDER_KEY);
+  sessionStorage.removeItem(OAUTH_NEXT_KEY);
   clearAuthStorageMode();
+};
+
+const normalizeOAuthErrorMessage = (error: string, errorDescription: string) => {
+  const combined = `${error} ${errorDescription}`.trim().toLowerCase();
+
+  if (combined.includes('timeout') || combined.includes('超时')) {
+    return '登录请求超时，请稍后重试。';
+  }
+
+  if (combined.includes('会话创建失败')) {
+    return '第三方登录页面未能创建授权会话，请稍后重试或联系统一认证服务维护方。';
+  }
+
+  if (combined.includes('access_denied') || combined.includes('denied') || combined.includes('拒绝')) {
+    return '你已取消授权，登录未完成。';
+  }
+
+  if (combined.includes('missing') || combined.includes('token') || combined.includes('缺少')) {
+    return '登录回调缺少必要凭证，请重新发起登录。';
+  }
+
+  return errorDescription || error || '登录失败，请稍后重试。';
 };
 
 export const useAuthStore = defineStore('auth', () => {
@@ -124,6 +150,8 @@ export const useAuthStore = defineStore('auth', () => {
   const startOAuthLogin = (provider: string, next = '/', remember = true) => {
     sessionStorage.setItem(OAUTH_REMEMBER_KEY, remember ? '1' : '0');
     const safeNext = next.startsWith('/') ? next : '/';
+    sessionStorage.setItem(OAUTH_PROVIDER_KEY, provider);
+    sessionStorage.setItem(OAUTH_NEXT_KEY, safeNext);
     const loginUrl = new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
     loginUrl.searchParams.set('next', safeNext);
     window.location.href = loginUrl.toString();
@@ -138,7 +166,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) {
       const errorDescription = readQueryValue(query.error_description);
       sessionStorage.removeItem(OAUTH_REMEMBER_KEY);
-      throw new Error(errorDescription || error);
+      throw new Error(normalizeOAuthErrorMessage(error, errorDescription));
     }
 
     const token = readQueryValue(query.access_token);
@@ -146,7 +174,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (!token || !refresh) {
       sessionStorage.removeItem(OAUTH_REMEMBER_KEY);
-      throw new Error('缺少登录令牌');
+      throw new Error('登录回调缺少必要令牌，请重新发起登录。');
     }
 
     let parsedUser: UserInfo | undefined;
