@@ -76,7 +76,7 @@ const metrics = [
             </button>
             <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : router.push('/login')">
               <Icon :icon="authStore.isAuthenticated ? 'material-symbols:school' : 'mdi:login'" class="h-5 w-5" />
-              {{ authStore.isAuthenticated ? '查看学习资源' : '先登录再继续' }}
+              {{ authStore.isAuthenticated ? '查看学习资源' : '登录后查看学习资源' }}
             </button>
           </div>
 
