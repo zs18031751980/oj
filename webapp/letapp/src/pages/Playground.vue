@@ -131,15 +131,15 @@ const currentLanguageInfo = computed<LanguageOption>(() => (
 ));
 
 const exportExtension = computed(() => extensionMap[selectedLanguage.value] ?? 'txt');
+const lineCount = computed(() => code.value.split('\n').length);
 
 const highlightedCode = computed(() => {
   const language = currentLanguageInfo.value.prism;
   const grammar = Prism.languages[language];
   const source = code.value;
-  return grammar ? Prism.highlight(source, grammar, language) : Prism.util.encode(source);
+  const normalizedSource = source.length > 0 ? source : ' ';
+  return grammar ? Prism.highlight(normalizedSource, grammar, language) : Prism.util.encode(normalizedSource);
 });
-
-const lineCount = computed(() => code.value.split('\n').length);
 
 const syncEditorScrollFromTextarea = (target: HTMLTextAreaElement) => {
   if (!highlightedCodeRef.value) {
@@ -154,36 +154,45 @@ const syncEditorScroll = (event: Event) => {
   syncEditorScrollFromTextarea(event.target as HTMLTextAreaElement);
 };
 
-const insertTabAtCursor = (event: KeyboardEvent, targetRef: { value: string }) => {
+const updateTextareaValue = (
+  target: HTMLTextAreaElement,
+  targetRef: { value: string },
+  replacement: string,
+) => {
+  const start = target.selectionStart;
+  const end = target.selectionEnd;
+  const value = targetRef.value;
+  targetRef.value = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
+
+  requestAnimationFrame(() => {
+    const nextPosition = start + replacement.length;
+    target.selectionStart = nextPosition;
+    target.selectionEnd = nextPosition;
+    target.focus();
+    syncEditorScrollFromTextarea(target);
+  });
+};
+
+const handleTabInsertion = (event: KeyboardEvent, targetRef: { value: string }) => {
+  if (event.key !== 'Tab') {
+    return;
+  }
+
   const target = event.target as HTMLTextAreaElement | null;
   if (!target) {
     return;
   }
 
   event.preventDefault();
-  const start = target.selectionStart;
-  const end = target.selectionEnd;
-  const value = targetRef.value;
-  targetRef.value = `${value.slice(0, start)}\t${value.slice(end)}`;
-
-  requestAnimationFrame(() => {
-    target.selectionStart = start + 1;
-    target.selectionEnd = start + 1;
-    target.focus();
-    syncEditorScrollFromTextarea(target);
-  });
+  updateTextareaValue(target, targetRef, '  ');
 };
 
 const handleEditorKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Tab') {
-    insertTabAtCursor(event, code);
-  }
+  handleTabInsertion(event, code);
 };
 
 const handleStdinKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Tab') {
-    insertTabAtCursor(event, stdin);
-  }
+  handleTabInsertion(event, stdin);
 };
 
 const updateExportFileName = (language: string) => {
@@ -375,7 +384,7 @@ const importCode = () => {
     </div>
 
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div class="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -395,7 +404,10 @@ const importCode = () => {
                 :placeholder="fallbackFileNames[selectedLanguage] || 'code'"
               />
             </label>
-            <div class="export-hint">将保存为 `{{ sanitizeFileName(exportFileName) || fallbackFileNames[selectedLanguage] || 'code' }}.{{ exportExtension }}`</div>
+            <div class="export-hint">
+              保存为
+              <span class="export-file-chip">{{ sanitizeFileName(exportFileName) || fallbackFileNames[selectedLanguage] || 'code' }}.{{ exportExtension }}</span>
+            </div>
           </div>
 
           <div class="editor-shell">
@@ -411,14 +423,14 @@ const importCode = () => {
           </div>
         </section>
 
-        <div class="grid gap-6">
+        <div class="side-panel-stack">
           <section class="surface-panel">
             <div class="panel-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>标准输入</span>
               </div>
-              <div class="text-xs text-slate-500 dark:text-slate-400">按 Tab 会插入真实制表符</div>
+              <div class="text-xs text-slate-500 dark:text-slate-400">Tab 会插入两个空格</div>
             </div>
             <textarea
               v-model="stdin"
@@ -486,24 +498,34 @@ const importCode = () => {
   @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/15;
 }
 
+.side-panel-stack {
+  @apply grid min-w-0 gap-6;
+}
+
 .panel-header {
-  @apply flex items-center justify-between border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
+  @apply flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-sm font-black text-slate-800 dark:border-slate-800 dark:text-slate-100;
 }
 
 .editor-toolbar {
-  @apply flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
+  @apply grid gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/60;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .export-name-field {
-  @apply flex min-w-[220px] flex-1 flex-col gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400;
+  @apply flex min-w-0 flex-col gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400;
 }
 
 .export-name-input {
-  @apply rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-cyan-900;
+  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold normal-case tracking-normal text-slate-900 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-cyan-900;
 }
 
 .export-hint {
-  @apply text-sm text-slate-500 dark:text-slate-400;
+  @apply flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400;
+}
+
+.export-file-chip {
+  @apply inline-flex max-w-full items-center rounded-full bg-slate-900 px-3 py-1 font-mono text-xs text-cyan-200 dark:bg-slate-800;
+  overflow-wrap: anywhere;
 }
 
 .editor-shell {
@@ -512,7 +534,7 @@ const importCode = () => {
 
 .editor-highlight,
 .editor-input {
-  @apply absolute inset-0 m-0 h-full w-full overflow-auto whitespace-pre p-5 font-mono text-sm leading-7;
+  @apply absolute inset-0 m-0 h-full w-full overflow-auto whitespace-pre-wrap break-normal p-5 font-mono text-sm leading-7;
   tab-size: 2;
 }
 
@@ -521,7 +543,9 @@ const importCode = () => {
 }
 
 .editor-highlight :deep(code) {
-  @apply font-mono text-sm leading-7;
+  @apply block min-h-full font-mono text-sm leading-7;
+  white-space: inherit;
+  tab-size: 2;
 }
 
 .editor-input {
@@ -543,5 +567,12 @@ const importCode = () => {
 
 .placeholder-copy {
   @apply text-sm italic text-slate-500;
+}
+
+@media (min-width: 900px) {
+  .editor-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
 }
 </style>
