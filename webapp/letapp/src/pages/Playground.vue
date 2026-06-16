@@ -837,22 +837,17 @@ onUnmounted(() => {
     @apply px-4 pb-4;
   }
 
-.playground-side-mode .editor-body {
-  position: relative;
-}
-
 .side-io-panel {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  position: fixed;
+  right: 2rem;
+  top: 50%;
+  translate: 0 -50%;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  width: 24rem;
-  z-index: 10;
-  padding: 1rem;
-  pointer-events: auto;
+  width: clamp(18rem, 28vw, 30rem);
+  max-height: 70vh;
+  z-index: 100;
 }
 
 .side-io-section {
@@ -875,8 +870,9 @@ onUnmounted(() => {
 
 @media (max-width: 1023px) {
   .side-io-panel {
-    width: 100%;
-    position: relative;
+    position: fixed;
+    width: 20rem;
+    right: 1rem;
   }
 }
 
