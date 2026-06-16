@@ -128,18 +128,6 @@ const isFullscreen = ref(false);
 const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
 
-const isIosFullscreenFallback = () => {
-  if (typeof navigator === 'undefined') {
-    return false;
-  }
-
-  const userAgent = navigator.userAgent;
-  const platform = navigator.platform;
-  const isAppleMobile = /iPad|iPhone|iPod/.test(userAgent);
-  const isTouchMac = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-  return isAppleMobile || isTouchMac;
-};
-
 const syncPageScrollLock = (locked: boolean) => {
   if (typeof document === 'undefined') {
     return;
@@ -150,10 +138,8 @@ const syncPageScrollLock = (locked: boolean) => {
 };
 
 const toggleFullscreen = async () => {
-  const useFallbackMode = isIosFullscreenFallback();
-
   if (isFullscreen.value) {
-    if (!useFallbackMode && document.fullscreenElement) {
+    if (document.fullscreenElement) {
       try {
         await document.exitFullscreen();
         return;
@@ -169,7 +155,7 @@ const toggleFullscreen = async () => {
 
   isFullscreen.value = true;
 
-  if (!useFallbackMode && editorPanelRef.value?.requestFullscreen) {
+  if (editorPanelRef.value?.requestFullscreen) {
     try {
       await editorPanelRef.value.requestFullscreen();
       return;
@@ -180,10 +166,6 @@ const toggleFullscreen = async () => {
 };
 
 const handleFullscreenChange = () => {
-  if (isIosFullscreenFallback()) {
-    return;
-  }
-
   const active = !!document.fullscreenElement;
   isFullscreen.value = active;
   if (!active) {
