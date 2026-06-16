@@ -477,50 +477,7 @@ onUnmounted(() => {
     </div>
 
     <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
-      <div class="playground-stack">
-        <template v-if="outputPosition === 'side'">
-          <div class="bottom-panels">
-            <section class="surface-panel">
-              <div class="collapse-header input-header">
-                <div class="flex items-center gap-2">
-                  <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                  <span>输入数据</span>
-                </div>
-                <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
-                  <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                  {{ isExecuting ? '运行中...' : '运行代码' }}
-                </button>
-              </div>
-              <div class="collapse-body">
-                <textarea
-                  v-model="stdin"
-                  class="plain-textarea panel-textarea"
-                  placeholder="如果程序需要输入，可以在这里填写测试数据。"
-                  @keydown="handleStdinKeydown"
-                ></textarea>
-              </div>
-            </section>
-
-            <section class="surface-panel">
-              <div class="collapse-header">
-                <div class="flex items-center gap-2">
-                  <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                  <span>输出</span>
-                </div>
-              </div>
-              <div class="collapse-body">
-                <div class="output-box">
-                  <pre
-                    v-if="output"
-                    :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
-                  >{{ output }}</pre>
-                  <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </template>
-
+      <div class="playground-stack" :class="{ 'playground-side-mode': outputPosition === 'side' }">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -557,6 +514,47 @@ onUnmounted(() => {
               @keydown="handleEditorKeydown"
             ></textarea>
           </div>
+
+          <aside v-if="outputPosition === 'side'" class="side-io-panel">
+            <section class="surface-panel side-io-section">
+              <div class="collapse-header input-header">
+                <div class="flex items-center gap-2">
+                  <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
+                  <span>输入数据</span>
+                </div>
+                <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+                  <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+                  {{ isExecuting ? '运行中...' : '运行代码' }}
+                </button>
+              </div>
+              <div class="collapse-body">
+                <textarea
+                  v-model="stdin"
+                  class="plain-textarea panel-textarea"
+                  placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                  @keydown="handleStdinKeydown"
+                ></textarea>
+              </div>
+            </section>
+
+            <section class="surface-panel side-io-section">
+              <div class="collapse-header">
+                <div class="flex items-center gap-2">
+                  <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
+                  <span>输出</span>
+                </div>
+              </div>
+              <div class="collapse-body">
+                <div class="output-box">
+                  <pre
+                    v-if="output"
+                    :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
+                  >{{ output }}</pre>
+                  <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                </div>
+              </div>
+            </section>
+          </aside>
         </section>
       </div>
     </div>
@@ -837,7 +835,53 @@ onUnmounted(() => {
     @apply px-4 pb-4;
   }
 
-  .floating-button-group {
+.playground-side-mode .editor-panel {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.playground-side-mode .editor-shell {
+  flex: 1;
+}
+
+.side-io-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 24rem;
+  flex-shrink: 0;
+}
+
+.side-io-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.side-io-section .collapse-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.side-io-section .panel-textarea,
+.side-io-section .output-box {
+  height: 100%;
+  max-height: none;
+}
+
+@media (max-width: 1023px) {
+  .playground-side-mode .editor-panel {
+    flex-direction: column;
+  }
+
+  .side-io-panel {
+    width: 100%;
+  }
+}
+
+.floating-button-group {
     right: 4rem;
   }
 
