@@ -838,21 +838,21 @@ onUnmounted(() => {
   }
 
 .playground-side-mode .editor-body {
-  display: flex;
-  flex-direction: row;
-  gap: 1rem;
-}
-
-.playground-side-mode .editor-shell {
-  flex: 1;
+  position: relative;
 }
 
 .side-io-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   width: 24rem;
-  flex-shrink: 0;
+  z-index: 10;
+  padding: 1rem;
+  pointer-events: auto;
 }
 
 .side-io-section {
@@ -874,12 +874,9 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1023px) {
-  .playground-side-mode .editor-panel {
-    flex-direction: column;
-  }
-
   .side-io-panel {
     width: 100%;
+    position: relative;
   }
 }
 
