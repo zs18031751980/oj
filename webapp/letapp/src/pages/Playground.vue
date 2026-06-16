@@ -129,20 +129,17 @@ const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
 
 const toggleFullscreen = async () => {
-  if (!isFullscreen.value) {
+  if (!document.fullscreenElement) {
     isFullscreen.value = true;
     try {
       await editorPanelRef.value?.requestFullscreen();
     } catch {
-      // CSS fullscreen fallback
+      isFullscreen.value = false;
     }
   } else {
-    isFullscreen.value = false;
     isFullscreenMenuOpen.value = false;
     try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      }
+      await document.exitFullscreen();
     } catch {
       // fallback
     }
