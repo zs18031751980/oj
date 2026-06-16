@@ -49,7 +49,7 @@ const courses: ResourceItem[] = [
   { id: 'js-guide', title: 'JavaScript 入门指南', category: 'beginner', level: '入门', duration: '12 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
   { id: 'python-data', title: 'Python 数据分析实战', category: 'advanced', level: '进阶', duration: '15 小时', author: 'Let Coding', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
   { id: 'todo-project', title: 'Web 项目练习：Todo 应用', category: 'project', level: '入门', duration: '8 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
-  { id: 'algorithm-basic', title: '算法基础：排序与搜索', category: 'algorithm', level: '入门', duration: '10 小时', author: 'Let Coding', language: 'Python', markdownFile: '算法基础：排序与搜索.md' },
+  { id: 'algorithm-basic', title: '算法基础：排序与搜索', category: 'algorithm', level: '入门', duration: '10 小时', author: 'Let Coding', language: 'C++', markdownFile: '算法基础：排序与搜索.md' },
   { id: 'vue-components', title: 'Vue 组件化开发', category: 'advanced', level: '进阶', duration: '11 小时', author: 'Let Coding', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
   { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', category: 'algorithm', level: '进阶', duration: '6 小时', author: 'Let Coding', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
 ];
@@ -248,15 +248,12 @@ watch(
               :key="path.title"
               class="path-card"
             >
-              <div class="inline-flex rounded-full bg-gradient-to-r px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-white" :class="path.accent">
-                Path
-              </div>
-              <h3 class="mt-5 text-2xl font-black tracking-tight">{{ path.title }}</h3>
+              <h3 class="text-2xl font-black tracking-tight">{{ path.title }}</h3>
               <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
                 {{ cardInfoMap[path.id]?.description || '' }}
               </p>
               <button
-                class="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                 @click="openResource(path)"
               >
                 <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
@@ -343,7 +340,7 @@ watch(
           <div v-else-if="docError" class="flex min-h-[320px] items-center justify-center p-8 text-center text-rose-500">
             {{ docError }}
           </div>
-          <MarkdownComponent v-else :content="selectedResource" />
+          <MarkdownComponent v-else :content="selectedResource" :show-nav="false" :show-heading-links="false" />
         </div>
       </section>
     </template>
@@ -358,7 +355,7 @@ watch(
 }
 
 .path-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
+  @apply flex h-full flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
 }
 
 .pill {

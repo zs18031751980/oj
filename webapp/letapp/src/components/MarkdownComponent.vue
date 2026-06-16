@@ -44,8 +44,10 @@ interface HeadingItem {
 const props = withDefaults(defineProps<{
   content?: Content;
   showNav?: boolean;
+  showHeadingLinks?: boolean;
 }>(), {
   showNav: true,
+  showHeadingLinks: true,
 });
 
 const route = useRoute();
@@ -76,7 +78,7 @@ const escapeHtml = (value: string) => value
 const md = new MarkdownIt({
   html: true,
   linkify: true,
-  typographer: true,
+  typographer: false,
   highlight: (code: string, language: string): string => {
     const normalizedLanguage = normalizeLanguage(language || '');
     const grammar = Prism.languages[normalizedLanguage];
@@ -194,14 +196,17 @@ const buildHeadingTree = (flatHeadings: HeadingItem[]) => {
 const render = async (markdown: string) => {
   headings.value = buildHeadingTree(extractHeadings(markdown));
   const renderedHtml = md.render(markdown);
+  const finalHtml = props.showHeadingLinks
+    ? renderedHtml
+    : renderedHtml.replace(/<a\b[^>]*class="[^"]*apple-link-no-icon[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
   await nextTick();
   setTimeout(() => Prism.highlightAll(), 50);
-  return renderedHtml;
+  return finalHtml;
 };
 
 watch(
-  () => props.content,
-  async (newValue) => {
+  () => [props.content, props.showHeadingLinks] as const,
+  async ([newValue]) => {
     html.value = newValue ? await render(newValue.content) : '';
   },
   { immediate: true },
