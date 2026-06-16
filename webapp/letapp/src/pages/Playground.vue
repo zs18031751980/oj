@@ -850,8 +850,8 @@ onUnmounted(() => {
   z-index: 100;
 }
 
-.playground-side-mode .editor-body {
-  padding-right: calc(clamp(18rem, 28vw, 30rem) + 3rem);
+.playground-side-mode .editor-panel {
+  width: 50%;
 }
 
 .side-io-section {
