@@ -331,9 +331,12 @@ onUnmounted(() => {
   </div>
 </template>
 
+<style>
+@import 'prismjs/themes/prism-tomorrow.min.css';
+</style>
+
 <style scoped>
 @reference 'tailwindcss';
-@import 'prismjs/themes/prism-tomorrow.min.css';
 
 :deep(.custom-block) {
   @apply my-4 rounded-2xl p-4;

@@ -39,14 +39,6 @@ type LearnResource = ResourceItem | LearningPath;
 const route = useRoute();
 const router = useRouter();
 
-const categories = [
-  { id: 'all', name: '全部', icon: 'material-symbols:category', accent: 'from-slate-200 to-slate-100 dark:from-slate-700 dark:to-slate-800' },
-  { id: 'beginner', name: '入门教程', icon: 'material-symbols:school', accent: 'from-emerald-200 to-lime-100 dark:from-emerald-950 dark:to-lime-950' },
-  { id: 'advanced', name: '进阶专题', icon: 'material-symbols:rocket-launch', accent: 'from-cyan-200 to-sky-100 dark:from-cyan-950 dark:to-sky-950' },
-  { id: 'project', name: '实战项目', icon: 'material-symbols:build', accent: 'from-amber-200 to-orange-100 dark:from-amber-950 dark:to-orange-950' },
-  { id: 'algorithm', name: '算法训练', icon: 'material-symbols:calculate', accent: 'from-fuchsia-200 to-violet-100 dark:from-fuchsia-950 dark:to-violet-950' },
-];
-
 const learningPaths: LearningPath[] = [
   {
     id: 'web-path',
@@ -152,7 +144,6 @@ const courses: ResourceItem[] = [
   },
 ];
 
-const selectedCategory = ref('all');
 const selectedTitle = ref('');
 const selectedResource = ref<MarkdownContent | undefined>();
 const isLoadingDoc = ref(false);
@@ -269,29 +260,11 @@ watch(
             <div class="max-w-3xl">
               <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Learning Hub</p>
               <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">把学习路径、推荐课程和练习入口连成一条线。</h1>
-              <p v-if="false" class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-                点击下方按钮后会新开页面进入对应资料，不再在当前页面下方直接展示内容。
-              </p>
             </div>
 
             <button class="inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
               <Icon icon="material-symbols:code" class="h-5 w-5" />
               先去写点代码
-            </button>
-          </div>
-
-          <div v-if="false" class="mt-8 flex flex-wrap gap-3">
-            <button
-              v-for="category in categories"
-              :key="category.id"
-              class="category-chip"
-              :class="selectedCategory === category.id ? 'category-chip-active' : 'category-chip-idle'"
-              @click="selectedCategory = category.id"
-            >
-              <span class="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br" :class="category.accent">
-                <Icon :icon="category.icon" class="h-5 w-5 text-slate-900 dark:text-white" />
-              </span>
-              {{ category.name }}
             </button>
           </div>
         </div>
@@ -417,18 +390,6 @@ watch(
 <style scoped>
 @reference 'tailwindcss';
 
-.category-chip {
-  @apply inline-flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm font-black transition;
-}
-
-.category-chip-idle {
-  @apply border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:bg-slate-50;
-}
-
-.category-chip-active {
-  @apply border-cyan-300 bg-cyan-50 text-cyan-700 shadow-lg shadow-cyan-100;
-}
-
 .course-card {
   @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
 }
@@ -451,23 +412,6 @@ watch(
 </style>
 
 <style>
-html.dark .category-chip-idle {
-  border-color: #1e293b !important;
-  background-color: #0f172a !important;
-  color: #e2e8f0 !important;
-}
-
-html.dark .category-chip-idle:hover {
-  background-color: #1e293b !important;
-}
-
-html.dark .category-chip-active {
-  border-color: #083344 !important;
-  background-color: rgba(8, 51, 68, 0.5) !important;
-  color: #67e8f9 !important;
-  box-shadow: none !important;
-}
-
 html.dark .course-card {
   border-color: #1e293b !important;
   background-color: #0f172a !important;

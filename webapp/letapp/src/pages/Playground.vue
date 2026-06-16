@@ -129,6 +129,7 @@ const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
 const bottomPanelsCollapsed = ref(false);
+const outputPosition = ref<'bottom' | 'side'>('bottom');
 const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth);
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
@@ -320,12 +321,7 @@ const updateLanguage = (language: string) => {
   previousLanguage.value = selectedLanguage.value;
   selectedLanguage.value = language;
   isLanguageMenuOpen.value = false;
-
-  const currentCode = code.value;
-  if (currentCode.trim() === '' || currentCode === getLanguagePreset(previousLanguage.value)) {
-    code.value = getLanguagePreset(language);
-  }
-
+  code.value = getLanguagePreset(language);
   updateExportFileName(language);
 };
 
@@ -471,13 +467,17 @@ onUnmounted(() => {
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
               重置
             </button>
+            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
+              <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-4 w-4" />
+              {{ outputPosition === 'bottom' ? '右边' : '底部' }}
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: bottomPanelSpacer }">
-      <div class="playground-stack">
+    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
+      <div class="playground-stack" :class="{ 'playground-side-mode': outputPosition === 'side' }">
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -503,22 +503,65 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div class="editor-shell">
-            <pre ref="highlightedCodeRef" :class="`editor-highlight language-${currentLanguageInfo.prism}`"><code v-html="highlightedCode"></code></pre>
-            <textarea
-              v-model="code"
-              spellcheck="false"
-              class="editor-input"
-              placeholder="在这里输入你的代码..."
-              @scroll="syncEditorScroll"
-              @keydown="handleEditorKeydown"
-            ></textarea>
+          <div class="editor-body">
+            <div class="editor-shell">
+              <pre ref="highlightedCodeRef" :class="`editor-highlight language-${currentLanguageInfo.prism}`"><code v-html="highlightedCode"></code></pre>
+              <textarea
+                v-model="code"
+                spellcheck="false"
+                class="editor-input"
+                placeholder="在这里输入你的代码..."
+                @scroll="syncEditorScroll"
+                @keydown="handleEditorKeydown"
+              ></textarea>
+            </div>
+
+            <aside v-if="outputPosition === 'side'" class="side-io-panel">
+              <section class="surface-panel side-io-section">
+                <div class="collapse-header input-header">
+                  <div class="flex items-center gap-2">
+                    <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
+                    <span>输入数据</span>
+                  </div>
+                  <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+                    <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+                    {{ isExecuting ? '运行中...' : '运行代码' }}
+                  </button>
+                </div>
+                <div class="collapse-body">
+                  <textarea
+                    v-model="stdin"
+                    class="plain-textarea panel-textarea"
+                    placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                    @keydown="handleStdinKeydown"
+                  ></textarea>
+                </div>
+              </section>
+
+              <section class="surface-panel side-io-section">
+                <div class="collapse-header">
+                  <div class="flex items-center gap-2">
+                    <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
+                    <span>输出</span>
+                  </div>
+                </div>
+                <div class="collapse-body">
+                  <div class="output-box">
+                    <pre
+                      v-if="output"
+                      :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
+                    >{{ output }}</pre>
+                    <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                  </div>
+                </div>
+              </section>
+            </aside>
           </div>
         </section>
       </div>
     </div>
 
-    <div v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
+    <div v-if="outputPosition === 'bottom'" v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
       <div class="playground-container fixed-panels-inner">
         <div class="bottom-panels">
           <section class="surface-panel">
@@ -563,15 +606,16 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <button
-      class="floating-collapse-button"
-      type="button"
-      :style="{ bottom: floatingButtonBottom }"
-      @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
-    >
-      <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
-      <span>{{ bottomPanelsCollapsed ? '展开' : '收起' }}</span>
-    </button>
+    <div v-if="outputPosition === 'bottom'" class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
+      <button
+        class="floating-collapse-button"
+        type="button"
+        @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
+      >
+        <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
+        <span>{{ bottomPanelsCollapsed ? '展开' : '收起' }}</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -729,11 +773,19 @@ onUnmounted(() => {
 }
 
 .floating-collapse-button {
-  @apply fixed right-5 z-50 inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
+  @apply inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
 }
 
 .placeholder-copy {
   @apply text-sm italic text-slate-500;
+}
+
+.floating-button-group {
+  position: fixed;
+  right: 5rem;
+  z-index: 50;
+  display: flex;
+  gap: 0.5rem;
 }
 
 @media (max-width: 767px) {
@@ -785,8 +837,59 @@ onUnmounted(() => {
     @apply px-4 pb-4;
   }
 
+.side-io-panel {
+  position: fixed;
+  right: 2rem;
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: clamp(18rem, 28vw, 30rem);
+  max-height: 70vh;
+  z-index: 100;
+}
+
+.playground-side-mode .editor-panel {
+  width: 50%;
+}
+
+.side-io-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.side-io-section .collapse-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+.side-io-section .panel-textarea,
+.side-io-section .output-box {
+  height: 100%;
+  max-height: none;
+}
+
+@media (max-width: 1023px) {
+  .side-io-panel {
+    position: fixed;
+    width: 20rem;
+    right: 1rem;
+  }
+
+  .playground-side-mode .editor-body {
+    padding-right: calc(20rem + 2rem);
+  }
+}
+
+.floating-button-group {
+    right: 4rem;
+  }
+
   .floating-collapse-button {
-    @apply right-4 px-3.5 py-2.5 text-[13px];
+    @apply px-3.5 py-2.5 text-[13px];
   }
 }
 
