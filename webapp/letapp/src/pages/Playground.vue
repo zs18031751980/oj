@@ -127,6 +127,17 @@ const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWid
 const isFullscreen = ref(false);
 const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
+const fullscreenExitArmed = ref(false);
+
+const isTouchFullscreenQuirkDevice = () => {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent;
+  const platform = navigator.platform;
+  return /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
 
 const syncPageScrollLock = (locked: boolean) => {
   if (typeof document === 'undefined') {
@@ -139,6 +150,8 @@ const syncPageScrollLock = (locked: boolean) => {
 
 const toggleFullscreen = async () => {
   if (isFullscreen.value) {
+    fullscreenExitArmed.value = true;
+
     if (document.fullscreenElement) {
       try {
         await document.exitFullscreen();
@@ -154,6 +167,7 @@ const toggleFullscreen = async () => {
   }
 
   isFullscreen.value = true;
+  fullscreenExitArmed.value = false;
 
   if (editorPanelRef.value?.requestFullscreen) {
     try {
@@ -167,10 +181,17 @@ const toggleFullscreen = async () => {
 
 const handleFullscreenChange = () => {
   const active = !!document.fullscreenElement;
+
+  if (!active && isTouchFullscreenQuirkDevice() && isFullscreen.value && !fullscreenExitArmed.value) {
+    return;
+  }
+
   isFullscreen.value = active;
   if (!active) {
     isFullscreenMenuOpen.value = false;
   }
+
+  fullscreenExitArmed.value = false;
 };
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
