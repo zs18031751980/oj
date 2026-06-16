@@ -7,24 +7,24 @@ import MarkdownComponent from '../components/MarkdownComponent.vue';
 interface ResourceItem {
   id: string;
   title: string;
-  description: string;
   category: 'beginner' | 'advanced' | 'project' | 'algorithm';
   level: string;
   duration: string;
   author: string;
   language: string;
   markdownFile: string;
-  url: string;
 }
 
 interface LearningPath {
   id: string;
   title: string;
-  description: string;
   accent: string;
-  points: string[];
   markdownFile: string;
-  url: string;
+}
+
+interface CardInfo {
+  description: string;
+  points: string[];
 }
 
 interface MarkdownContent {
@@ -34,114 +34,24 @@ interface MarkdownContent {
   content: string;
 }
 
-type LearnResource = ResourceItem | LearningPath;
+type LearnResource = { id: string; title: string; markdownFile: string };
 
 const route = useRoute();
 const router = useRouter();
 
 const learningPaths: LearningPath[] = [
-  {
-    id: 'web-path',
-    title: 'Web 开发路径',
-    description: '从 HTML、CSS、JavaScript 开始，逐步进阶到 Vue、接口联调和项目交付。',
-    accent: 'from-cyan-500 to-sky-500',
-    points: ['HTML 与 CSS 基础', 'JavaScript 核心语法', 'Vue 组件开发', '接口联调与部署'],
-    markdownFile: 'Web 开发路径.md',
-    url: '/learn?doc=Web%20开发路径',
-  },
-  {
-    id: 'data-path',
-    title: '数据科学路径',
-    description: '围绕 Python 和常用数据处理工具，打通分析、可视化和基础建模思路。',
-    accent: 'from-emerald-500 to-lime-500',
-    points: ['Python 编程基础', 'pandas 与 numpy', '数据可视化', '模型与实验记录'],
-    markdownFile: '数据科学路径.md',
-    url: '/learn?doc=%E6%95%B0%E6%8D%AE%E7%A7%91%E5%AD%A6%E8%B7%AF%E5%BE%84',
-  },
-  {
-    id: 'algorithm-path',
-    title: '算法与竞赛路径',
-    description: '适合准备笔试、面试和 OJ 刷题训练，强调解题思路与复杂度意识。',
-    accent: 'from-amber-500 to-orange-500',
-    points: ['数据结构基础', '搜索与排序', '动态规划专题', '题解复盘与优化'],
-    markdownFile: '算法与竞赛路径.md',
-    url: '/learn?doc=%E7%AE%97%E6%B3%95%E4%B8%8E%E7%AB%9E%E8%B5%9B%E8%B7%AF%E5%BE%84',
-  },
+  { id: 'web-path', title: 'Web 开发路径', accent: 'from-cyan-500 to-sky-500', markdownFile: 'Web 开发路径.md' },
+  { id: 'data-path', title: '数据科学路径', accent: 'from-emerald-500 to-lime-500', markdownFile: '数据科学路径.md' },
+  { id: 'algorithm-path', title: '算法与竞赛路径', accent: 'from-amber-500 to-orange-500', markdownFile: '算法与竞赛路径.md' },
 ];
 
 const courses: ResourceItem[] = [
-  {
-    id: 'js-guide',
-    title: 'JavaScript 入门指南',
-    description: '从变量、函数和 DOM 基础开始，适合第一次系统接触前端编程的同学。',
-    category: 'beginner',
-    level: '入门',
-    duration: '12 小时',
-    author: 'Let Coding',
-    language: 'JavaScript',
-    markdownFile: 'JavaScript 入门指南.md',
-    url: '/learn?doc=JavaScript%20%E5%85%A5%E9%97%A8%E6%8C%87%E5%8D%97',
-  },
-  {
-    id: 'python-data',
-    title: 'Python 数据分析实战',
-    description: '围绕数据清洗、可视化和简单分析案例，建立完整的 Python 数据处理思路。',
-    category: 'advanced',
-    level: '进阶',
-    duration: '15 小时',
-    author: 'Let Coding',
-    language: 'Python',
-    markdownFile: 'Python 数据分析实战.md',
-    url: '/learn?doc=Python%20%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90%E5%AE%9E%E6%88%98',
-  },
-  {
-    id: 'todo-project',
-    title: 'Web 项目练习：Todo 应用',
-    description: '从布局、交互到数据存储，一步步完成一个完整的小型前端项目。',
-    category: 'project',
-    level: '入门',
-    duration: '8 小时',
-    author: 'Let Coding',
-    language: 'JavaScript',
-    markdownFile: 'Web 项目练习：Todo 应用.md',
-    url: '/learn?doc=Web%20%E9%A1%B9%E7%9B%AE%E7%BB%83%E4%B9%A0%EF%BC%9ATodo%20%E5%BA%94%E7%94%A8',
-  },
-  {
-    id: 'algorithm-basic',
-    title: '算法基础：排序与搜索',
-    description: '理解常见排序与搜索算法，建立时间复杂度和调试思维。',
-    category: 'algorithm',
-    level: '入门',
-    duration: '10 小时',
-    author: 'Let Coding',
-    language: 'Python',
-    markdownFile: '算法基础：排序与搜索.md',
-    url: '/learn?doc=%E7%AE%97%E6%B3%95%E5%9F%BA%E7%A1%80%EF%BC%9A%E6%8E%92%E5%BA%8F%E4%B8%8E%E6%90%9C%E7%B4%A2',
-  },
-  {
-    id: 'vue-components',
-    title: 'Vue 组件化开发',
-    description: '学习如何拆分页面、设计组件边界，并逐步建立中型项目结构。',
-    category: 'advanced',
-    level: '进阶',
-    duration: '11 小时',
-    author: 'Let Coding',
-    language: 'Vue',
-    markdownFile: 'Vue 组件化开发.md',
-    url: '/learn?doc=Vue%20%E7%BB%84%E4%BB%B6%E5%8C%96%E5%BC%80%E5%8F%91',
-  },
-  {
-    id: 'oj-strategy',
-    title: 'OJ 刷题策略：从输入输出到调试',
-    description: '围绕在线评测常见问题，提升题目阅读、边界处理和错误定位效率。',
-    category: 'algorithm',
-    level: '进阶',
-    duration: '6 小时',
-    author: 'Let Coding',
-    language: '通用',
-    markdownFile: 'OJ 刷题策略：从输入输出到调试.md',
-    url: '/learn?doc=OJ%20%E5%88%B7%E9%A2%98%E7%AD%96%E7%95%A5%EF%BC%9A%E4%BB%8E%E8%BE%93%E5%85%A5%E8%BE%93%E5%87%BA%E5%88%B0%E8%B0%83%E8%AF%95',
-  },
+  { id: 'js-guide', title: 'JavaScript 入门指南', category: 'beginner', level: '入门', duration: '12 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
+  { id: 'python-data', title: 'Python 数据分析实战', category: 'advanced', level: '进阶', duration: '15 小时', author: 'Let Coding', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
+  { id: 'todo-project', title: 'Web 项目练习：Todo 应用', category: 'project', level: '入门', duration: '8 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
+  { id: 'algorithm-basic', title: '算法基础：排序与搜索', category: 'algorithm', level: '入门', duration: '10 小时', author: 'Let Coding', language: 'Python', markdownFile: '算法基础：排序与搜索.md' },
+  { id: 'vue-components', title: 'Vue 组件化开发', category: 'advanced', level: '进阶', duration: '11 小时', author: 'Let Coding', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
+  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', category: 'algorithm', level: '进阶', duration: '6 小时', author: 'Let Coding', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
 ];
 
 const selectedTitle = ref('');
@@ -150,6 +60,58 @@ const isLoadingDoc = ref(false);
 const docError = ref('');
 
 const allResources = [...learningPaths, ...courses];
+
+const cardInfoMap = ref<Record<string, CardInfo>>({});
+
+function parseCardInfo(markdown: string): CardInfo {
+  const lines = markdown.split('\n');
+  let description = '';
+  const points: string[] = [];
+  let heading = '';
+
+  const descHeadings = ['路径说明', '课程目标', '项目目标', '适合谁'];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+
+    if (line.startsWith('## ')) {
+      heading = line.slice(2).trim();
+      continue;
+    }
+
+    if (!description && descHeadings.some(h => heading.includes(h)) && line && !line.startsWith('#')) {
+      description = line.replace(/^[-*]\s*/, '');
+    }
+
+    if (line.startsWith('### ')) {
+      const point = line.replace(/^###\s*\d*\.?\s*/, '').trim();
+      if (point) {
+        points.push(point);
+      }
+    }
+  }
+
+  return { description, points };
+}
+
+async function loadCardData() {
+  const results = await Promise.all(
+    allResources.map(async (resource) => {
+      try {
+        const res = await fetch(`/learn/${encodeURIComponent(resource.markdownFile)}`);
+        const markdown = await res.text();
+        return { id: resource.id, ...parseCardInfo(markdown) };
+      } catch {
+        return { id: resource.id, description: '', points: [] };
+      }
+    })
+  );
+  const map: Record<string, CardInfo> = {};
+  for (const r of results) {
+    map[r.id] = { description: r.description, points: r.points };
+  }
+  cardInfoMap.value = map;
+}
 
 const filteredCourses = computed(() => courses);
 
@@ -234,6 +196,7 @@ onMounted(async () => {
   if (currentDocTitle.value) {
     await loadMarkdown(currentDocTitle.value);
   }
+  await loadCardData();
 });
 
 watch(
@@ -290,7 +253,7 @@ watch(
               </div>
               <h3 class="mt-5 text-2xl font-black tracking-tight">{{ path.title }}</h3>
               <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                {{ path.description }}
+                {{ cardInfoMap[path.id]?.description || '' }}
               </p>
               <button
                 class="mt-5 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
@@ -320,7 +283,7 @@ watch(
             </div>
             <h3 class="mt-5 text-2xl font-black tracking-tight">{{ course.title }}</h3>
             <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              {{ course.description }}
+              {{ cardInfoMap[course.id]?.description || '' }}
             </p>
             <div class="mt-6 flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
               <span class="inline-flex items-center gap-1">
