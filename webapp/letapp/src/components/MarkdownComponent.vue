@@ -23,6 +23,7 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-typescript';
+import 'prismjs/themes/prism-tomorrow.min.css';
 
 interface Content {
   title?: string;
@@ -330,10 +331,6 @@ onUnmounted(() => {
     <p class="text-lg text-slate-500 dark:text-slate-400">请选择一篇资料开始阅读</p>
   </div>
 </template>
-
-<style>
-@import 'prismjs/themes/prism-tomorrow.min.css';
-</style>
 
 <style scoped>
 @reference 'tailwindcss';

@@ -14,6 +14,7 @@ import 'prismjs/components/prism-kotlin';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-swift';
+import 'prismjs/themes/prism-tomorrow.min.css';
 
 interface ExecutionResponse {
   stdout?: string;
@@ -619,10 +620,6 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style>
-@import 'prismjs/themes/prism-tomorrow.min.css';
-</style>
-
 <style scoped>
 @reference 'tailwindcss';
 
@@ -837,6 +834,15 @@ onUnmounted(() => {
     @apply px-4 pb-4;
   }
 
+  .floating-button-group {
+    right: 4rem;
+  }
+
+  .floating-collapse-button {
+    @apply px-3.5 py-2.5 text-[13px];
+  }
+}
+
 .side-io-panel {
   position: fixed;
   right: 2rem;
@@ -881,15 +887,6 @@ onUnmounted(() => {
 
   .playground-side-mode .editor-body {
     padding-right: calc(20rem + 2rem);
-  }
-}
-
-.floating-button-group {
-    right: 4rem;
-  }
-
-  .floating-collapse-button {
-    @apply px-3.5 py-2.5 text-[13px];
   }
 }
 
