@@ -124,6 +124,37 @@ const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? '
 const bottomPanelsCollapsed = ref(false);
 const outputPosition = ref<'bottom' | 'side'>('bottom');
 const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth);
+const isFullscreen = ref(false);
+const isFullscreenMenuOpen = ref(false);
+const editorPanelRef = ref<HTMLElement | null>(null);
+
+const toggleFullscreen = async () => {
+  if (!isFullscreen.value) {
+    isFullscreen.value = true;
+    try {
+      await editorPanelRef.value?.requestFullscreen();
+    } catch {
+      // CSS fullscreen fallback
+    }
+  } else {
+    isFullscreen.value = false;
+    isFullscreenMenuOpen.value = false;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // fallback
+    }
+  }
+};
+
+const handleFullscreenChange = () => {
+  isFullscreen.value = !!document.fullscreenElement;
+  if (!document.fullscreenElement) {
+    isFullscreenMenuOpen.value = false;
+  }
+};
 
 const currentLanguageInfo = computed<LanguageOption>(() => (
   languages.find((lang) => lang.value === selectedLanguage.value) ?? defaultLanguage
@@ -352,12 +383,14 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalShortcut);
   window.addEventListener('resize', updateViewportWidth);
   window.addEventListener('click', closeLanguageMenuOnOutsideClick);
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalShortcut);
   window.removeEventListener('resize', updateViewportWidth);
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 </script>
 
@@ -424,16 +457,47 @@ onUnmounted(() => {
 
     <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
       <div class="playground-stack" :class="{ 'playground-side-mode': outputPosition === 'side' }">
-        <section class="editor-panel">
+        <section ref="editorPanelRef" class="editor-panel" :class="{ 'fullscreen-mode': isFullscreen }">
           <div class="panel-header">
             <div class="flex items-center gap-2">
               <Icon icon="material-symbols:code" class="h-5 w-5 text-cyan-500" />
               <span>代码编辑区</span>
             </div>
-            <div class="text-sm text-slate-500 dark:text-slate-400">Monaco Editor</div>
+            <div class="flex items-center gap-2">
+              <button v-if="isFullscreen" class="fullscreen-icon-btn" title="菜单" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
+                <Icon icon="material-symbols:menu" class="h-5 w-5" />
+              </button>
+              <button class="fullscreen-icon-btn" :title="isFullscreen ? '退出全屏' : '全屏'" @click="toggleFullscreen">
+                <Icon :icon="isFullscreen ? 'material-symbols:fullscreen-exit' : 'material-symbols:fullscreen'" class="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          <div class="editor-toolbar">
+          <div v-if="isFullscreen && isFullscreenMenuOpen" class="fullscreen-menu">
+            <div class="fullscreen-menu-section">
+              <div class="fullscreen-menu-label">切换语言</div>
+              <button
+                v-for="lang in languages"
+                :key="lang.value"
+                type="button"
+                class="fullscreen-menu-item"
+                @click="updateLanguage(lang.value); isFullscreenMenuOpen = false"
+              >
+                <Icon :icon="lang.icon" class="h-4 w-4 shrink-0" :style="{ color: lang.color }" />
+                <span>{{ lang.name }}</span>
+                <span v-if="selectedLanguage === lang.value" class="ml-auto h-2 w-2 rounded-full bg-cyan-400"></span>
+              </button>
+            </div>
+            <div class="fullscreen-menu-divider"></div>
+            <button class="fullscreen-menu-item" @click="importCode(); isFullscreenMenuOpen = false">
+              <Icon icon="material-symbols:upload" class="h-4 w-4" /> 导入
+            </button>
+            <button class="fullscreen-menu-item" @click="saveCode(); isFullscreenMenuOpen = false">
+              <Icon icon="material-symbols:download" class="h-4 w-4" /> 导出
+            </button>
+          </div>
+
+          <div v-show="!isFullscreen" class="editor-toolbar">
             <label class="export-name-field">
               <span>导出文件名</span>
               <input
@@ -459,7 +523,7 @@ onUnmounted(() => {
               />
             </div>
 
-            <aside v-if="outputPosition === 'side'" class="side-io-panel">
+            <aside v-if="!isFullscreen && outputPosition === 'side'" class="side-io-panel">
               <section class="surface-panel side-io-section">
                 <div class="collapse-header input-header">
                   <div class="flex items-center gap-2">
@@ -500,11 +564,63 @@ onUnmounted(() => {
               </section>
             </aside>
           </div>
+
+          <template v-if="isFullscreen">
+            <div v-if="!bottomPanelsCollapsed" class="fullscreen-panels">
+              <section class="surface-panel fullscreen-panel-item">
+                <div class="collapse-header input-header">
+                  <div class="flex items-center gap-2">
+                    <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
+                    <span>输入数据</span>
+                  </div>
+                  <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+                    <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+                    {{ isExecuting ? '运行中...' : '运行代码' }}
+                  </button>
+                </div>
+                <div class="collapse-body">
+                  <textarea
+                    v-model="stdin"
+                    class="plain-textarea panel-textarea"
+                    placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                    @keydown="handleStdinKeydown"
+                  ></textarea>
+                </div>
+              </section>
+              <section class="surface-panel fullscreen-panel-item">
+                <div class="collapse-header">
+                  <div class="flex items-center gap-2">
+                    <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
+                    <span>输出</span>
+                  </div>
+                </div>
+                <div class="collapse-body">
+                  <div class="output-box">
+                    <pre
+                      v-if="output"
+                      :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
+                    >{{ output }}</pre>
+                    <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <div class="fullscreen-bottom-bar">
+              <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
+                <Icon icon="material-symbols:refresh" class="h-4 w-4" />
+                重置
+              </button>
+              <button class="floating-collapse-button" @click="bottomPanelsCollapsed = !bottomPanelsCollapsed">
+                <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
+                {{ bottomPanelsCollapsed ? '展开' : '收起' }}
+              </button>
+            </div>
+          </template>
         </section>
       </div>
     </div>
 
-    <div v-if="outputPosition === 'bottom'" v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
+    <div v-if="!isFullscreen && outputPosition === 'bottom'" v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
       <div class="playground-container fixed-panels-inner">
         <div class="bottom-panels">
           <section class="surface-panel">
@@ -549,7 +665,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-if="outputPosition === 'bottom'" class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
+    <div v-if="!isFullscreen && outputPosition === 'bottom'" class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
       <button
         class="floating-collapse-button"
         type="button"
@@ -868,6 +984,149 @@ onUnmounted(() => {
   .bottom-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ── Fullscreen Mode ── */
+
+.fullscreen-mode {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.fullscreen-mode .panel-header {
+  flex-shrink: 0;
+  border-radius: 0;
+}
+
+.fullscreen-mode .editor-body {
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.fullscreen-mode .editor-shell {
+  flex: 1 !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.fullscreen-icon-btn {
+  @apply grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100;
+}
+
+.fullscreen-menu {
+  flex-shrink: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 0.75rem;
+}
+
+.fullscreen-menu-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fullscreen-menu-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #94a3b8;
+  padding: 0.25rem 0.75rem 0.5rem;
+}
+
+.fullscreen-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 1rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #334155;
+  transition: background 0.15s;
+}
+
+.fullscreen-menu-item:hover {
+  background: #f1f5f9;
+}
+
+.fullscreen-menu-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0.5rem 0.75rem;
+}
+
+.fullscreen-panels {
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.fullscreen-panel-item {
+  border-radius: 1.25rem !important;
+}
+
+.fullscreen-bottom-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+/* dark overrides for fullscreen */
+html.dark .fullscreen-menu {
+  border-color: #1e293b;
+  background: #0f172a;
+}
+
+html.dark .fullscreen-menu-item {
+  color: #e2e8f0;
+}
+
+html.dark .fullscreen-menu-item:hover {
+  background: #1e293b;
+}
+
+html.dark .fullscreen-menu-divider {
+  background: #1e293b;
+}
+
+html.dark .fullscreen-panels {
+  border-color: #1e293b;
+  background: #0f172a;
+}
+
+html.dark .fullscreen-bottom-bar {
+  border-color: #1e293b;
+  background: #0f172a;
+}
+
+html.dark .fullscreen-icon-btn {
+  border-color: #1e293b;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+html.dark .fullscreen-icon-btn:hover {
+  background: #1e293b;
 }
 </style>
 
