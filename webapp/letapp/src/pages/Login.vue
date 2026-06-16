@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { NButton } from 'naive-ui';
+import { NAlert, NButton, NCheckbox, NInput, useMessage } from 'naive-ui';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
+const router = useRouter();
+const message = useMessage();
 const authStore = useAuthStore();
+
+const identifier = ref('');
+const password = ref('');
+const remember = ref(true);
+const isSubmitting = ref(false);
+const loginError = ref('');
 
 const safeNext = computed(() => {
   const nextValue = Array.isArray(route.query.next)
@@ -16,7 +24,34 @@ const safeNext = computed(() => {
 });
 
 const startClubLogin = () => {
-  authStore.startOAuthLogin('iOSClub', safeNext.value, true);
+  authStore.startOAuthLogin('iOSClub', safeNext.value, remember.value);
+};
+
+const handlePasswordLogin = async () => {
+  const trimmedIdentifier = identifier.value.trim();
+
+  if (!trimmedIdentifier) {
+    loginError.value = '请输入学号或账号';
+    return;
+  }
+
+  if (!password.value) {
+    loginError.value = '请输入密码';
+    return;
+  }
+
+  isSubmitting.value = true;
+  loginError.value = '';
+
+  try {
+    await authStore.loginWithProviderPassword('iOSClub', trimmedIdentifier, password.value, remember.value);
+    message.success('登录成功');
+    await router.replace(safeNext.value);
+  } catch (error) {
+    loginError.value = error instanceof Error ? error.message : '登录失败，请稍后重试';
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 
 const handleLogout = async () => {
@@ -37,23 +72,23 @@ const handleLogout = async () => {
             Let Coding Access
           </div>
 
-          <h1 class="mt-8 text-4xl font-black tracking-tight">登录之后，你就能把练习和身份体系连接起来。</h1>
+          <h1 class="mt-8 text-4xl font-black tracking-tight">登录后继续你的代码练习</h1>
           <p class="mt-5 text-base leading-8 text-slate-300">
-            这里使用社团统一认证登录。登录完成后会自动回到你刚才访问的页面，不需要手动再跳一次。
+            这里使用 iOSClub 账号完成身份验证。登录成功后会自动回到你刚才访问的页面。
           </p>
 
           <div class="mt-10 space-y-4">
             <div class="info-card">
               <Icon icon="material-symbols:verified-user" class="h-5 w-5 text-cyan-300" />
-              <span>统一 OAuth 登录，减少重复注册。</span>
+              <span>统一账号验证，减少重复注册和重复登录。</span>
             </div>
             <div class="info-card">
-              <Icon icon="material-symbols:history" class="h-5 w-5 text-cyan-300" />
-              <span>登录后可保持会话，方便后续扩展保存与个性化功能。</span>
+              <Icon icon="material-symbols:lock-open-right" class="h-5 w-5 text-cyan-300" />
+              <span>登录成功后签发本站会话，可继续访问学习资源和练习页面。</span>
             </div>
             <div class="info-card">
               <Icon icon="material-symbols:route" class="h-5 w-5 text-cyan-300" />
-              <span>回调成功后自动返回原页面，流程更顺畅。</span>
+              <span>完成后会自动返回你刚才访问的页面。</span>
             </div>
           </div>
         </div>
@@ -64,7 +99,7 @@ const handleLogout = async () => {
           <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Secure Sign In</p>
           <h2 class="mt-3 text-3xl font-black tracking-tight">登录 Let Coding</h2>
           <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-            点击下面的按钮后，会跳转到社团官网的统一认证页面。认证完成后会自动返回当前站点。
+            输入你的 iOSClub 账号和密码。密码只会提交给本站后端，由后端按环境变量中的 provider 配置向认证服务验证。
           </p>
 
           <div v-if="authStore.isAuthenticated" class="mt-8 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-5 text-sm leading-7 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100">
@@ -74,26 +109,66 @@ const handleLogout = async () => {
             </div>
           </div>
 
-          <div class="mt-8 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 text-sm leading-7 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-            登录将沿用你当前访问路径作为返回地址：
-            <code class="mt-2 block rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-800 dark:bg-slate-950 dark:text-slate-100">{{ safeNext }}</code>
-          </div>
+          <form class="mt-8 space-y-5" @submit.prevent="handlePasswordLogin">
+            <NAlert v-if="loginError" type="error" :bordered="false">
+              {{ loginError }}
+            </NAlert>
+
+            <NInput
+              v-model:value="identifier"
+              size="large"
+              placeholder="学号或账号"
+              :input-props="{ autocomplete: 'username' }"
+            >
+              <template #prefix>
+                <Icon icon="material-symbols:person-rounded" class="text-slate-400" />
+              </template>
+            </NInput>
+
+            <NInput
+              v-model:value="password"
+              type="password"
+              size="large"
+              placeholder="密码"
+              show-password-on="click"
+              :input-props="{ autocomplete: 'current-password' }"
+              @keyup.enter="handlePasswordLogin"
+            >
+              <template #prefix>
+                <Icon icon="material-symbols:lock-rounded" class="text-slate-400" />
+              </template>
+            </NInput>
+
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <NCheckbox v-model:checked="remember">记住登录状态</NCheckbox>
+              <span class="truncate text-slate-500 dark:text-slate-400">返回：{{ safeNext }}</span>
+            </div>
+
+            <NButton
+              block
+              attr-type="submit"
+              :loading="isSubmitting"
+              :bordered="false"
+              class="h-14 rounded-full bg-cyan-500 text-base font-black text-white hover:bg-cyan-400 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+            >
+              <template #icon>
+                <Icon icon="material-symbols:login" class="h-5 w-5" />
+              </template>
+              登录
+            </NButton>
+          </form>
 
           <NButton
             block
-            :bordered="false"
-            class="mt-8 h-14 rounded-full bg-slate-950 text-base font-black text-white hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+            tertiary
+            class="mt-4 h-12 rounded-full"
             @click="startClubLogin"
           >
             <template #icon>
-              <Icon icon="material-symbols:login" class="h-5 w-5" />
+              <Icon icon="material-symbols:open-in-new" class="h-5 w-5" />
             </template>
-            使用社团统一认证登录
+            使用 OAuth 页面登录
           </NButton>
-
-          <p class="mt-6 text-sm text-slate-500 dark:text-slate-400">
-            登录完成后会自动返回你原本访问的页面。
-          </p>
         </div>
       </div>
     </div>

@@ -222,6 +222,29 @@ export const useAuthStore = defineStore('auth', () => {
     return tokens;
   };
 
+  const loginWithProviderPassword = async (
+    provider: string,
+    identifier: string,
+    password: string,
+    remember = true,
+  ) => {
+    const result = await apiRequest<PasswordLoginResponse>(
+      `/auth/login/${encodeURIComponent(provider)}/password`,
+      {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({ identifier, password, remember }),
+      },
+    );
+
+    const tokens = {
+      ...result.tokens,
+      user_info: result.tokens.user_info ?? result.user_info,
+    };
+    setSession(tokens, { remember });
+    return tokens;
+  };
+
   const loadSupportedProviders = async () => {
     isLoadingProviders.value = true;
     try {
@@ -328,6 +351,7 @@ export const useAuthStore = defineStore('auth', () => {
     startGithubLogin,
     completeOAuthCallback,
     loginWithPassword,
+    loginWithProviderPassword,
     loadSupportedProviders,
     verify,
     refresh,
