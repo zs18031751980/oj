@@ -1,5 +1,6 @@
 """OAuth/OIDC authentication service."""
 
+import re
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
@@ -215,6 +216,9 @@ class OIDCService(Injectable, IOIDCService):
 
         return str(authorization_result or '')
 
+    def _strip_nonce(self, authorization_url: str) -> str:
+        return re.sub(r'&nonce=[^&]+', '', authorization_url)
+
     def _extract_authorization_state(self, authorization_result: Any) -> str:
         if isinstance(authorization_result, Mapping):
             return str(authorization_result.get('state') or '')
@@ -310,6 +314,7 @@ class OIDCService(Injectable, IOIDCService):
             authorization_result = client.create_authorization_url(**authorization_kwargs)
             authorization_url = self._extract_authorization_url(authorization_result)
             authorization_state = self._extract_authorization_state(authorization_result)
+            authorization_url = self._strip_nonce(authorization_url)
             client.save_authorize_data(
                 redirect_uri=redirect_uri,
                 state=authorization_state,
@@ -343,7 +348,8 @@ class OIDCService(Injectable, IOIDCService):
 
             kwargs = self._authorization_kwargs(resolved_provider, redirect_uri)
             authorization_result = client.create_authorization_url(**kwargs)
-            return self._extract_authorization_url(authorization_result)
+            authorization_url = self._extract_authorization_url(authorization_result)
+            return self._strip_nonce(authorization_url)
         except Exception as ex:
             self._logger_service.error(f'Failed to create authorization URL: {provider}', ex)
             return None
