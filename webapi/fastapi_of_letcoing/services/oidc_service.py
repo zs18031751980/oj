@@ -1,6 +1,5 @@
 """OAuth/OIDC authentication service."""
 
-import re
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
@@ -81,8 +80,9 @@ class OIDCService(Injectable, IOIDCService):
             client_kwargs = {}
 
         if not client_kwargs.get('scope'):
-            # Match the provider metadata to avoid sending unsupported scopes.
-            client_kwargs['scope'] = 'openid profile email'
+            # Match the provider's own OAuth login page default scope so the
+            # issued token can be reused to create the authorization session.
+            client_kwargs['scope'] = 'openid profile role'
 
         if not client_kwargs.get('token_endpoint_auth_method'):
             client_kwargs['token_endpoint_auth_method'] = 'client_secret_post'
@@ -216,9 +216,6 @@ class OIDCService(Injectable, IOIDCService):
 
         return str(authorization_result or '')
 
-    def _strip_nonce(self, authorization_url: str) -> str:
-        return re.sub(r'&nonce=[^&]+', '', authorization_url)
-
     def _extract_authorization_state(self, authorization_result: Any) -> str:
         if isinstance(authorization_result, Mapping):
             return str(authorization_result.get('state') or '')
@@ -314,10 +311,10 @@ class OIDCService(Injectable, IOIDCService):
             authorization_result = client.create_authorization_url(**authorization_kwargs)
             authorization_url = self._extract_authorization_url(authorization_result)
             authorization_state = self._extract_authorization_state(authorization_result)
-            authorization_url = self._strip_nonce(authorization_url)
+            authorization_data = self._authorization_data(authorization_result)
             client.save_authorize_data(
                 redirect_uri=redirect_uri,
-                state=authorization_state,
+                **authorization_data,
             )
             self._logger_service.info(
                 'Authorization URL created: '
@@ -348,8 +345,7 @@ class OIDCService(Injectable, IOIDCService):
 
             kwargs = self._authorization_kwargs(resolved_provider, redirect_uri)
             authorization_result = client.create_authorization_url(**kwargs)
-            authorization_url = self._extract_authorization_url(authorization_result)
-            return self._strip_nonce(authorization_url)
+            return self._extract_authorization_url(authorization_result)
         except Exception as ex:
             self._logger_service.error(f'Failed to create authorization URL: {provider}', ex)
             return None
