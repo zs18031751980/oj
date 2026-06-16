@@ -454,13 +454,29 @@ onUnmounted(() => {
 
     <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
       <div class="playground-stack" :class="{ 'playground-side-mode': outputPosition === 'side' }">
-        <section ref="editorPanelRef" class="editor-panel" :class="{ 'fullscreen-mode': isFullscreen }">
+        <section
+          ref="editorPanelRef"
+          class="editor-panel"
+          :class="{
+            'fullscreen-mode': isFullscreen,
+            'fullscreen-side-mode': isFullscreen && outputPosition === 'side',
+            'fullscreen-bottom-mode': isFullscreen && outputPosition === 'bottom',
+          }"
+        >
           <div class="panel-header">
             <div class="flex items-center gap-2">
               <Icon icon="material-symbols:code" class="h-5 w-5 text-cyan-500" />
               <span>代码编辑区</span>
             </div>
             <div class="flex items-center gap-2">
+              <button
+                v-if="isFullscreen"
+                class="fullscreen-icon-btn"
+                :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'"
+                @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'"
+              >
+                <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-5 w-5" />
+              </button>
               <button v-if="isFullscreen" class="fullscreen-icon-btn" title="菜单" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
               </button>
@@ -520,7 +536,11 @@ onUnmounted(() => {
               />
             </div>
 
-            <aside v-if="!isFullscreen && outputPosition === 'side'" class="side-io-panel">
+            <aside
+              v-if="outputPosition === 'side'"
+              class="side-io-panel"
+              :class="{ 'fullscreen-side-io-panel': isFullscreen }"
+            >
               <section class="surface-panel side-io-section">
                 <div class="collapse-header input-header">
                   <div class="flex items-center gap-2">
@@ -562,7 +582,7 @@ onUnmounted(() => {
             </aside>
           </div>
 
-          <template v-if="isFullscreen">
+          <template v-if="isFullscreen && outputPosition === 'bottom'">
             <div v-if="!bottomPanelsCollapsed" class="fullscreen-panels">
               <section class="surface-panel fullscreen-panel-item">
                 <div class="collapse-header input-header">
@@ -610,6 +630,14 @@ onUnmounted(() => {
               <button class="floating-collapse-button" @click="bottomPanelsCollapsed = !bottomPanelsCollapsed">
                 <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
                 {{ bottomPanelsCollapsed ? '展开' : '收起' }}
+              </button>
+            </div>
+          </template>
+          <template v-else-if="isFullscreen">
+            <div class="fullscreen-bottom-bar fullscreen-side-bottom-bar">
+              <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
+                <Icon icon="material-symbols:refresh" class="h-4 w-4" />
+                閲嶇疆
               </button>
             </div>
           </template>
@@ -880,6 +908,10 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.fullscreen-side-io-panel {
+  width: min(28rem, 32vw);
+}
+
 .side-io-section {
   flex: 1;
   display: flex;
@@ -904,6 +936,10 @@ onUnmounted(() => {
   }
 
   .side-io-panel {
+    width: 100%;
+  }
+
+  .fullscreen-side-io-panel {
     width: 100%;
   }
 }
@@ -1008,10 +1044,21 @@ onUnmounted(() => {
   flex-direction: column !important;
 }
 
+.fullscreen-side-mode .editor-body {
+  flex-direction: row !important;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+
 .fullscreen-mode .editor-shell {
   flex: 1 !important;
   min-height: 0 !important;
   height: auto !important;
+}
+
+.fullscreen-side-mode .editor-shell {
+  min-width: 0 !important;
 }
 
 .fullscreen-icon-btn {
@@ -1088,6 +1135,16 @@ onUnmounted(() => {
   background: #fff;
 }
 
+.fullscreen-side-bottom-bar {
+  justify-content: flex-end;
+}
+
+@media (max-width: 1023px) {
+  .fullscreen-side-mode .editor-body {
+    flex-direction: column !important;
+  }
+}
+
 /* dark overrides for fullscreen */
 html.dark .fullscreen-menu {
   border-color: #1e293b;
@@ -1108,6 +1165,10 @@ html.dark .fullscreen-menu-divider {
 
 html.dark .fullscreen-panels {
   border-color: #1e293b;
+  background: #0f172a;
+}
+
+html.dark .fullscreen-side-mode .editor-body {
   background: #0f172a;
 }
 
