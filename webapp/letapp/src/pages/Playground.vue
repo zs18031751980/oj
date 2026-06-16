@@ -54,7 +54,7 @@ int main() {
 }`,
   go: `package main
 
-import "fmt"
+${'import "fmt"'}
 
 func main() {
   fmt.Println("Hello, Let Coding!")
