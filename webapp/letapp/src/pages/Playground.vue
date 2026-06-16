@@ -467,9 +467,9 @@ onUnmounted(() => {
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
               重置
             </button>
-            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为侧边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
+            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
               <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-4 w-4" />
-              {{ outputPosition === 'bottom' ? '侧边' : '底部' }}
+              {{ outputPosition === 'bottom' ? '右边' : '底部' }}
             </button>
           </div>
         </div>
