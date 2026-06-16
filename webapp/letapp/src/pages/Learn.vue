@@ -115,22 +115,22 @@ async function loadCardData() {
 
 const filteredCourses = computed(() => courses);
 
-const currentDocTitle = computed(() => {
+const currentDocId = computed(() => {
   const raw = route.query.doc;
   return Array.isArray(raw) ? raw[0] || '' : String(raw || '');
 });
 
-const isDetailMode = computed(() => Boolean(currentDocTitle.value));
+const isDetailMode = computed(() => Boolean(currentDocId.value));
 const currentResource = computed(() => (
-  currentDocTitle.value ? findResourceByTitle(currentDocTitle.value) : undefined
+  currentDocId.value ? findResourceById(currentDocId.value) : undefined
 ));
 
 const currentMarkdownFile = computed(() => currentResource.value?.markdownFile || '');
 
-const findResourceByTitle = (title: string) => allResources.find((item) => item.title === title);
+const findResourceById = (id: string) => allResources.find((item) => item.id === id || item.title === id);
 
 const getResourceLink = (resource: LearnResource) => {
-  const resolved = router.resolve({ path: '/learn', query: { doc: resource.title } });
+  const resolved = router.resolve({ path: '/learn', query: { doc: resource.id } });
   return resolved.href;
 };
 
@@ -162,8 +162,8 @@ const downloadCurrentMarkdown = () => {
   URL.revokeObjectURL(objectUrl);
 };
 
-const loadMarkdown = async (title: string) => {
-  const resource = findResourceByTitle(title);
+const loadMarkdown = async (resourceId: string) => {
+  const resource = findResourceById(resourceId);
   if (!resource) {
     selectedResource.value = undefined;
     docError.value = '未找到对应的学习资料。';
@@ -172,7 +172,7 @@ const loadMarkdown = async (title: string) => {
 
   isLoadingDoc.value = true;
   docError.value = '';
-  selectedTitle.value = title;
+  selectedTitle.value = resource.title;
 
   try {
     const response = await fetch(`/learn/${encodeURIComponent(resource.markdownFile)}`);
@@ -193,23 +193,23 @@ const loadMarkdown = async (title: string) => {
 };
 
 onMounted(async () => {
-  if (currentDocTitle.value) {
-    await loadMarkdown(currentDocTitle.value);
+  if (currentDocId.value) {
+    await loadMarkdown(currentDocId.value);
   }
   await loadCardData();
 });
 
 watch(
-  () => currentDocTitle.value,
-  async (title) => {
-    if (!title) {
+  () => currentDocId.value,
+  async (resourceId) => {
+    if (!resourceId) {
       selectedTitle.value = '';
       selectedResource.value = undefined;
       docError.value = '';
       return;
     }
 
-    await loadMarkdown(title);
+    await loadMarkdown(resourceId);
   },
 );
 </script>
