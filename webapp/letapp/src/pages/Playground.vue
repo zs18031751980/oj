@@ -843,21 +843,22 @@ onUnmounted(() => {
   }
 }
 
+.playground-side-mode .editor-body {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.playground-side-mode .editor-shell {
+  flex: 1;
+}
+
 .side-io-panel {
-  position: fixed;
-  right: 2rem;
-  top: 50%;
-  translate: 0 -50%;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  width: clamp(18rem, 28vw, 30rem);
-  max-height: 70vh;
-  z-index: 100;
-}
-
-.playground-side-mode .editor-panel {
-  width: 50%;
+  width: 24rem;
+  flex-shrink: 0;
 }
 
 .side-io-section {
@@ -879,14 +880,12 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1023px) {
-  .side-io-panel {
-    position: fixed;
-    width: 20rem;
-    right: 1rem;
+  .playground-side-mode .editor-body {
+    flex-direction: column;
   }
 
-  .playground-side-mode .editor-body {
-    padding-right: calc(20rem + 2rem);
+  .side-io-panel {
+    width: 100%;
   }
 }
 
