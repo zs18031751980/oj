@@ -2,19 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
-import Prism from 'prismjs';
 import { apiRequest } from '../services/api';
 import { useAuthStore } from '../stores/auth';
-import 'prismjs/components/prism-c';
-import 'prismjs/components/prism-cpp';
-import 'prismjs/components/prism-go';
-import 'prismjs/components/prism-java';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-kotlin';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-swift';
-import 'prismjs/themes/prism-tomorrow.min.css';
+import { useThemeStore } from '../stores/theme';
+import MonacoEditor from '../components/MonacoEditor.vue';
+import * as monaco from 'monaco-editor';
 
 interface ExecutionResponse {
   stdout?: string;
@@ -33,8 +25,8 @@ interface LanguageOption {
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
+const themeStore = useThemeStore();
 
-const highlightedCodeRef = ref<HTMLElement | null>(null);
 const languageMenuRef = ref<HTMLElement | null>(null);
 
 const languagePresets: Record<string, string> = {
@@ -138,7 +130,6 @@ const currentLanguageInfo = computed<LanguageOption>(() => (
 ));
 
 const exportExtension = computed(() => extensionMap[selectedLanguage.value] ?? 'txt');
-const lineCount = computed(() => code.value.split('\n').length);
 
 const bottomPanelSpacer = computed(() => {
   if (bottomPanelsCollapsed.value) {
@@ -171,60 +162,6 @@ const floatingButtonBottom = computed(() => {
 
   return '24rem';
 });
-
-const highlightedCode = computed(() => {
-  const language = currentLanguageInfo.value.prism;
-  const grammar = Prism.languages[language];
-  const source = code.value;
-  const normalizedSource = source.length > 0 ? source : ' ';
-  return grammar ? Prism.highlight(normalizedSource, grammar, language) : Prism.util.encode(normalizedSource);
-});
-
-const syncEditorScrollFromTextarea = (target: HTMLTextAreaElement) => {
-  if (!highlightedCodeRef.value) {
-    return;
-  }
-
-  highlightedCodeRef.value.scrollTop = target.scrollTop;
-  highlightedCodeRef.value.scrollLeft = target.scrollLeft;
-};
-
-const syncEditorScroll = (event: Event) => {
-  syncEditorScrollFromTextarea(event.target as HTMLTextAreaElement);
-};
-
-const updateTextareaValue = (
-  target: HTMLTextAreaElement,
-  targetRef: { value: string },
-  replacement: string,
-) => {
-  const start = target.selectionStart;
-  const end = target.selectionEnd;
-  const value = targetRef.value;
-  targetRef.value = `${value.slice(0, start)}${replacement}${value.slice(end)}`;
-
-  requestAnimationFrame(() => {
-    const nextPosition = start + replacement.length;
-    target.selectionStart = nextPosition;
-    target.selectionEnd = nextPosition;
-    target.focus();
-    syncEditorScrollFromTextarea(target);
-  });
-};
-
-const handleTabInsertion = (event: KeyboardEvent, targetRef: { value: string }) => {
-  if (event.key !== 'Tab') {
-    return;
-  }
-
-  const target = event.target as HTMLTextAreaElement | null;
-  if (!target) {
-    return;
-  }
-
-  event.preventDefault();
-  updateTextareaValue(target, targetRef, '  ');
-};
 
 const runCode = async () => {
   const source = code.value;
@@ -263,16 +200,17 @@ const runCode = async () => {
   }
 };
 
-const handleEditorKeydown = (event: KeyboardEvent) => {
-  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-    event.preventDefault();
-    if (!isExecuting.value) {
-      void runCode();
-    }
-    return;
-  }
-
-  handleTabInsertion(event, code);
+const handleMonacoReady = (editor: monaco.editor.IStandaloneCodeEditor) => {
+  editor.addAction({
+    id: 'run-code',
+    label: 'Run Code',
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+    run: () => {
+      if (!isExecuting.value) {
+        void runCode();
+      }
+    },
+  });
 };
 
 const handleStdinKeydown = (event: KeyboardEvent) => {
@@ -284,7 +222,14 @@ const handleStdinKeydown = (event: KeyboardEvent) => {
     return;
   }
 
-  handleTabInsertion(event, stdin);
+  if (event.key === 'Tab') {
+    event.preventDefault();
+    const target = event.target as HTMLTextAreaElement;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+    target.value = `${target.value.slice(0, start)}  ${target.value.slice(end)}`;
+    target.selectionStart = target.selectionEnd = start + 2;
+  }
 };
 
 const handleGlobalShortcut = (event: KeyboardEvent) => {
@@ -485,7 +430,7 @@ onUnmounted(() => {
               <Icon icon="material-symbols:code" class="h-5 w-5 text-cyan-500" />
               <span>代码编辑区</span>
             </div>
-            <div class="text-sm text-slate-500 dark:text-slate-400">{{ lineCount }} 行</div>
+            <div class="text-sm text-slate-500 dark:text-slate-400">Monaco Editor</div>
           </div>
 
           <div class="editor-toolbar">
@@ -506,15 +451,12 @@ onUnmounted(() => {
 
           <div class="editor-body">
             <div class="editor-shell">
-              <pre ref="highlightedCodeRef" :class="`editor-highlight language-${currentLanguageInfo.prism}`"><code v-html="highlightedCode"></code></pre>
-              <textarea
+              <MonacoEditor
                 v-model="code"
-                spellcheck="false"
-                class="editor-input"
-                placeholder="在这里输入你的代码..."
-                @scroll="syncEditorScroll"
-                @keydown="handleEditorKeydown"
-              ></textarea>
+                :language="selectedLanguage"
+                :is-dark="themeStore.isDark"
+                @ready="handleMonacoReady"
+              />
             </div>
 
             <aside v-if="outputPosition === 'side'" class="side-io-panel">
@@ -708,50 +650,16 @@ onUnmounted(() => {
 }
 
 .editor-shell {
-  @apply relative h-[620px] overflow-hidden bg-white transition-colors duration-300;
+  @apply relative h-[620px] overflow-hidden;
+}
+
+.editor-shell :deep(.monaco-editor .margin),
+.editor-shell :deep(.monaco-editor .monaco-editor-background) {
+  background: transparent !important;
 }
 
 .editor-run-button {
   @apply min-w-[10.75rem] justify-center;
-}
-
-.editor-highlight,
-.editor-input {
-  @apply absolute inset-0 m-0 h-full w-full overflow-auto whitespace-pre-wrap break-normal p-5 font-mono text-sm leading-7;
-  tab-size: 2;
-}
-
-.editor-highlight {
-  @apply pointer-events-none text-slate-900 transition-colors duration-300;
-}
-
-.editor-highlight[class*='language-'] {
-  background: transparent !important;
-}
-
-.editor-highlight :deep(code),
-.editor-highlight :deep([class*='language-']),
-.editor-highlight :deep(.token) {
-  background: transparent !important;
-  text-shadow: none !important;
-}
-
-.editor-highlight :deep(code) {
-  @apply block min-h-full font-mono text-sm leading-7;
-  white-space: inherit;
-  tab-size: 2;
-}
-
-.editor-input {
-  @apply resize-none border-none bg-transparent text-transparent caret-slate-950 outline-none transition-colors duration-300;
-}
-
-.editor-input::selection {
-  background: rgba(8, 145, 178, 0.22);
-}
-
-:global(.dark) .editor-input::selection {
-  background: rgba(34, 211, 238, 0.28);
 }
 
 .plain-textarea {
@@ -817,8 +725,6 @@ onUnmounted(() => {
     height: 380px;
   }
 
-  .editor-highlight,
-  .editor-input,
   .plain-textarea,
   .output-box {
     @apply p-4 text-[13px] leading-6;
@@ -1018,26 +924,18 @@ html.dark .export-file-chip {
   color: #a5f3fc !important;
 }
 
-html.dark .editor-shell,
 html.dark .plain-textarea,
 html.dark .output-box {
   background-color: #020617 !important;
   color: #f8fafc !important;
 }
 
-html.dark .editor-highlight {
-  color: #f8fafc !important;
-}
-
-html.dark .editor-input,
 html.dark .plain-textarea {
   caret-color: #ffffff !important;
 }
 
 html:not(.dark) .editor-panel,
 html:not(.dark) .surface-panel,
-html:not(.dark) .editor-shell,
-html:not(.dark) .editor-shell::before,
 html:not(.dark) .plain-textarea,
 html:not(.dark) .output-box {
   background-color: #ffffff !important;
@@ -1071,55 +969,11 @@ html:not(.dark) .export-file-chip {
   color: #0f172a !important;
 }
 
-html:not(.dark) .editor-input,
 html:not(.dark) .plain-textarea {
   caret-color: #0f172a !important;
 }
 
 html:not(.dark) .output-box pre {
   color: inherit !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'],
-html:not(.dark) pre.editor-highlight[class*='language-'] code,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token {
-  background: #ffffff !important;
-  color: #0f172a !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.comment,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.prolog,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.doctype,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.cdata {
-  color: #64748b !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.punctuation,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.operator {
-  color: #334155 !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.keyword,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.selector,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.atrule {
-  color: #7c3aed !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.string,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.attr-value,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.char,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.inserted {
-  color: #059669 !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.function,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.class-name {
-  color: #2563eb !important;
-}
-
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.number,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.boolean,
-html:not(.dark) pre.editor-highlight[class*='language-'] .token.constant {
-  color: #ea580c !important;
 }
 </style>
