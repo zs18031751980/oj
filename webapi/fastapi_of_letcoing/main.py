@@ -1,44 +1,83 @@
-import ast
-import json
-import os
-import re
-from pathlib import Path
+"""
+LetCoding API 主入口模块
 
-from dotenv import find_dotenv, load_dotenv
-from flask import Flask, request
-from flask_restx import Api
-from werkzeug.middleware.proxy_fix import ProxyFix
+该模块是 Flask 应用的入口点，负责：
+- 加载环境变量配置（.env 文件）
+- 初始化 Flask 应用实例并注册配置
+- 初始化依赖注入容器和服务
+- 注册 API 路由命名空间
+- 配置 CORS 跨域支持和反向代理支持
+"""
 
+import ast          # 用于安全解析 Python 字面量表达式（解析 OIDC 配置）
+import json         # 用于解析 JSON 格式的配置（OIDC 提供商配置）
+import os           # 用于读取环境变量
+import re           # 用于正则匹配 .env 文件中的 OIDC_PROVIDERS 配置
+from pathlib import Path  # 用于跨平台路径操作
+
+from dotenv import find_dotenv, load_dotenv  # 用于加载 .env 环境变量文件
+from flask import Flask, request              # Flask 核心框架
+from flask_restx import Api                   # Flask-RESTX 扩展，用于构建 RESTful API 和 Swagger 文档
+from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
+
+# 导入认证和代码执行的 API 命名空间
 from controllers.auth_controller import api as auth_api
 from controllers.code_controller import api as code_api
+# 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
 from interfaces.service_interfaces import IOIDCService
 
 
+# ============================================================
+# 1. 环境变量加载
+# ============================================================
+
+# 当前文件的绝对路径（main.py 的完整路径）
 CURRENT_FILE_PATH = Path(__file__).resolve()
+
+# 后端 .env 文件路径：与 main.py 同级的 .env 文件
 BACKEND_DOTENV_PATH = CURRENT_FILE_PATH.with_name('.env')
 
-# In local development the repo root is two levels above this file.
-# In Zeabur the service may be mounted much shallower, so guard the lookup.
+# 在本地开发环境下，仓库根目录在 main.py 的上两级目录
+# 在 Zeabur 部署平台上，服务挂载路径可能更浅，所以需要动态判断
 ROOT_DOTENV_PATH = (
-    CURRENT_FILE_PATH.parents[2] / '.env'
+    CURRENT_FILE_PATH.parents[2] / '.env'   # 本地开发：项目根目录下的 .env
     if len(CURRENT_FILE_PATH.parents) > 2
-    else BACKEND_DOTENV_PATH
+    else BACKEND_DOTENV_PATH                # 部署环境：回退到后端层的 .env
 )
 
+# 依次加载各个层级的 .env 文件，优先级：后加载的覆盖先加载的
 if BACKEND_DOTENV_PATH.exists():
     load_dotenv(BACKEND_DOTENV_PATH, override=False)
 
 if ROOT_DOTENV_PATH.exists():
     load_dotenv(ROOT_DOTENV_PATH, override=False)
 
+# 最后加载系统环境变量（优先级最高）
 load_dotenv()
 
 
+# ============================================================
+# 2. OIDC 提供商配置加载函数
+# ============================================================
+
 def _load_oidc_providers_config():
+    """
+    加载 OIDC（OpenID Connect）第三方登录提供商的配置信息。
+
+    加载优先级：
+    1. 先尝试从环境变量 OIDC_PROVIDERS 中读取（支持 JSON 或 Python 字面量格式）
+    2. 如果环境变量中不存在，则从 .env 文件中通过正则表达式匹配提取
+    3. 如果仍然找不到，返回空字典
+
+    Returns:
+        dict 或 list: OIDC 提供商的配置信息，格式如 {"provider_name": {...}}
+    """
+    # 优先从系统环境变量中读取
     raw_value = os.environ.get('OIDC_PROVIDERS')
     if raw_value:
+        # 尝试用 JSON 解析，如果失败则尝试用 Python 字面量解析
         for parser in (json.loads, ast.literal_eval):
             try:
                 parsed = parser(raw_value)
@@ -47,10 +86,11 @@ def _load_oidc_providers_config():
             except Exception:
                 pass
 
+    # 如果环境变量中没有，则从 .env 文件中搜索
     dotenv_candidates = [
-        BACKEND_DOTENV_PATH,
-        Path(find_dotenv(usecwd=True)) if find_dotenv(usecwd=True) else None,
-        ROOT_DOTENV_PATH,
+        BACKEND_DOTENV_PATH,                                   # 后端层的 .env
+        Path(find_dotenv(usecwd=True)) if find_dotenv(usecwd=True) else None,  # 通过 python-dotenv 查找
+        ROOT_DOTENV_PATH,                                      # 项目根目录的 .env
     ]
 
     for dotenv_path in dotenv_candidates:
@@ -62,6 +102,7 @@ def _load_oidc_providers_config():
         except OSError:
             continue
 
+        # 使用正则表达式匹配 OIDC_PROVIDERS= 后面的字典或列表内容
         match = re.search(r'^OIDC_PROVIDERS\s*=\s*(\{[\s\S]*?\}|\[[\s\S]*?\])', dotenv_content, re.MULTILINE)
         if not match:
             continue
@@ -77,17 +118,44 @@ def _load_oidc_providers_config():
 
     return {}
 
+# ============================================================
+# 3. Flask 应用初始化与配置
+# ============================================================
+
+# 创建 Flask 应用实例
 app = Flask(__name__)
+
+# 配置 ProxyFix 中间件，用于处理反向代理（如 Nginx）传递的请求头信息
+# x_for=1: 信任 X-Forwarded-For 的第一个 IP
+# x_proto=1: 信任 X-Forwarded-Proto（HTTP/HTTPS）
+# x_host=1: 信任 X-Forwarded-Host
+# x_port=1: 信任 X-Forwarded-Port
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
+# ---------- API 认证配置 ----------
+# API 调用令牌，用于 Glot.io 代码执行服务的身份验证
 app.config['API_TOKEN'] = os.environ.get('API_TOKEN', '')
+
+# ---------- JWT（JSON Web Token）配置 ----------
+# JWT 签名密钥，用于签发和验证令牌
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-secret-key-here')
+# 访问令牌（Access Token）过期时间，单位：秒，默认 1 小时
 app.config['JWT_ACCESS_TOKEN_EXPIRE'] = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRE', '3600'))
+# 刷新令牌（Refresh Token）过期时间，单位：秒，默认 7 天
 app.config['JWT_REFRESH_TOKEN_EXPIRE'] = int(os.environ.get('JWT_REFRESH_TOKEN_EXPIRE', '604800'))
+# JWT 签名算法，默认使用 HMAC-SHA256
 app.config['JWT_ALGORITHM'] = os.environ.get('JWT_ALGORITHM', 'HS256')
+# Flask 的全局密钥，用于 session 加密等；如果没有单独配置，则复用 JWT 密钥
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY') or app.config['JWT_SECRET_KEY']
+
+# ---------- 前端 URL 配置 ----------
+# 前端应用的访问地址，用于 OAuth 登录成功后的重定向
 app.config['FRONTEND_URL'] = os.environ.get('FRONTEND_URL', 'http://localhost:5173')
+# 后端服务的公网地址，用于构建 OAuth 回调 URL
 app.config['PUBLIC_BACKEND_URL'] = os.environ.get('PUBLIC_BACKEND_URL', '')
+
+# ---------- CORS 跨域配置 ----------
+# 允许跨域访问的前端域名列表（逗号分隔），默认允许本地开发服务器
 app.config['ALLOWED_ORIGINS'] = [
     origin.strip()
     for origin in os.environ.get(
@@ -97,74 +165,130 @@ app.config['ALLOWED_ORIGINS'] = [
     if origin.strip()
 ]
 
+# ---------- Redis 缓存配置 ----------
+# Redis 服务器地址
 app.config['REDIS_HOST'] = os.environ.get('REDIS_HOST', 'localhost')
+# Redis 服务端口
 app.config['REDIS_PORT'] = int(os.environ.get('REDIS_PORT', '6379'))
+# Redis 数据库编号（0-15）
 app.config['REDIS_DB'] = int(os.environ.get('REDIS_DB', '0'))
+# Redis 连接密码（可选）
 app.config['REDIS_PASSWORD'] = os.environ.get('REDIS_PASSWORD')
+# Redis 连接超时时间，单位：秒
 app.config['REDIS_TIMEOUT'] = int(os.environ.get('REDIS_TIMEOUT', '5'))
 
+# ---------- PostgreSQL 数据库配置 ----------
+# 数据库主机地址
 app.config['DB_HOST'] = os.environ.get('DB_HOST', 'localhost')
+# 数据库端口
 app.config['DB_PORT'] = int(os.environ.get('DB_PORT', '5432'))
+# 数据库名称
 app.config['DB_NAME'] = os.environ.get('DB_NAME', 'letcoding')
+# 数据库用户名
 app.config['DB_USER'] = os.environ.get('DB_USER', 'postgres')
+# 数据库密码
 app.config['DB_PASSWORD'] = os.environ.get('DB_PASSWORD', '')
+# 数据库连接池的最大连接数
 app.config['DB_MAX_CONNECTIONS'] = int(os.environ.get('DB_MAX_CONNECTIONS', '20'))
+# 连接池中空闲连接的超时时间，单位：秒
 app.config['DB_STALE_TIMEOUT'] = int(os.environ.get('DB_STALE_TIMEOUT', '300'))
 
+# ---------- GitHub OAuth 配置 ----------
+# GitHub OAuth 应用客户端 ID
 app.config['GITHUB_CLIENT_ID'] = os.environ.get('GITHUB_CLIENT_ID')
+# GitHub OAuth 应用客户端密钥
 app.config['GITHUB_CLIENT_SECRET'] = os.environ.get('GITHUB_CLIENT_SECRET')
+# GitHub OAuth 回调地址
 app.config['GITHUB_REDIRECT_URI'] = os.environ.get('GITHUB_REDIRECT_URI')
+# IOSClub OAuth 回调地址
 app.config['IOSCLUB_REDIRECT_URI'] = os.environ.get('IOSCLUB_REDIRECT_URI')
 
+# ---------- 自定义 OIDC 提供商配置 ----------
+# 从环境变量或 .env 文件中加载所有 OIDC 提供商的配置
 app.config['OIDC_PROVIDERS'] = _load_oidc_providers_config()
 
 
+# ============================================================
+# 4. API 路由与端点
+# ============================================================
+
 @app.get('/')
 def index():
+    """根路径端点，返回 API 的基本信息和服务状态"""
     return {
         'service': 'LetCoding API',
         'status': 'ok',
-        'docs': '/swagger/',
-        'health': '/healthz',
+        'docs': '/swagger/',     # Swagger API 文档地址
+        'health': '/healthz',    # 健康检查端点地址
     }
 
 
 @app.get('/healthz')
 def healthcheck():
+    """健康检查端点，用于监控和负载均衡器的心跳检测"""
     return {'status': 'ok'}
 
 
+# ============================================================
+# 5. 全局请求钩子
+# ============================================================
+
 @app.after_request
 def add_cors_headers(response):
+    """在每个 HTTP 响应后添加 CORS（跨域资源共享）相关的响应头
+
+    仅当请求来源（Origin）在允许的域名列表中时，才会添加 CORS 头。
+    这样可以确保只有受信任的前端应用才能调用 API。
+    """
     origin = request.headers.get('Origin')
     allowed_origins = app.config.get('ALLOWED_ORIGINS', [])
     if origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Vary'] = 'Origin'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'   # 允许携带 Cookie
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     return response
 
 
+# ============================================================
+# 6. 服务初始化与 API 注册
+# ============================================================
+
+# 初始化并注册所有依赖注入服务（配置服务、日志服务、JWT 服务等）
 setup_services(app.config)
 
+# 获取依赖注入容器
 container = get_container()
+
+# 初始化 OIDC/OAuth 认证服务（注册 GitHub、自定义 OIDC 提供商等）
 oidc_service = container.resolve(IOIDCService)
 oidc_service.initialize_oauth(app)
 
+# 创建 Flask-RESTX API 实例，自动生成 Swagger 文档
 api = Api(
     app,
     version='1.0',
     title='LetCoding API',
     description='Code execution and authentication API service.',
-    doc='/swagger/',
+    doc='/swagger/',           # Swagger UI 的访问路径
 )
 
+# 注册 API 命名空间（Namespace），相当于路由分组
+# /code 路径下的所有端点由 code_api 处理（代码执行相关）
 api.add_namespace(code_api, path='/code')
+# /auth 路径下的所有端点由 auth_api 处理（用户认证相关）
 api.add_namespace(auth_api, path='/auth')
 
+
+# ============================================================
+# 7. 应用启动入口
+# ============================================================
+
 if __name__ == '__main__':
+    # 默认端口设为 6173（与 "LetCoding" 谐音）
     port = int(os.environ.get('PORT', '6173'))
+    # 根据环境变量 FLASK_DEBUG 控制是否开启调试模式
     debug = os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes', 'on')
+    # 启动 Flask 开发服务器（生产环境应使用 Gunicorn 等 WSGI 服务器）
     app.run(debug=debug, host='0.0.0.0', port=port)

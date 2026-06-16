@@ -1,9 +1,24 @@
-"""OAuth/OIDC authentication service."""
+"""
+OAuth/OIDC 认证服务模块
+
+提供第三方登录的完整实现，支持：
+1. GitHub OAuth 2.0（内置支持，使用显式端点配置）
+2. 标准 OIDC（OpenID Connect）提供商（通过 OIDC_PROVIDERS 配置动态注册）
+3. 支持 OIDC 发现协议（自动从 .well-known/openid-configuration 获取元数据）
+4. 支持跳过 ID Token 验证的自定义提供商（处理 at_hash 不匹配的情况）
+
+认证流程：
+1. 用户选择第三方登录方式
+2. 后端生成授权 URL，重定向用户到第三方登录页
+3. 用户授权后，第三方回调到后端的 callback 接口
+4. 后端用授权码换取访问令牌和用户信息
+5. 签发本地 JWT 令牌，完成登录
+"""
 
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional
 
-from authlib.integrations.flask_client import OAuth
+from authlib.integrations.flask_client import OAuth  # Authlib OAuth 客户端
 from flask import redirect, request, session
 import requests
 
@@ -12,6 +27,12 @@ from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCS
 
 
 def _safe_client_id(client_id: Any) -> str:
+    """
+    安全地展示客户端 ID（隐藏中间部分）
+
+    用于日志记录，避免暴露完整的客户端 ID。
+    例如：abcd...wxyz
+    """
     value = str(client_id or '')
     if len(value) <= 8:
         return value
@@ -19,21 +40,40 @@ def _safe_client_id(client_id: Any) -> str:
 
 
 class OIDCService(Injectable, IOIDCService):
-    """OAuth/OIDC authentication service.
+    """
+    OAuth/OIDC 认证服务实现类
 
-    GitHub uses OAuth2 rather than pure OIDC, so it is registered with explicit
-    authorize/token/API endpoints. Extra OIDC providers can be supplied through
-    the OIDC_PROVIDERS config.
+    GitHub 使用 OAuth 2.0 协议（非标准 OIDC），因此使用显式的
+    authorize/token/API 端点进行注册。额外的 OIDC 提供商通过
+    OIDC_PROVIDERS 配置项动态注册，支持标准 OIDC 发现协议。
     """
 
     def __init__(self, config_service: IConfigService, logger_service: ILoggerService):
+        """
+        初始化 OIDC 认证服务
+
+        Args:
+            config_service: 配置服务（读取 OAuth 客户端配置）
+            logger_service: 日志服务
+        """
         self._config_service = config_service
         self._logger_service = logger_service
         self._oauth: Optional[OAuth] = None
+        # 元数据获取超时时间（最少 5 秒）
         self._metadata_timeout = max(int(self._config_service.get_timeout()), 5)
 
     def resolve_provider_name(self, provider: str) -> Optional[str]:
-        """Resolve a provider name case-insensitively."""
+        """
+        将提供商名称解析为配置中的规范名称（大小写不敏感匹配）
+
+        例如：用户传入 "GitHub"、"GITHUB" 或 "github"，都会解析为 "github"。
+
+        Args:
+            provider: 用户传入的提供商名称
+
+        Returns:
+            配置中的规范名称，未找到返回 None
+        """
         if not provider:
             return None
 
@@ -43,9 +83,21 @@ class OIDCService(Injectable, IOIDCService):
                 return provider_name
         return None
 
+    # ============================================================
+    # OAuth 初始化与提供商注册
+    # ============================================================
+
     def initialize_oauth(self, app) -> None:
+        """
+        初始化 OAuth 服务，注册所有已配置的认证提供商
+
+        1. 创建 Authlib OAuth 实例
+        2. 注册内置的 GitHub OAuth 提供商（如果已配置）
+        3. 注册所有自定义 OIDC 提供商（如果已配置）
+        """
         self._oauth = OAuth(app)
 
+        # ----- GitHub OAuth 注册 -----
         github_client_id = self._config_service.get_config('GITHUB_CLIENT_ID')
         github_client_secret = self._config_service.get_config('GITHUB_CLIENT_SECRET')
 
@@ -59,31 +111,48 @@ class OIDCService(Injectable, IOIDCService):
                 api_base_url='https://api.github.com/',
                 client_kwargs={'scope': 'read:user user:email'},
             )
-            self._logger_service.info('GitHub OAuth registered')
+            self._logger_service.info('GitHub OAuth 已注册')
         else:
-            self._logger_service.warning('GitHub OAuth is not configured')
+            self._logger_service.warning('GitHub OAuth 未配置')
 
+        # ----- 自定义 OIDC 提供商注册 -----
         self._register_custom_providers()
 
     def _normalize_provider_config(self, provider_name: str, config: Dict[str, Any]) -> Dict[str, Any]:
-        """补齐自定义 OIDC 提供方配置。"""
+        """
+        标准化自定义 OIDC 提供商的配置
+
+        补充缺失的配置项：
+        - 如果没有 server_metadata_url 但有 issuer，自动拼接 OIDC 发现地址
+        - 如果未设置 scope，默认使用 'openid profile role'
+        - 如果未设置 token_endpoint_auth_method，默认使用 'client_secret_post'
+
+        Args:
+            provider_name: 提供商名称
+            config: 原始配置字典
+
+        Returns:
+            补充了默认值后的标准化配置字典
+        """
         normalized_config = dict(config or {})
         normalized_config.setdefault('name', provider_name)
 
+        # 自动构建 OIDC 发现端点 URL
         if not normalized_config.get('server_metadata_url'):
             issuer = normalized_config.get('issuer')
             if issuer:
                 normalized_config['server_metadata_url'] = f"{str(issuer).rstrip('/')}/.well-known/openid-configuration"
 
+        # 确保 client_kwargs 存在
         client_kwargs = normalized_config.get('client_kwargs')
         if not isinstance(client_kwargs, dict):
             client_kwargs = {}
 
+        # 设置默认 scope
         if not client_kwargs.get('scope'):
-            # Match the provider's own OAuth login page default scope so the
-            # issued token can be reused to create the authorization session.
             client_kwargs['scope'] = 'openid profile role'
 
+        # 设置默认令牌端点认证方式
         if not client_kwargs.get('token_endpoint_auth_method'):
             client_kwargs['token_endpoint_auth_method'] = 'client_secret_post'
 
@@ -91,6 +160,16 @@ class OIDCService(Injectable, IOIDCService):
         return normalized_config
 
     def _normalize_oidc_provider_configs(self) -> Dict[str, Dict[str, Any]]:
+        """
+        将 OIDC_PROVIDERS 配置标准化为字典格式
+
+        支持两种输入格式：
+        - 字典格式：{"provider_name": {...}}
+        - 列表格式：[{"name": "provider_name", ...}]
+
+        Returns:
+            标准化后的字典格式配置
+        """
         raw_configs = self._config_service.get_config('OIDC_PROVIDERS', {})
         if isinstance(raw_configs, dict):
             return raw_configs
@@ -105,6 +184,7 @@ class OIDCService(Injectable, IOIDCService):
         return {}
 
     def _register_custom_providers(self) -> None:
+        """注册所有自定义 OIDC 提供商（从 OIDC_PROVIDERS 配置读取）"""
         if not self._oauth:
             return
 
@@ -116,12 +196,14 @@ class OIDCService(Injectable, IOIDCService):
             token_endpoint = normalized_config.get('access_token_url') or normalized_config.get('token_url')
             userinfo_endpoint = normalized_config.get('userinfo_endpoint')
 
+            # 跳过配置不完整的提供商
             if not server_metadata_url and not (access_token_url and authorize_url):
                 self._logger_service.warning(
                     f'OIDC provider skipped because metadata or endpoints are missing: {provider_name}'
                 )
                 continue
 
+            # 尝试预取 OIDC 元数据
             resolved_metadata = self._fetch_server_metadata(server_metadata_url) if server_metadata_url else None
             if resolved_metadata:
                 authorize_url = authorize_url or resolved_metadata.get('authorization_endpoint')
@@ -135,6 +217,7 @@ class OIDCService(Injectable, IOIDCService):
                 effective_authorize_url = authorize_url
                 effective_userinfo_endpoint = userinfo_endpoint
 
+                # 向 Authlib 注册 OAuth 客户端
                 self._oauth.register(
                     provider_name,
                     client_id=normalized_config['client_id'],
@@ -161,6 +244,18 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'Failed to register OIDC provider: {provider_name}', ex)
 
     def _fetch_server_metadata(self, server_metadata_url: Optional[str]) -> Optional[Dict[str, Any]]:
+        """
+        预取 OIDC 提供商的服务元数据
+
+        从 OIDC 发现端点（.well-known/openid-configuration）获取提供商的服务信息，
+        包括授权端点、令牌端点、用户信息端点等。
+
+        Args:
+            server_metadata_url: OIDC 发现端点 URL
+
+        Returns:
+            元数据字典，获取失败返回 None
+        """
         if not server_metadata_url:
             return None
 
@@ -186,7 +281,21 @@ class OIDCService(Injectable, IOIDCService):
             )
             return None
 
+    # ============================================================
+    # OAuth 授权流程（生成授权 URL 与重定向）
+    # ============================================================
+
     def _authorization_kwargs(self, provider: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
+        """
+        构建 OAuth 授权请求的额外参数
+
+        Args:
+            provider: 提供商名称
+            redirect_uri: 自定义回调地址（可选）
+
+        Returns:
+            包含 redirect_uri 和 scope 等参数的字典
+        """
         provider_config = self._normalize_oidc_provider_configs().get(provider, {})
         normalized_config = (
             self._normalize_provider_config(provider, provider_config)
@@ -206,6 +315,7 @@ class OIDCService(Injectable, IOIDCService):
         return kwargs
 
     def _extract_authorization_url(self, authorization_result: Any) -> str:
+        """从 Authlib 返回的授权结果中提取授权 URL"""
         if isinstance(authorization_result, Mapping):
             url_value = authorization_result.get('url')
             if url_value:
@@ -217,6 +327,7 @@ class OIDCService(Injectable, IOIDCService):
         return str(authorization_result or '')
 
     def _extract_authorization_state(self, authorization_result: Any) -> str:
+        """从 Authlib 返回的授权结果中提取 CSRF 保护用的 state 参数"""
         if isinstance(authorization_result, Mapping):
             return str(authorization_result.get('state') or '')
 
@@ -226,6 +337,7 @@ class OIDCService(Injectable, IOIDCService):
         return ''
 
     def _authorization_data(self, authorization_result: Any) -> Dict[str, Any]:
+        """将 Authlib 返回的授权结果统一转换为字典格式"""
         if isinstance(authorization_result, Mapping):
             return dict(authorization_result)
 
@@ -238,13 +350,20 @@ class OIDCService(Injectable, IOIDCService):
         return {'url': str(authorization_result or '')}
 
     def _should_skip_id_token_validation(self, provider: str) -> bool:
-        """Return whether callback handling should avoid parsing the ID token.
+        """
+        判断是否应跳过 ID Token 验证
 
-        Some self-hosted OIDC providers issue an id_token whose at_hash claim
-        does not match the access_token. Authlib validates that claim inside
-        authorize_access_token(), before this service can fall back to the
-        userinfo endpoint. For custom providers we can safely finish the OAuth
-        code exchange and read userinfo with the returned access token instead.
+        某些自托管的 OIDC 提供商签发的 id_token 中，at_hash 声明
+        与实际 access_token 不匹配。Authlib 的 authorize_access_token()
+        方法会事先验证 at_hash，导致回调失败。对于自定义提供商，
+        我们可以安全地跳过 ID Token 验证，直接使用 access_token
+        从 userinfo 端点获取用户信息。
+
+        Args:
+            provider: 提供商名称
+
+        Returns:
+            是否跳过 ID Token 验证
         """
         if provider == 'github':
             return False
@@ -262,10 +381,12 @@ class OIDCService(Injectable, IOIDCService):
         return True
 
     def _authorize_access_token_without_id_token_validation(self, client) -> Dict[str, Any]:
-        """Exchange the callback code for a token without parsing id_token.
+        """
+        跳过 ID Token 验证的 OAuth 回调令牌交换
 
-        This mirrors Authlib's FlaskOAuth2App.authorize_access_token() state
-        handling, but intentionally stops before parse_id_token().
+        此方法模拟 Authlib 的 FlaskOAuth2App.authorize_access_token()
+        的状态处理逻辑，但在 parse_id_token() 之前停止，
+        避免 at_hash 验证失败导致整个回调流程中断。
         """
         if request.method == 'GET':
             params = {
@@ -285,8 +406,24 @@ class OIDCService(Injectable, IOIDCService):
         client.token = token
         return token
 
+    # ============================================================
+    # 外部接口方法（供控制器调用）
+    # ============================================================
+
     def get_authorization_redirect(self, provider: str, redirect_uri: str):
-        """Return a Flask redirect response that starts the OAuth login."""
+        """
+        创建浏览器重定向响应，将用户引导至第三方登录页面
+
+        此方法供浏览器登录流程使用（AuthBrowserLoginController），
+        直接返回 Flask 的重定向响应对象。
+
+        Args:
+            provider: 提供商名称
+            redirect_uri: 登录成功后的回调地址
+
+        Returns:
+            Flask redirect 响应对象，失败返回 None
+        """
         if not self._oauth:
             return None
 
@@ -328,7 +465,19 @@ class OIDCService(Injectable, IOIDCService):
             return None
 
     def get_authorization_url(self, provider: str, redirect_uri: Optional[str] = None) -> Optional[str]:
-        """Return an authorization URL for API clients."""
+        """
+        获取 OAuth 授权 URL（供 API 客户端使用）
+
+        此方法供 API 客户端登录流程使用（AuthLoginController），
+        返回授权 URL 字符串，客户端自行决定如何跳转。
+
+        Args:
+            provider: 提供商名称
+            redirect_uri: 自定义回调地址（可选）
+
+        Returns:
+            OAuth 授权 URL 字符串，失败返回 None
+        """
         if not self._oauth:
             return None
 
@@ -351,6 +500,22 @@ class OIDCService(Injectable, IOIDCService):
             return None
 
     def authorize_callback(self, provider: str, redirect_uri: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        处理 OAuth 授权回调
+
+        接收第三方提供商回调的授权码（code），
+        完成以下步骤：
+        1. 用授权码向提供商换取访问令牌
+        2. 使用访问令牌获取用户信息
+        3. 返回标准化的认证结果
+
+        Args:
+            provider: 提供商名称
+            redirect_uri: 回调地址（通常不需要传递，Authlib 会使用之前保存的地址）
+
+        Returns:
+            包含 provider、token 和 user_info 的字典，失败返回 None
+        """
         if not self._oauth:
             return None
 
@@ -365,10 +530,8 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'OAuth provider not found: {resolved_provider}')
                 return None
 
-            # Authlib's Flask integration already persists the redirect URI used
-            # during authorize_redirect() and reuses it while exchanging the code.
-            # Passing redirect_uri again here can collide with the stored value and
-            # raise "got multiple values for keyword argument 'redirect_uri'".
+            # Authlib 的 Flask 集成会自动持久化授权时使用的 redirect_uri，
+            # 并在换取令牌时自动复用。再次传递 redirect_uri 可能与已存储的值冲突。
             if self._should_skip_id_token_validation(resolved_provider):
                 self._logger_service.warning(
                     'Skipping OIDC id_token validation and using userinfo endpoint: '
@@ -377,11 +540,14 @@ class OIDCService(Injectable, IOIDCService):
                 token = self._authorize_access_token_without_id_token_validation(client)
             else:
                 token = client.authorize_access_token()
+
             self._logger_service.info(
                 'OAuth token received: '
                 f'provider={resolved_provider}, '
                 f'token_keys={",".join(sorted(token.keys())) if isinstance(token, dict) else type(token).__name__}'
             )
+
+            # 获取用户信息
             user_info = self._get_user_info(resolved_provider, client, token)
             if not user_info:
                 self._logger_service.error(f'OAuth callback failed because user info is empty: {resolved_provider}')
@@ -396,7 +562,22 @@ class OIDCService(Injectable, IOIDCService):
             self._logger_service.error(f'Failed to handle OAuth callback: {provider}', ex)
             return None
 
+    # ============================================================
+    # 用户信息获取（处理不同提供商的数据格式）
+    # ============================================================
+
     def _normalize_user_data(self, user_data: Any) -> Optional[Dict[str, Any]]:
+        """
+        将不同格式的用户数据统一转换为字典
+
+        支持：to_dict() 方法、Mapping 类型、json() 方法
+
+        Args:
+            user_data: 来自不同来源的用户数据
+
+        Returns:
+            标准化的字典格式，转换失败返回 None
+        """
         if hasattr(user_data, 'to_dict'):
             return user_data.to_dict()
 
@@ -409,6 +590,22 @@ class OIDCService(Injectable, IOIDCService):
         return None
 
     def _build_oidc_user_info(self, provider: str, user_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        从 OIDC 用户信息中提取标准化的用户数据
+
+        OIDC 标准字段映射：
+        - sub -> id（用户唯一标识）
+        - preferred_username -> username
+        - email -> email
+        - picture -> avatar_url
+
+        Args:
+            provider: 提供商名称
+            user_data: 来自提供商的标准 OIDC 用户信息
+
+        Returns:
+            标准化后的用户信息字典，缺少唯一标识时返回 None
+        """
         subject = user_data.get('sub') or user_data.get('id') or user_data.get('user_id') or user_data.get('uid')
         if not subject:
             self._logger_service.error(
@@ -441,12 +638,29 @@ class OIDCService(Injectable, IOIDCService):
         }
 
     def _get_user_info(self, provider: str, client, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        从 OAuth 提供商获取用户信息
+
+        根据提供商类型采用不同的获取方式：
+        - GitHub：调用 GitHub API（/user 和 /user/emails）
+        - 标准 OIDC：优先从 ID Token 中获取，然后尝试 userinfo 端点
+
+        Args:
+            provider: 提供商名称
+            client: Authlib OAuth 客户端实例
+            token: OAuth 访问令牌
+
+        Returns:
+            标准化的用户信息字典，获取失败返回 None
+        """
         try:
+            # ----- GitHub 特殊处理 -----
             if provider == 'github':
                 user_resp = client.get('user', token=token)
                 user_resp.raise_for_status()
                 user_data = user_resp.json()
 
+                # GitHub 可能不在 /user 接口返回 email，需要额外调用 /user/emails
                 if not user_data.get('email'):
                     email_resp = client.get('user/emails', token=token)
                     email_resp.raise_for_status()
@@ -471,6 +685,8 @@ class OIDCService(Injectable, IOIDCService):
                     'provider': provider,
                 }
 
+            # ----- 标准 OIDC 提供商处理 -----
+            # 优先从 ID Token 的 userinfo 字段获取
             token_user_data = self._normalize_user_data(token.get('userinfo')) if isinstance(token, dict) else None
             if token_user_data:
                 self._logger_service.info(
@@ -479,6 +695,7 @@ class OIDCService(Injectable, IOIDCService):
                 )
                 return self._build_oidc_user_info(provider, token_user_data)
 
+            # 尝试调用 userinfo 端点
             user_data = None
             if hasattr(client, 'userinfo'):
                 try:
@@ -505,7 +722,19 @@ class OIDCService(Injectable, IOIDCService):
             self._logger_service.error(f'Failed to fetch user info: {provider}', ex)
             return None
 
+    # ============================================================
+    # 提供商查询与验证
+    # ============================================================
+
     def get_supported_providers(self) -> List[str]:
+        """
+        获取所有已配置的认证提供商名称列表
+
+        返回顺序：GitHub > 自定义 OIDC 提供商（去重）
+
+        Returns:
+            提供商名称列表
+        """
         providers: List[str] = []
         seen = set()
 
@@ -523,4 +752,5 @@ class OIDCService(Injectable, IOIDCService):
         return providers
 
     def validate_provider(self, provider: str) -> bool:
+        """检查指定的提供商是否已配置且受支持"""
         return self.resolve_provider_name(provider) is not None
