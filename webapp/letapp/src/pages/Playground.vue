@@ -128,6 +128,18 @@ const isFullscreen = ref(false);
 const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
 
+const isIosFullscreenFallback = () => {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent;
+  const platform = navigator.platform;
+  const isAppleMobile = /iPad|iPhone|iPod/.test(userAgent);
+  const isTouchMac = platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return isAppleMobile || isTouchMac;
+};
+
 const syncPageScrollLock = (locked: boolean) => {
   if (typeof document === 'undefined') {
     return;
@@ -137,9 +149,44 @@ const syncPageScrollLock = (locked: boolean) => {
   document.body.style.overflow = locked ? 'hidden' : '';
 };
 
-const toggleFullscreen = () => {
-  isFullscreen.value = !isFullscreen.value;
-  if (!isFullscreen.value) {
+const toggleFullscreen = async () => {
+  const useFallbackMode = isIosFullscreenFallback();
+
+  if (isFullscreen.value) {
+    if (!useFallbackMode && document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+        return;
+      } catch {
+        // fall through to local state reset
+      }
+    }
+
+    isFullscreen.value = false;
+    isFullscreenMenuOpen.value = false;
+    return;
+  }
+
+  isFullscreen.value = true;
+
+  if (!useFallbackMode && editorPanelRef.value?.requestFullscreen) {
+    try {
+      await editorPanelRef.value.requestFullscreen();
+      return;
+    } catch {
+      // fall back to in-app fullscreen mode
+    }
+  }
+};
+
+const handleFullscreenChange = () => {
+  if (isIosFullscreenFallback()) {
+    return;
+  }
+
+  const active = !!document.fullscreenElement;
+  isFullscreen.value = active;
+  if (!active) {
     isFullscreenMenuOpen.value = false;
   }
 };
@@ -252,6 +299,12 @@ const handleStdinKeydown = (event: KeyboardEvent) => {
 };
 
 const handleGlobalShortcut = (event: KeyboardEvent) => {
+  if (event.key === 'Escape' && isFullscreen.value) {
+    event.preventDefault();
+    void toggleFullscreen();
+    return;
+  }
+
   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !isExecuting.value) {
     const target = event.target as HTMLElement | null;
     const isEditable = target?.tagName === 'TEXTAREA' || target?.tagName === 'INPUT';
@@ -371,6 +424,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalShortcut);
   window.addEventListener('resize', updateViewportWidth);
   window.addEventListener('click', closeLanguageMenuOnOutsideClick);
+  document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onUnmounted(() => {
@@ -378,6 +432,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalShortcut);
   window.removeEventListener('resize', updateViewportWidth);
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
+  document.removeEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 watch(isFullscreen, (active) => {
