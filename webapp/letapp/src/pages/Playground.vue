@@ -467,13 +467,60 @@ onUnmounted(() => {
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
               重置
             </button>
+            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为侧边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
+              <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-4 w-4" />
+              {{ outputPosition === 'bottom' ? '侧边' : '底部' }}
+            </button>
           </div>
         </div>
       </div>
     </div>
 
     <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
-      <div class="playground-stack" :class="{ 'playground-side-layout': outputPosition === 'side' }">
+      <div class="playground-stack">
+        <template v-if="outputPosition === 'side'">
+          <div class="bottom-panels">
+            <section class="surface-panel">
+              <div class="collapse-header input-header">
+                <div class="flex items-center gap-2">
+                  <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
+                  <span>输入数据</span>
+                </div>
+                <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
+                  <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
+                  {{ isExecuting ? '运行中...' : '运行代码' }}
+                </button>
+              </div>
+              <div class="collapse-body">
+                <textarea
+                  v-model="stdin"
+                  class="plain-textarea panel-textarea"
+                  placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                  @keydown="handleStdinKeydown"
+                ></textarea>
+              </div>
+            </section>
+
+            <section class="surface-panel">
+              <div class="collapse-header">
+                <div class="flex items-center gap-2">
+                  <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
+                  <span>输出</span>
+                </div>
+              </div>
+              <div class="collapse-body">
+                <div class="output-box">
+                  <pre
+                    v-if="output"
+                    :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
+                  >{{ output }}</pre>
+                  <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </template>
+
         <section class="editor-panel">
           <div class="panel-header">
             <div class="flex items-center gap-2">
@@ -511,47 +558,6 @@ onUnmounted(() => {
             ></textarea>
           </div>
         </section>
-
-        <aside v-if="outputPosition === 'side' && !bottomPanelsCollapsed" class="side-panels">
-          <section class="surface-panel">
-            <div class="collapse-header input-header">
-              <div class="flex items-center gap-2">
-                <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                <span>输入数据</span>
-              </div>
-              <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
-                <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                {{ isExecuting ? '运行中...' : '运行代码' }}
-              </button>
-            </div>
-            <div class="collapse-body">
-              <textarea
-                v-model="stdin"
-                class="plain-textarea panel-textarea"
-                placeholder="如果程序需要输入，可以在这里填写测试数据。"
-                @keydown="handleStdinKeydown"
-              ></textarea>
-            </div>
-          </section>
-
-          <section class="surface-panel">
-            <div class="collapse-header">
-              <div class="flex items-center gap-2">
-                <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                <span>输出</span>
-              </div>
-            </div>
-            <div class="collapse-body">
-              <div class="output-box">
-                <pre
-                  v-if="output"
-                  :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
-                >{{ output }}</pre>
-                <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
-              </div>
-            </div>
-          </section>
-        </aside>
       </div>
     </div>
 
@@ -600,7 +606,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
+    <div v-if="outputPosition === 'bottom'" class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
       <button
         class="floating-collapse-button"
         type="button"
@@ -608,15 +614,6 @@ onUnmounted(() => {
       >
         <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
         <span>{{ bottomPanelsCollapsed ? '展开' : '收起' }}</span>
-      </button>
-      <button
-        class="floating-collapse-button"
-        type="button"
-        :title="outputPosition === 'bottom' ? '切换为侧边显示' : '切换为底部显示'"
-        @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'"
-      >
-        <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-5 w-5" />
-        <span>{{ outputPosition === 'bottom' ? '侧边' : '底部' }}</span>
       </button>
     </div>
   </div>
@@ -783,33 +780,12 @@ onUnmounted(() => {
   @apply text-sm italic text-slate-500;
 }
 
-.playground-side-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.side-panels {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  position: sticky;
-  top: 7rem;
-}
-
 .floating-button-group {
   position: fixed;
   right: 5rem;
   z-index: 50;
   display: flex;
   gap: 0.5rem;
-}
-
-@media (max-width: 1023px) {
-  .playground-side-layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 767px) {
