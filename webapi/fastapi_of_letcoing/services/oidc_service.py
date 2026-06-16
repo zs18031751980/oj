@@ -310,10 +310,9 @@ class OIDCService(Injectable, IOIDCService):
             authorization_result = client.create_authorization_url(**authorization_kwargs)
             authorization_url = self._extract_authorization_url(authorization_result)
             authorization_state = self._extract_authorization_state(authorization_result)
-            authorization_data = self._authorization_data(authorization_result)
             client.save_authorize_data(
                 redirect_uri=redirect_uri,
-                **authorization_data,
+                state=authorization_state,
             )
             self._logger_service.info(
                 'Authorization URL created: '
