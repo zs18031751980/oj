@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiRequest } from '../services/api';
@@ -128,27 +128,18 @@ const isFullscreen = ref(false);
 const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
 
-const toggleFullscreen = async () => {
-  if (!document.fullscreenElement) {
-    isFullscreen.value = true;
-    try {
-      await editorPanelRef.value?.requestFullscreen();
-    } catch {
-      isFullscreen.value = false;
-    }
-  } else {
-    isFullscreenMenuOpen.value = false;
-    try {
-      await document.exitFullscreen();
-    } catch {
-      // fallback
-    }
+const syncPageScrollLock = (locked: boolean) => {
+  if (typeof document === 'undefined') {
+    return;
   }
+
+  document.documentElement.style.overflow = locked ? 'hidden' : '';
+  document.body.style.overflow = locked ? 'hidden' : '';
 };
 
-const handleFullscreenChange = () => {
-  isFullscreen.value = !!document.fullscreenElement;
-  if (!document.fullscreenElement) {
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value;
+  if (!isFullscreen.value) {
     isFullscreenMenuOpen.value = false;
   }
 };
@@ -380,14 +371,20 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalShortcut);
   window.addEventListener('resize', updateViewportWidth);
   window.addEventListener('click', closeLanguageMenuOnOutsideClick);
-  document.addEventListener('fullscreenchange', handleFullscreenChange);
 });
 
 onUnmounted(() => {
+  syncPageScrollLock(false);
   window.removeEventListener('keydown', handleGlobalShortcut);
   window.removeEventListener('resize', updateViewportWidth);
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
-  document.removeEventListener('fullscreenchange', handleFullscreenChange);
+});
+
+watch(isFullscreen, (active) => {
+  syncPageScrollLock(active);
+  if (!active) {
+    isFullscreenMenuOpen.value = false;
+  }
 });
 </script>
 
