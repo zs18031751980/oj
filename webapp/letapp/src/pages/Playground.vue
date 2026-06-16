@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -215,7 +215,7 @@ const runCode = async () => {
   const source = code.value;
   if (!source.trim()) {
     outputKind.value = 'error';
-    output.value = '代码不能为空。';
+    output.value = '浠ｇ爜涓嶈兘涓虹┖銆?;
     bottomPanelsCollapsed.value = false;
     return;
   }
@@ -238,11 +238,11 @@ const runCode = async () => {
     });
 
     const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
-    output.value = text || '程序已运行，但没有产生输出。';
+    output.value = text || '绋嬪簭宸茶繍琛岋紝浣嗘病鏈変骇鐢熻緭鍑恒€?;
     outputKind.value = result.stderr ? 'error' : 'info';
   } catch (error) {
     outputKind.value = 'error';
-    output.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}`;
+    output.value = `鎵ц閿欒: ${error instanceof Error ? error.message : '鏈煡閿欒'}`;
   } finally {
     isExecuting.value = false;
   }
@@ -435,8 +435,8 @@ watch(isFullscreen, (active) => {
               <Icon icon="material-symbols:arrow-back" class="h-5 w-5" />
             </button>
             <div class="min-w-0">
-              <h1 class="truncate text-2xl font-black tracking-tight">在线代码编辑器</h1>
-              <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入，以及统一输出结果显示。</p>
+              <h1 class="truncate text-2xl font-black tracking-tight">鍦ㄧ嚎浠ｇ爜缂栬緫鍣?/h1>
+              <p class="text-sm text-slate-500 dark:text-slate-400">鏀寔澶氳瑷€杩愯銆佹爣鍑嗚緭鍏ワ紝浠ュ強缁熶竴杈撳嚭缁撴灉鏄剧ず銆?/p>
             </div>
           </div>
 
@@ -467,19 +467,19 @@ watch(isFullscreen, (active) => {
 
             <button class="toolbar-button flex-1 sm:flex-none" @click="importCode">
               <Icon icon="material-symbols:upload" class="h-4 w-4" />
-              导入
+              瀵煎叆
             </button>
             <button class="toolbar-button flex-1 sm:flex-none" @click="saveCode">
               <Icon icon="material-symbols:download" class="h-4 w-4" />
-              导出
+              瀵煎嚭
             </button>
             <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
-              重置
+              閲嶇疆
             </button>
-            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
+            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '鍒囨崲涓哄彸杈规樉绀? : '鍒囨崲涓哄簳閮ㄦ樉绀?" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
               <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-4 w-4" />
-              {{ outputPosition === 'bottom' ? '右边' : '底部' }}
+              {{ outputPosition === 'bottom' ? '鍙宠竟' : '搴曢儴' }}
             </button>
           </div>
         </div>
@@ -500,21 +500,21 @@ watch(isFullscreen, (active) => {
           <div class="panel-header">
             <div class="flex items-center gap-2">
               <Icon icon="material-symbols:code" class="h-5 w-5 text-cyan-500" />
-              <span>代码编辑区</span>
+              <span>浠ｇ爜缂栬緫鍖?/span>
             </div>
             <div class="flex items-center gap-2">
               <button
                 v-if="isFullscreen"
                 class="fullscreen-icon-btn"
-                :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'"
+                :title="outputPosition === 'bottom' ? '鍒囨崲涓哄彸杈规樉绀? : '鍒囨崲涓哄簳閮ㄦ樉绀?"
                 @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'"
               >
                 <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-5 w-5" />
               </button>
-              <button v-if="isFullscreen" class="fullscreen-icon-btn" title="菜单" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
+              <button v-if="isFullscreen" class="fullscreen-icon-btn" title="鑿滃崟" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
               </button>
-              <button class="fullscreen-icon-btn" :title="isFullscreen ? '退出全屏' : '全屏'" @click="toggleFullscreen">
+              <button class="fullscreen-icon-btn" :title="isFullscreen ? '閫€鍑哄叏灞? : '鍏ㄥ睆'" @click="toggleFullscreen">
                 <Icon :icon="isFullscreen ? 'material-symbols:fullscreen-exit' : 'material-symbols:fullscreen'" class="h-5 w-5" />
               </button>
             </div>
@@ -522,7 +522,7 @@ watch(isFullscreen, (active) => {
 
           <div v-if="isFullscreen && isFullscreenMenuOpen" class="fullscreen-menu">
             <div class="fullscreen-menu-section">
-              <div class="fullscreen-menu-label">切换语言</div>
+              <div class="fullscreen-menu-label">鍒囨崲璇█</div>
               <button
                 v-for="lang in languages"
                 :key="lang.value"
@@ -537,16 +537,16 @@ watch(isFullscreen, (active) => {
             </div>
             <div class="fullscreen-menu-divider"></div>
             <button class="fullscreen-menu-item" @click="importCode(); isFullscreenMenuOpen = false">
-              <Icon icon="material-symbols:upload" class="h-4 w-4" /> 导入
+              <Icon icon="material-symbols:upload" class="h-4 w-4" /> 瀵煎叆
             </button>
             <button class="fullscreen-menu-item" @click="saveCode(); isFullscreenMenuOpen = false">
-              <Icon icon="material-symbols:download" class="h-4 w-4" /> 导出
+              <Icon icon="material-symbols:download" class="h-4 w-4" /> 瀵煎嚭
             </button>
           </div>
 
           <div v-show="!isFullscreen" class="editor-toolbar">
             <label class="export-name-field">
-              <span>导出文件名</span>
+              <span>瀵煎嚭鏂囦欢鍚?/span>
               <input
                 v-model="exportFileName"
                 type="text"
@@ -555,7 +555,7 @@ watch(isFullscreen, (active) => {
               />
             </label>
             <div class="export-hint">
-              <span>保存为</span>
+              <span>淇濆瓨涓?/span>
               <span class="export-file-chip">{{ sanitizeFileName(exportFileName) || fallbackFileNames[selectedLanguage] || 'code' }}.{{ exportExtension }}</span>
             </div>
           </div>
@@ -579,18 +579,18 @@ watch(isFullscreen, (active) => {
                 <div class="collapse-header input-header">
                   <div class="flex items-center gap-2">
                     <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                    <span>输入数据</span>
+                    <span>杈撳叆鏁版嵁</span>
                   </div>
                   <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
                     <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                    {{ isExecuting ? '运行中...' : '运行代码' }}
+                    {{ isExecuting ? '杩愯涓?..' : '杩愯浠ｇ爜' }}
                   </button>
                 </div>
                 <div class="collapse-body">
                   <textarea
                     v-model="stdin"
                     class="plain-textarea panel-textarea"
-                    placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                    placeholder="濡傛灉绋嬪簭闇€瑕佽緭鍏ワ紝鍙互鍦ㄨ繖閲屽～鍐欐祴璇曟暟鎹€?
                     @keydown="handleStdinKeydown"
                   ></textarea>
                 </div>
@@ -600,7 +600,7 @@ watch(isFullscreen, (active) => {
                 <div class="collapse-header">
                   <div class="flex items-center gap-2">
                     <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                    <span>输出</span>
+                    <span>杈撳嚭</span>
                   </div>
                 </div>
                 <div class="collapse-body">
@@ -609,7 +609,7 @@ watch(isFullscreen, (active) => {
                       v-if="output"
                       :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                     >{{ output }}</pre>
-                    <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                    <div v-else class="placeholder-copy">杩愯缁撴灉鍜屾姤閿欓兘浼氭樉绀哄湪杩欓噷銆?/div>
                   </div>
                 </div>
               </section>
@@ -622,18 +622,18 @@ watch(isFullscreen, (active) => {
                 <div class="collapse-header input-header">
                   <div class="flex items-center gap-2">
                     <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                    <span>输入数据</span>
+                    <span>杈撳叆鏁版嵁</span>
                   </div>
                   <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
                     <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                    {{ isExecuting ? '运行中...' : '运行代码' }}
+                    {{ isExecuting ? '杩愯涓?..' : '杩愯浠ｇ爜' }}
                   </button>
                 </div>
                 <div class="collapse-body">
                   <textarea
                     v-model="stdin"
                     class="plain-textarea panel-textarea"
-                    placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                    placeholder="濡傛灉绋嬪簭闇€瑕佽緭鍏ワ紝鍙互鍦ㄨ繖閲屽～鍐欐祴璇曟暟鎹€?
                     @keydown="handleStdinKeydown"
                   ></textarea>
                 </div>
@@ -642,7 +642,7 @@ watch(isFullscreen, (active) => {
                 <div class="collapse-header">
                   <div class="flex items-center gap-2">
                     <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                    <span>输出</span>
+                    <span>杈撳嚭</span>
                   </div>
                 </div>
                 <div class="collapse-body">
@@ -651,7 +651,7 @@ watch(isFullscreen, (active) => {
                       v-if="output"
                       :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                     >{{ output }}</pre>
-                    <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                    <div v-else class="placeholder-copy">杩愯缁撴灉鍜屾姤閿欓兘浼氭樉绀哄湪杩欓噷銆?/div>
                   </div>
                 </div>
               </section>
@@ -659,11 +659,11 @@ watch(isFullscreen, (active) => {
             <div class="fullscreen-bottom-bar">
               <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
                 <Icon icon="material-symbols:refresh" class="h-4 w-4" />
-                重置
+                閲嶇疆
               </button>
               <button class="floating-collapse-button" @click="bottomPanelsCollapsed = !bottomPanelsCollapsed">
                 <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
-                {{ bottomPanelsCollapsed ? '展开' : '收起' }}
+                {{ bottomPanelsCollapsed ? '灞曞紑' : '鏀惰捣' }}
               </button>
             </div>
           </template>
@@ -671,8 +671,7 @@ watch(isFullscreen, (active) => {
             <div class="fullscreen-bottom-bar fullscreen-side-bottom-bar">
               <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
                 <Icon icon="material-symbols:refresh" class="h-4 w-4" />
-                閲嶇疆
-              </button>
+                闁插秶鐤?              </button>
             </div>
           </template>
         </section>
@@ -686,18 +685,18 @@ watch(isFullscreen, (active) => {
             <div class="collapse-header input-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                <span>输入数据</span>
+                <span>杈撳叆鏁版嵁</span>
               </div>
               <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
                 <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                {{ isExecuting ? '运行中...' : '运行代码' }}
+                {{ isExecuting ? '杩愯涓?..' : '杩愯浠ｇ爜' }}
               </button>
             </div>
             <div class="collapse-body">
               <textarea
                 v-model="stdin"
                 class="plain-textarea panel-textarea"
-                placeholder="如果程序需要输入，可以在这里填写测试数据。"
+                placeholder="濡傛灉绋嬪簭闇€瑕佽緭鍏ワ紝鍙互鍦ㄨ繖閲屽～鍐欐祴璇曟暟鎹€?
                 @keydown="handleStdinKeydown"
               ></textarea>
             </div>
@@ -707,7 +706,7 @@ watch(isFullscreen, (active) => {
             <div class="collapse-header">
               <div class="flex items-center gap-2">
                 <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                <span>输出</span>
+                <span>杈撳嚭</span>
               </div>
             </div>
             <div class="collapse-body">
@@ -716,7 +715,7 @@ watch(isFullscreen, (active) => {
                   v-if="output"
                   :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                 >{{ output }}</pre>
-                <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                <div v-else class="placeholder-copy">杩愯缁撴灉鍜屾姤閿欓兘浼氭樉绀哄湪杩欓噷銆?/div>
               </div>
             </div>
           </section>
@@ -1053,7 +1052,7 @@ watch(isFullscreen, (active) => {
   }
 }
 
-/* ── Fullscreen Mode ── */
+/* 鈹€鈹€ Fullscreen Mode 鈹€鈹€ */
 
 .fullscreen-mode {
   position: fixed !important;
