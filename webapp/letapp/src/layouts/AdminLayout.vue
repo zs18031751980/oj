@@ -36,8 +36,8 @@ const logout = async () => {
     <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85">
       <div class="flex h-16 items-center justify-between px-4">
         <div class="flex items-center gap-3">
-          <button class="admin-icon-button" aria-label="切换侧边栏" @click="toggleSidebar">
-            <Icon :icon="sidebarExpanded ? 'material-symbols:menu-open' : 'material-symbols:menu'" class="h-6 w-6" />
+          <button class="admin-icon-button" :aria-label="sidebarExpanded ? '收起侧边栏' : '展开侧边栏'" @click="toggleSidebar">
+            <Icon :icon="sidebarExpanded ? 'material-symbols:chevron-left' : 'material-symbols:chevron-right'" class="h-6 w-6" />
           </button>
           <h1 class="text-xl font-black">Let Coding 管理后台</h1>
         </div>

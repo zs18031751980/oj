@@ -5,7 +5,7 @@
         class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-white/70 bg-white/88 shadow-2xl shadow-slate-200/60 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-black/30 md:flex"
         :class="sidebarExpanded ? 'w-72' : 'w-24'"
       >
-        <div class="flex h-20 items-center justify-between px-5" :class="sidebarExpanded ? 'gap-3' : 'justify-center'">
+        <div class="flex h-20 items-center justify-between gap-3 px-5">
           <router-link to="/" class="group flex min-w-0 items-center gap-3 overflow-hidden" @click="closeMenu">
             <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white shadow-lg shadow-cyan-500/15 dark:bg-slate-950">
               <img src="/assets/logo.png" alt="Let Coding Logo" class="h-8 w-8 transition-transform group-hover:scale-110" />
@@ -15,26 +15,6 @@
               <div class="-mt-1 text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">Online Judge</div>
             </div>
           </router-link>
-
-          <button
-            v-if="sidebarExpanded"
-            class="sidebar-toggle"
-            aria-label="收起侧边栏"
-            @click="toggleSidebar"
-          >
-            <Icon icon="material-symbols:left-panel-close-rounded" class="h-5 w-5" />
-          </button>
-        </div>
-
-        <div class="px-4 pb-4" :class="sidebarExpanded ? '' : 'flex justify-center'">
-          <button
-            v-if="!sidebarExpanded"
-            class="sidebar-toggle"
-            aria-label="展开侧边栏"
-            @click="toggleSidebar"
-          >
-            <Icon icon="material-symbols:right-panel-open-rounded" class="h-5 w-5" />
-          </button>
         </div>
 
         <nav class="flex-1 space-y-2 px-4 pb-6">
@@ -50,6 +30,18 @@
             <span v-if="sidebarExpanded" class="truncate">{{ item.label }}</span>
           </router-link>
         </nav>
+
+        <div class="border-t border-slate-200 p-4 dark:border-slate-800">
+          <button
+            class="sidebar-toggle w-full"
+            :class="sidebarExpanded ? 'justify-between px-4' : 'justify-center'"
+            :aria-label="sidebarExpanded ? '收起侧边栏' : '展开侧边栏'"
+            @click="toggleSidebar"
+          >
+            <span v-if="sidebarExpanded" class="text-sm font-bold">收起</span>
+            <Icon :icon="sidebarExpanded ? 'material-symbols:chevron-left' : 'material-symbols:chevron-right'" class="h-5 w-5" />
+          </button>
+        </div>
       </aside>
 
       <n-layout>
@@ -236,7 +228,7 @@ onUnmounted(() => {
 }
 
 .sidebar-toggle {
-  @apply grid h-10 w-10 place-items-center rounded-2xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white;
+  @apply flex items-center rounded-2xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white;
 }
 
 .sidebar-link {
