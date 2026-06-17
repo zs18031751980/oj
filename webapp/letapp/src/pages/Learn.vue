@@ -280,7 +280,7 @@ watch(
               {{ cardInfoMap[course.id]?.description || '' }}
             </p>
             <button
-              class="mt-auto pt-2 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+              class="mt-auto pt-6 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
               @click="openResource(course)"
             >
               <Icon icon="material-symbols:arrow-forward" class="h-4 w-4" />
