@@ -243,7 +243,7 @@ onUnmounted(() => {
   @apply flex h-13 items-center gap-3 rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-950 shadow-sm shadow-slate-200/60 transition hover:bg-slate-100 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-white dark:shadow-black/20 dark:hover:bg-slate-800 dark:hover:text-white;
 }
 
-.router-link-active.sidebar-link {
+.router-link-exact-active.sidebar-link {
   @apply border-cyan-300 bg-white shadow-md shadow-cyan-100 dark:border-cyan-500/50 dark:bg-slate-950 dark:shadow-cyan-950/20;
 }
 
@@ -293,14 +293,14 @@ html:not(.dark) .sidebar-link * {
   color: #0f172a !important;
 }
 
-html:not(.dark) .router-link-active.sidebar-link {
+html:not(.dark) .router-link-exact-active.sidebar-link {
   background-color: #e0f2fe !important;
   border-color: #38bdf8 !important;
   color: #0f172a !important;
   box-shadow: 0 12px 24px rgba(14, 165, 233, 0.18) !important;
 }
 
-html:not(.dark) .router-link-active.sidebar-link * {
+html:not(.dark) .router-link-exact-active.sidebar-link * {
   color: #0f172a !important;
 }
 
@@ -321,14 +321,14 @@ html.dark .sidebar-link * {
   color: #f8fafc !important;
 }
 
-html.dark .router-link-active.sidebar-link {
+html.dark .router-link-exact-active.sidebar-link {
   background-color: #082f49 !important;
   border-color: #22d3ee !important;
   color: #ecfeff !important;
   box-shadow: 0 12px 24px rgba(8, 145, 178, 0.24) !important;
 }
 
-html.dark .router-link-active.sidebar-link * {
+html.dark .router-link-exact-active.sidebar-link * {
   color: #ecfeff !important;
 }
 

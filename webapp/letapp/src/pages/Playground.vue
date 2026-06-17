@@ -499,7 +499,7 @@ watch(isFullscreen, (active) => {
               重置
             </button>
             <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
-              <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-4 w-4" />
+              <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:vertical-split' : 'material-symbols:horizontal-split'" class="h-4 w-4" />
               {{ outputPosition === 'bottom' ? '右边' : '底部' }}
             </button>
           </div>
@@ -530,7 +530,7 @@ watch(isFullscreen, (active) => {
                 :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'"
                 @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'"
               >
-                <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:side-navigation' : 'material-symbols:bottom-panel'" class="h-5 w-5" />
+                <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:vertical-split' : 'material-symbols:horizontal-split'" class="h-5 w-5" />
               </button>
               <button v-if="isFullscreen" class="fullscreen-icon-btn" title="菜单" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
@@ -678,6 +678,10 @@ watch(isFullscreen, (active) => {
               </section>
             </div>
             <div class="fullscreen-bottom-bar">
+              <button class="toolbar-button flex-1 sm:flex-none" @click="outputPosition = 'side'">
+                <Icon icon="material-symbols:vertical-split" class="h-4 w-4" />
+                侧边
+              </button>
               <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
                 <Icon icon="material-symbols:refresh" class="h-4 w-4" />
                 重置
@@ -690,6 +694,10 @@ watch(isFullscreen, (active) => {
           </template>
           <template v-else-if="isFullscreen">
             <div class="fullscreen-bottom-bar fullscreen-side-bottom-bar">
+              <button class="toolbar-button flex-1 sm:flex-none" @click="outputPosition = 'bottom'">
+                <Icon icon="material-symbols:horizontal-split" class="h-4 w-4" />
+                底部
+              </button>
               <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
                 <Icon icon="material-symbols:refresh" class="h-4 w-4" />
                 重置

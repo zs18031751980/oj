@@ -49,7 +49,7 @@ const courses: ResourceItem[] = [
   { id: 'todo-project', title: 'Web 项目练习：Todo 应用', duration: '', author: '', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
   { id: 'algorithm-basic', title: '算法', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
   { id: 'vue-components', title: 'Vue 组件化开发', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
-  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', duration: '', author: '', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
+  { id: 'oj-strategy', title: 'agent开发', duration: '', author: '', language: '通用', markdownFile: 'agent开发.md' },
 ];
 
 const selectedTitle = ref('');
