@@ -222,7 +222,7 @@ watch(
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
               <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Learning Hub</p>
-              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">把学习路径、推荐课程和练习入口连成一条线。</h1>
+              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">把路径、资料和练习入口连成一条线。</h1>
             </div>
 
             <button class="inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
@@ -238,7 +238,7 @@ watch(
           <div class="mb-8">
             <h2 class="text-2xl font-black tracking-tight">学习路径建议</h2>
             <p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              如果你还没确定从哪里开始，可以先按下面的路径走。点击按钮会新建页面并进入对应资料。
+              如果你还没确定从哪里开始，可以先按下面的路径走。
             </p>
           </div>
 
@@ -278,22 +278,12 @@ watch(
               <span class="pill cyan">{{ course.language }}</span>
               <span class="pill slate">{{ course.level }}</span>
             </div>
-            <h3 class="mt-5 text-2xl font-black tracking-tight">{{ course.title }}</h3>
+            <h3 class="mt-4 text-2xl font-black tracking-tight">{{ course.title }}</h3>
             <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
               {{ cardInfoMap[course.id]?.description || '' }}
             </p>
-            <div class="mt-6 flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-              <span class="inline-flex items-center gap-1">
-                <Icon icon="material-symbols:person" class="h-4 w-4" />
-                {{ course.author }}
-              </span>
-              <span class="inline-flex items-center gap-1">
-                <Icon icon="material-symbols:schedule" class="h-4 w-4" />
-                {{ course.duration }}
-              </span>
-            </div>
             <button
-              class="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+              class="mt-auto inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
               @click="openResource(course)"
             >
               <Icon icon="material-symbols:arrow-forward" class="h-4 w-4" />
@@ -351,7 +341,7 @@ watch(
 @reference 'tailwindcss';
 
 .course-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
+  @apply flex min-h-[18rem] flex-col rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
 }
 
 .path-card {
