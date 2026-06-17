@@ -46,12 +46,12 @@ const learningPaths: LearningPath[] = [
 ];
 
 const courses: ResourceItem[] = [
-  { id: 'js-guide', title: 'JavaScript 入门指南', category: 'beginner', level: '入门', duration: '12 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
-  { id: 'python-data', title: 'Python 数据分析实战', category: 'advanced', level: '进阶', duration: '15 小时', author: 'Let Coding', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
-  { id: 'todo-project', title: 'Web 项目练习：Todo 应用', category: 'project', level: '入门', duration: '8 小时', author: 'Let Coding', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
-  { id: 'algorithm-basic', title: '算法基础：排序与搜索', category: 'algorithm', level: '入门', duration: '10 小时', author: 'Let Coding', language: 'C++', markdownFile: '算法基础：排序与搜索.md' },
-  { id: 'vue-components', title: 'Vue 组件化开发', category: 'advanced', level: '进阶', duration: '11 小时', author: 'Let Coding', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
-  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', category: 'algorithm', level: '进阶', duration: '6 小时', author: 'Let Coding', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
+  { id: 'js-guide', title: 'JavaScript 入门指南', category: 'beginner', level: '入门', duration: '', author: '', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
+  { id: 'python-data', title: 'Python 数据分析实战', category: 'advanced', level: '进阶', duration: '', author: '', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
+  { id: 'todo-project', title: 'Web 项目练习：Todo 应用', category: 'project', level: '入门', duration: '', author: '', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
+  { id: 'algorithm-basic', title: '算法', category: 'algorithm', level: '入门', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
+  { id: 'vue-components', title: 'Vue 组件化开发', category: 'advanced', level: '进阶', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
+  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', category: 'algorithm', level: '进阶', duration: '', author: '', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
 ];
 
 const selectedTitle = ref('');
