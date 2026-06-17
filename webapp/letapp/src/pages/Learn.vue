@@ -7,8 +7,6 @@ import MarkdownComponent from '../components/MarkdownComponent.vue';
 interface ResourceItem {
   id: string;
   title: string;
-  category: 'beginner' | 'advanced' | 'project' | 'algorithm';
-  level: string;
   duration: string;
   author: string;
   language: string;
@@ -46,12 +44,12 @@ const learningPaths: LearningPath[] = [
 ];
 
 const courses: ResourceItem[] = [
-  { id: 'js-guide', title: 'JavaScript 入门指南', category: 'beginner', level: '入门', duration: '', author: '', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
-  { id: 'python-data', title: 'Python 数据分析实战', category: 'advanced', level: '进阶', duration: '', author: '', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
-  { id: 'todo-project', title: 'Web 项目练习：Todo 应用', category: 'project', level: '入门', duration: '', author: '', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
-  { id: 'algorithm-basic', title: '算法', category: 'algorithm', level: '入门', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
-  { id: 'vue-components', title: 'Vue 组件化开发', category: 'advanced', level: '进阶', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
-  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', category: 'algorithm', level: '进阶', duration: '', author: '', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
+  { id: 'js-guide', title: 'JavaScript 入门指南', duration: '', author: '', language: 'JavaScript', markdownFile: 'JavaScript 入门指南.md' },
+  { id: 'python-data', title: 'Python 数据分析实战', duration: '', author: '', language: 'Python', markdownFile: 'Python 数据分析实战.md' },
+  { id: 'todo-project', title: 'Web 项目练习：Todo 应用', duration: '', author: '', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
+  { id: 'algorithm-basic', title: '算法', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
+  { id: 'vue-components', title: 'Vue 组件化开发', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
+  { id: 'oj-strategy', title: 'OJ 刷题策略：从输入输出到调试', duration: '', author: '', language: '通用', markdownFile: 'OJ 刷题策略：从输入输出到调试.md' },
 ];
 
 const selectedTitle = ref('');
@@ -276,7 +274,6 @@ watch(
           <article v-for="course in filteredCourses" :key="course.id" class="course-card">
             <div class="flex items-center gap-2">
               <span class="pill cyan">{{ course.language }}</span>
-              <span class="pill slate">{{ course.level }}</span>
             </div>
             <h3 class="mt-4 text-2xl font-black tracking-tight">{{ course.title }}</h3>
             <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
