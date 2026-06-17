@@ -161,7 +161,7 @@ const features = [
               点击右侧按钮，开始代码编写！
             </h2>
             <p class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-              学习资源区域目前正在补充中……
+              学习资源目前正在补充中……
             </p>
           </div>
 
