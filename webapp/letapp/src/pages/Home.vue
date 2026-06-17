@@ -40,7 +40,7 @@ const features = [
   {
     icon: 'material-symbols:verified-user',
     title: '统一认证接入',
-    description: '保留社团登录体验，后续扩展个人化功能和学习记录也更顺手。',
+    description: '使用iOSClub社团账号进行登录，方便快捷',
   },
 ];
 
@@ -158,10 +158,10 @@ const features = [
           <div class="max-w-2xl">
             <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Ready To Start</p>
             <h2 class="mt-3 text-3xl font-black tracking-tight sm:text-4xl">
-              从打开页面到运行第一段代码，只差一次点击。
+              点击右侧按钮，开始代码编写！
             </h2>
             <p class="mt-4 text-base leading-8 text-slate-600 dark:text-slate-300">
-              想立刻写代码，就直接进入编辑器；想先看路径和资料，就去学习资源页按路线推进。两个入口现在是连通的，切换起来会轻松很多。
+              学习资源区域目前正在补充中……
             </p>
           </div>
 
