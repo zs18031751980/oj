@@ -220,12 +220,12 @@ watch(
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
               <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Learning Hub</p>
-              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">把路径、资料和练习入口连成一条线。</h1>
+              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">路径、资料、练习连成一条线。</h1>
             </div>
 
             <button class="inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
               <Icon icon="material-symbols:code" class="h-5 w-5" />
-              先去写点代码
+              去编辑器练习
             </button>
           </div>
         </div>
@@ -236,7 +236,7 @@ watch(
           <div class="mb-8">
             <h2 class="text-2xl font-black tracking-tight">学习路径建议</h2>
             <p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              如果你还没确定从哪里开始，可以先按下面的路径走。
+              如果还没确定从哪里开始，可以先按下面的路径走。
             </p>
           </div>
 

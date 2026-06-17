@@ -152,7 +152,7 @@ const toggleFullscreen = async () => {
   if (isFullscreen.value) {
     fullscreenExitArmed.value = true;
 
-    if (document.fullscreenElement) {
+    if (document.fullscreenElement && !isTouchFullscreenQuirkDevice()) {
       try {
         await document.exitFullscreen();
         return;
@@ -169,7 +169,7 @@ const toggleFullscreen = async () => {
   isFullscreen.value = true;
   fullscreenExitArmed.value = false;
 
-  if (editorPanelRef.value?.requestFullscreen) {
+  if (editorPanelRef.value?.requestFullscreen && !isTouchFullscreenQuirkDevice()) {
     try {
       await editorPanelRef.value.requestFullscreen();
       return;
@@ -180,11 +180,11 @@ const toggleFullscreen = async () => {
 };
 
 const handleFullscreenChange = () => {
-  const active = !!document.fullscreenElement;
-
-  if (!active && isTouchFullscreenQuirkDevice() && isFullscreen.value && !fullscreenExitArmed.value) {
+  if (isTouchFullscreenQuirkDevice()) {
     return;
   }
+
+  const active = !!document.fullscreenElement;
 
   isFullscreen.value = active;
   if (!active) {
@@ -1093,6 +1093,7 @@ watch(isFullscreen, (active) => {
   border-radius: 0 !important;
   border: none !important;
   box-shadow: none !important;
+  touch-action: manipulation;
 }
 
 .fullscreen-mode .panel-header {
