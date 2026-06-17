@@ -246,12 +246,12 @@ watch(
               :key="path.title"
               class="path-card"
             >
-              <h3 class="text-2xl font-black tracking-tight">{{ path.title }}</h3>
-              <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+              <h3 class="mt-0 text-2xl font-black tracking-tight">{{ path.title }}</h3>
+              <p class="mt-5 text-sm leading-7 text-slate-600 dark:text-slate-300">
                 {{ cardInfoMap[path.id]?.description || '' }}
               </p>
               <button
-                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                class="mt-auto pt-2 inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                 @click="openResource(path)"
               >
                 <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
@@ -275,12 +275,12 @@ watch(
             <div class="flex items-center gap-2">
               <span class="pill cyan">{{ course.language }}</span>
             </div>
-            <h3 class="mt-4 text-2xl font-black tracking-tight">{{ course.title }}</h3>
-            <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
+            <h3 class="mt-5 text-2xl font-black tracking-tight">{{ course.title }}</h3>
+            <p class="mt-5 text-sm leading-7 text-slate-600 dark:text-slate-300">
               {{ cardInfoMap[course.id]?.description || '' }}
             </p>
             <button
-              class="mt-auto inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+              class="mt-auto pt-2 inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
               @click="openResource(course)"
             >
               <Icon icon="material-symbols:arrow-forward" class="h-4 w-4" />
@@ -338,11 +338,11 @@ watch(
 @reference 'tailwindcss';
 
 .course-card {
-  @apply flex min-h-[18rem] flex-col rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
+  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
 }
 
 .path-card {
-  @apply flex h-full flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
+  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-8 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
 }
 
 .pill {
