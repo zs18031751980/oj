@@ -210,7 +210,7 @@ const bottomPanelSpacer = computed(() => {
   }
 
   if (viewportWidth.value < 900) {
-    return '30rem';
+    return '38rem';
   }
 
   return '23rem';
@@ -222,11 +222,11 @@ const floatingButtonBottom = computed(() => {
   }
 
   if (viewportWidth.value < 768) {
-    return '40rem';
+    return '41rem';
   }
 
   if (viewportWidth.value < 900) {
-    return '31rem';
+    return '39rem';
   }
 
   return '24rem';
@@ -892,7 +892,7 @@ watch(isFullscreen, (active) => {
 .floating-button-group {
   position: fixed;
   right: 5rem;
-  z-index: 50;
+  z-index: 9999;
   display: flex;
   gap: 0.5rem;
 }
@@ -1079,6 +1079,41 @@ watch(isFullscreen, (active) => {
 
   .bottom-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .bottom-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: 50vh;
+    min-height: 0;
+  }
+
+  .bottom-panels .surface-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: 50vh;
+    min-height: 0;
+  }
+
+  .bottom-panels .collapse-body {
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .bottom-panels .panel-textarea,
+  .bottom-panels .output-box {
+    height: 100%;
+    max-height: none;
+  }
+
+  .floating-button-group {
+    right: 1.5rem;
+  }
+
+  .floating-collapse-button {
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
   }
 }
 
