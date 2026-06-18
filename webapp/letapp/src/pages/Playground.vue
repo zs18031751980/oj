@@ -135,8 +135,7 @@ const isTouchFullscreenQuirkDevice = () => {
   }
 
   const userAgent = navigator.userAgent;
-  const platform = navigator.platform;
-  return /iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return /iPhone|iPod/.test(userAgent);
 };
 
 const syncPageScrollLock = (locked: boolean) => {
