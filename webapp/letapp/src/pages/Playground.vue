@@ -151,9 +151,14 @@ const toggleFullscreen = async () => {
   if (isFullscreen.value) {
     fullscreenExitArmed.value = true;
 
-    if (document.fullscreenElement && !isTouchFullscreenQuirkDevice()) {
+    const activeEl = document.fullscreenElement || (document as any).webkitFullscreenElement;
+    if (activeEl && !isTouchFullscreenQuirkDevice()) {
       try {
-        await document.exitFullscreen();
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        }
         return;
       } catch {
         // fall through to local state reset
@@ -168,9 +173,16 @@ const toggleFullscreen = async () => {
   isFullscreen.value = true;
   fullscreenExitArmed.value = false;
 
-  if (editorPanelRef.value?.requestFullscreen && !isTouchFullscreenQuirkDevice()) {
+  if (isTouchFullscreenQuirkDevice()) {
+    return;
+  }
+
+  const docEl = document.documentElement as any;
+  const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen;
+
+  if (requestFS) {
     try {
-      await editorPanelRef.value.requestFullscreen();
+      await requestFS.call(docEl);
       return;
     } catch {
       // fall back to in-app fullscreen mode
@@ -183,7 +195,7 @@ const handleFullscreenChange = () => {
     return;
   }
 
-  const active = !!document.fullscreenElement;
+  const active = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
 
   isFullscreen.value = active;
   if (!active) {
@@ -427,6 +439,7 @@ onMounted(() => {
   window.addEventListener('resize', updateViewportWidth);
   window.addEventListener('click', closeLanguageMenuOnOutsideClick);
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 });
 
 onUnmounted(() => {
@@ -435,6 +448,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateViewportWidth);
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
 });
 
 watch(isFullscreen, (active) => {
