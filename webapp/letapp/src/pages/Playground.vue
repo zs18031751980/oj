@@ -147,6 +147,14 @@ const syncPageScrollLock = (locked: boolean) => {
   document.body.style.overflow = locked ? 'hidden' : '';
 };
 
+const preventFullscreenExitSwipe = (e: TouchEvent) => {
+  const target = e.target as HTMLElement | null;
+  if (!target) return;
+  const scrollable = target.closest('textarea, pre, .monaco-editor, .output-box');
+  if (scrollable) return;
+  e.preventDefault();
+};
+
 const toggleFullscreen = async () => {
   if (isFullscreen.value) {
     fullscreenExitArmed.value = true;
@@ -449,12 +457,16 @@ onUnmounted(() => {
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+  document.removeEventListener('touchmove', preventFullscreenExitSwipe);
 });
 
 watch(isFullscreen, (active) => {
   syncPageScrollLock(active);
   if (!active) {
     isFullscreenMenuOpen.value = false;
+    document.removeEventListener('touchmove', preventFullscreenExitSwipe);
+  } else {
+    document.addEventListener('touchmove', preventFullscreenExitSwipe, { passive: false });
   }
 });
 </script>
@@ -1142,6 +1154,7 @@ watch(isFullscreen, (active) => {
   border: none !important;
   box-shadow: none !important;
   touch-action: manipulation;
+  overscroll-behavior: none;
 }
 
 .fullscreen-mode .panel-header {
