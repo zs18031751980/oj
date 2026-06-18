@@ -136,7 +136,7 @@ const isTouchFullscreenQuirkDevice = () => {
 
   const userAgent = navigator.userAgent;
   const platform = navigator.platform;
-  return /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return /iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 };
 
 const syncPageScrollLock = (locked: boolean) => {
@@ -1213,10 +1213,31 @@ watch(isFullscreen, (active) => {
 .fullscreen-panels {
   flex-shrink: 0;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  height: 33.33vh;
+  min-height: 0;
   gap: 0.75rem;
   padding: 0.75rem;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
+}
+
+.fullscreen-panels .surface-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fullscreen-panels .collapse-body {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.fullscreen-panels .panel-textarea,
+.fullscreen-panels .output-box {
+  height: 100%;
+  max-height: none;
 }
 
 .fullscreen-panel-item {
