@@ -81,7 +81,7 @@ const languages: LanguageOption[] = [
   { name: 'Kotlin', value: 'kotlin', prism: 'kotlin', icon: 'vscode-icons:file-type-kotlin', color: '#7f52ff' },
 ];
 
-const defaultLanguage = languages[0]!;
+const defaultLanguage = languages.find((lang) => lang.value === 'cpp')!;
 const fallbackFileNames: Record<string, string> = {
   javascript: 'script',
   python: 'script',
@@ -438,6 +438,13 @@ onMounted(() => {
     selectedLanguage.value = languageParam;
     previousLanguage.value = languageParam;
     code.value = getLanguagePreset(languageParam) || code.value;
+  } else {
+    const savedLanguage = localStorage.getItem('playground_language');
+    if (savedLanguage && languages.some((lang) => lang.value === savedLanguage)) {
+      selectedLanguage.value = savedLanguage;
+      previousLanguage.value = savedLanguage;
+      code.value = getLanguagePreset(savedLanguage) || code.value;
+    }
   }
 
   updateExportFileName(selectedLanguage.value);
@@ -458,6 +465,10 @@ onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
   document.removeEventListener('touchmove', preventFullscreenExitSwipe);
+});
+
+watch(selectedLanguage, (lang) => {
+  localStorage.setItem('playground_language', lang);
 });
 
 watch(isFullscreen, (active) => {
