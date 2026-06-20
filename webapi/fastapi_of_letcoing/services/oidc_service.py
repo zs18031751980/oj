@@ -59,8 +59,17 @@ class OIDCService(Injectable, IOIDCService):
         self._config_service = config_service
         self._logger_service = logger_service
         self._oauth: Optional[OAuth] = None
-        # 元数据获取超时时间（最少 5 秒）
         self._metadata_timeout = max(int(self._config_service.get_timeout()), 5)
+        self._metadata_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+        self._normalized_configs_cache: Optional[Dict[str, Dict[str, Any]]] = None
+        self._http_session: Optional[requests.Session] = None
+
+    def _get_http_session(self) -> requests.Session:
+        """获取或创建复用的 requests Session，复用 TCP 连接"""
+        if self._http_session is None:
+            self._http_session = requests.Session()
+            self._http_session.headers.update({'Accept': 'application/json'})
+        return self._http_session
 
     def resolve_provider_name(self, provider: str) -> Optional[str]:
         """
@@ -161,7 +170,7 @@ class OIDCService(Injectable, IOIDCService):
 
     def _normalize_oidc_provider_configs(self) -> Dict[str, Dict[str, Any]]:
         """
-        将 OIDC_PROVIDERS 配置标准化为字典格式
+        将 OIDC_PROVIDERS 配置标准化为字典格式（结果缓存，避免重复处理）
 
         支持两种输入格式：
         - 字典格式：{"provider_name": {...}}
@@ -170,8 +179,12 @@ class OIDCService(Injectable, IOIDCService):
         Returns:
             标准化后的字典格式配置
         """
+        if self._normalized_configs_cache is not None:
+            return self._normalized_configs_cache
+
         raw_configs = self._config_service.get_config('OIDC_PROVIDERS', {})
         if isinstance(raw_configs, dict):
+            self._normalized_configs_cache = raw_configs
             return raw_configs
 
         if isinstance(raw_configs, list):
@@ -179,8 +192,10 @@ class OIDCService(Injectable, IOIDCService):
             for item in raw_configs:
                 if isinstance(item, dict) and item.get('name'):
                     normalized[item['name']] = item
+            self._normalized_configs_cache = normalized
             return normalized
 
+        self._normalized_configs_cache = {}
         return {}
 
     def _register_custom_providers(self) -> None:
@@ -245,7 +260,7 @@ class OIDCService(Injectable, IOIDCService):
 
     def _fetch_server_metadata(self, server_metadata_url: Optional[str]) -> Optional[Dict[str, Any]]:
         """
-        预取 OIDC 提供商的服务元数据
+        预取 OIDC 提供商的服务元数据（结果缓存，避免重复请求）
 
         从 OIDC 发现端点（.well-known/openid-configuration）获取提供商的服务信息，
         包括授权端点、令牌端点、用户信息端点等。
@@ -259,14 +274,18 @@ class OIDCService(Injectable, IOIDCService):
         if not server_metadata_url:
             return None
 
+        if server_metadata_url in self._metadata_cache:
+            return self._metadata_cache[server_metadata_url]
+
         try:
-            response = requests.get(server_metadata_url, timeout=self._metadata_timeout)
+            response = self._get_http_session().get(server_metadata_url, timeout=self._metadata_timeout)
             response.raise_for_status()
             metadata = response.json()
             if not isinstance(metadata, dict):
                 self._logger_service.warning(
                     f'OIDC metadata is not a JSON object: {server_metadata_url}'
                 )
+                self._metadata_cache[server_metadata_url] = None
                 return None
 
             self._logger_service.info(
@@ -274,11 +293,13 @@ class OIDCService(Injectable, IOIDCService):
                 f'url={server_metadata_url}, '
                 f'keys={",".join(sorted(metadata.keys()))}'
             )
+            self._metadata_cache[server_metadata_url] = metadata
             return metadata
         except Exception as ex:
             self._logger_service.warning(
                 f'Failed to prefetch OIDC metadata, will fall back to runtime fetch: {server_metadata_url} ({str(ex)})'
             )
+            self._metadata_cache[server_metadata_url] = None
             return None
 
     # ============================================================

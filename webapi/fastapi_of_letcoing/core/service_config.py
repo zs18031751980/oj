@@ -55,9 +55,9 @@ def setup_services(app_config: dict) -> None:
         # JWT 令牌服务：生成、验证和撤销令牌
         container.register_singleton(IJWTService, JWTService)
 
-        # ---------- 作用域服务 ----------
-        # 代码执行服务：每次请求独立实例，避免状态污染
-        container.register_scoped(ICodeExecutionService, GlotService)
+        # ---------- 单例服务 ----------
+        # 代码执行服务：单例以复用 aiohttp 连接池，减少 TCP 握手开销
+        container.register_singleton(ICodeExecutionService, GlotService)
 
         # ---------- 数据库服务（单例，使用工厂延迟初始化） ----------
         # DatabaseService 和 UserService 依赖 ConfigService，使用工厂延迟创建

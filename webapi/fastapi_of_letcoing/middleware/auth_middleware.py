@@ -122,26 +122,14 @@ class RateLimitMiddleware:
                         redis_service = inject(IRedisService)
                         user_id = user_info.get('id')
                         key = f'rate_limit:{user_id}'
-                        current_count = redis_service.get(key)
 
-                        if current_count is None:
-                            # 首次请求：初始化计数器并设置过期时间
-                            redis_service.set(key, 1, window_seconds)
-                        else:
-                            current_count = int(current_count)
-                            if current_count >= max_requests:
-                                return jsonify({
-                                    'error': '请求过于频繁，请稍后再试',
-                                    'limit': max_requests,
-                                    'window': window_seconds,
-                                }), 429
-
-                            # 递增计数器，并确保过期时间存在
-                            next_count = redis_service.increment(key)
-                            if next_count is not None and redis_service.ttl(key) < 0:
-                                redis_service.expire(key, window_seconds)
+                        if not redis_service.rate_limit_check(key, max_requests, window_seconds):
+                            return jsonify({
+                                'error': '请求过于频繁，请稍后再试',
+                                'limit': max_requests,
+                                'window': window_seconds,
+                            }), 429
                     except Exception:
-                        # Redis 服务不可用时不应阻塞代码执行
                         pass
 
                 return f(*args, **kwargs)

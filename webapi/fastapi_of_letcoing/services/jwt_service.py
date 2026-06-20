@@ -254,28 +254,28 @@ class JWTService(Injectable, IJWTService):
             return None
 
     def _cache_refresh_token(self, user_id: str, refresh_token: str) -> None:
-        """将刷新令牌缓存到 Redis，用于后续验证"""
+        """将刷新令牌缓存到 Redis，用于后续验证（使用原始字符串存储，避免 JSON 序列化开销）"""
         try:
             key = f"refresh_token:{user_id}"
-            self._redis_service.set(key, refresh_token, self._refresh_token_expire)
+            self._redis_service.set_raw(key, refresh_token, self._refresh_token_expire)
         except Exception as ex:
             self._logger_service.warning("缓存刷新令牌失败", ex)
 
     def _is_valid_refresh_token(self, user_id: str, refresh_token: str) -> bool:
-        """检查客户端提供的刷新令牌是否与 Redis 中缓存的一致"""
+        """检查客户端提供的刷新令牌是否与 Redis 中缓存的一致（使用原始字符串读取）"""
         try:
             key = f"refresh_token:{user_id}"
-            cached_token = self._redis_service.get(key)
+            cached_token = self._redis_service.get_raw(key)
             return cached_token == refresh_token
         except Exception as ex:
             self._logger_service.warning("检查刷新令牌失败", ex)
             return False
 
     def _blacklist_token(self, token: str, expire_time: int) -> None:
-        """将令牌加入 Redis 黑名单，使其在剩余有效期内失效"""
+        """将令牌加入 Redis 黑名单，使其在剩余有效期内失效（使用原始字符串存储）"""
         try:
             key = f"blacklist:{token}"
-            self._redis_service.set(key, "1", expire_time)
+            self._redis_service.set_raw(key, "1", expire_time)
         except Exception as ex:
             self._logger_service.warning("将令牌加入黑名单失败", ex)
 

@@ -208,6 +208,90 @@ class RedisService(IRedisService, Injectable):
             self._logger_service.error(f"Redis 获取TTL失败: {key}", ex)
             return -2
 
+    def set_raw(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
+        """
+        设置键为原始字符串值（不进行 JSON 序列化）
+
+        用于存储简单字符串值（黑名单标记、刷新令牌等），避免 JSON 序列化开销。
+
+        Args:
+            key: 键名
+            value: 值（自动转换为字符串）
+            ttl: 过期时间（秒），不设置则持久化存储
+        """
+        if not self.is_connected():
+            return False
+
+        try:
+            str_value = str(value)
+            if ttl:
+                return self._client.setex(key, ttl, str_value)
+            else:
+                return self._client.set(key, str_value)
+        except Exception as ex:
+            self._logger_service.error(f"Redis 设置原始值失败: {key}", ex)
+            return False
+
+    def get_raw(self, key: str) -> Optional[str]:
+        """
+        获取键对应的原始字符串值（不进行 JSON 反序列化）
+
+        用于计数器和简单字符串值的读取，避免 JSON 解析开销。
+        """
+        if not self.is_connected():
+            return None
+
+        try:
+            return self._client.get(key)
+        except Exception as ex:
+            self._logger_service.error(f"Redis 获取原始值失败: {key}", ex)
+            return None
+
+    def get_int(self, key: str, default: int = 0) -> int:
+        """
+        获取键对应的整数值
+
+        用于计数器读取，避免 JSON 解析开销。
+        """
+        if not self.is_connected():
+            return default
+
+        try:
+            value = self._client.get(key)
+            return int(value) if value is not None else default
+        except (ValueError, Exception) as ex:
+            self._logger_service.error(f"Redis 获取整数值失败: {key}", ex)
+            return default
+
+    def rate_limit_check(self, key: str, max_requests: int, window_seconds: int) -> bool:
+        """
+        原子化频率限制检查
+
+        使用 INCR + EXPIRE 组合实现高效且原子化的计数和过期设置。
+        在单个原子操作中递增计数器，并在首次请求时设置过期时间。
+
+        Returns:
+            True 表示允许请求，False 表示超出限制
+        """
+        if not self.is_connected():
+            return True
+
+        try:
+            pipe = self._client.pipeline()
+            pipe.incr(key)
+            pipe.ttl(key)
+            results = pipe.execute()
+            count = int(results[0])
+            ttl_val = int(results[1])
+
+            if ttl_val < 0:
+                self._client.expire(key, window_seconds)
+
+            return count <= max_requests
+        except Exception as ex:
+            self._logger_service.error(f"Redis 频率限制检查失败: {key}", ex)
+            return True
+
     # ============================================================
     # 计数器操作（原子操作）
     # ============================================================

@@ -18,6 +18,8 @@ from pathlib import Path  # 用于跨平台路径操作
 from dotenv import find_dotenv, load_dotenv  # 用于加载 .env 环境变量文件
 from flask import Flask, request              # Flask 核心框架
 from flask_restx import Api                   # Flask-RESTX 扩展，用于构建 RESTful API 和 Swagger 文档
+import gzip
+import io
 from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
 
 # 导入认证和代码执行的 API 命名空间
@@ -226,7 +228,8 @@ def index():
 @app.get('/healthz')
 def healthcheck():
     """健康检查端点，用于监控和负载均衡器的心跳检测"""
-    return {'status': 'ok'}
+    response = {'status': 'ok'}
+    return response
 
 
 # ============================================================
@@ -244,10 +247,27 @@ def add_cors_headers(response):
     allowed_origins = app.config.get('ALLOWED_ORIGINS', [])
     if origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Vary'] = 'Origin'
+        response.headers['Vary'] = 'Origin, Accept-Encoding'
         response.headers['Access-Control-Allow-Credentials'] = 'true'   # 允许携带 Cookie
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+
+    accept_encoding = request.headers.get('Accept-Encoding', '')
+    content_type = response.headers.get('Content-Type', '')
+    if ('gzip' in accept_encoding
+            and response.status_code == 200
+            and response.content_length is not None
+            and response.content_length > 500
+            and 'application/json' in content_type
+            and 'Content-Encoding' not in response.headers):
+        gzip_buffer = io.BytesIO()
+        with gzip.GzipFile(fileobj=gzip_buffer, mode='wb', compresslevel=6) as gzip_file:
+            gzip_file.write(response.get_data())
+        compressed_data = gzip_buffer.getvalue()
+        response.set_data(compressed_data)
+        response.headers['Content-Encoding'] = 'gzip'
+        response.headers['Content-Length'] = str(len(compressed_data))
+
     return response
 
 

@@ -52,7 +52,28 @@ class GlotService(ICodeExecutionService, Injectable):
         """
         self._config_service = config_service
         self._logger_service = logger_service
-        self.timeout = aiohttp.ClientTimeout(total=config_service.get_timeout())
+        self._timeout = aiohttp.ClientTimeout(total=config_service.get_timeout())
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    def _get_session(self) -> aiohttp.ClientSession:
+        """获取或创建复用的 aiohttp 会话，避免每次请求重建 TCP 连接"""
+        if self._session is None or self._session.closed:
+            connector = aiohttp.TCPConnector(
+                limit=10,
+                ttl_dns_cache=300,
+                enable_cleanup_closed=True,
+            )
+            self._session = aiohttp.ClientSession(
+                timeout=self._timeout,
+                connector=connector,
+            )
+        return self._session
+
+    async def close(self):
+        """关闭 aiohttp 会话，释放连接资源"""
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
 
     async def execute_code(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
         """
@@ -149,29 +170,28 @@ class GlotService(ICodeExecutionService, Injectable):
         }
 
         try:
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.post(url, json=data.to_dict(), headers=headers) as response:
-                    resp_text = await response.text()
+            async with self._get_session().post(url, json=data.to_dict(), headers=headers) as response:
+                resp_text = await response.text()
 
-                    if not response.ok:
-                        return {
-                            "ok": False,
-                            "stdout": "",
-                            "stderr": f"请求失败: HTTP {response.status}",
-                        }
-
-                    resp_json = json.loads(resp_text)
-                    result = RunResult(
-                        stdout=resp_json.get("stdout", ""),
-                        stderr=resp_json.get("stderr", ""),
-                    )
-
-                    # Glot.io 约定：stderr 为空表示执行成功
+                if not response.ok:
                     return {
-                        "ok": result.stderr == "",
-                        "stdout": result.stdout,
-                        "stderr": result.stderr,
+                        "ok": False,
+                        "stdout": "",
+                        "stderr": f"请求失败: HTTP {response.status}",
                     }
+
+                resp_json = json.loads(resp_text)
+                result = RunResult(
+                    stdout=resp_json.get("stdout", ""),
+                    stderr=resp_json.get("stderr", ""),
+                )
+
+                # Glot.io 约定：stderr 为空表示执行成功
+                return {
+                    "ok": result.stderr == "",
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                }
         except asyncio.TimeoutError:
             return {"ok": False, "stdout": "", "stderr": "请求超时"}
         except aiohttp.ClientError as ex:
