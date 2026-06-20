@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import MarkdownComponent from '../components/MarkdownComponent.vue';
 
-interface Announcement {
-  id: string;
+interface ManifestItem {
+  file: string;
   title: string;
-  markdownFile: string;
   updatedAt: string;
 }
 
@@ -18,67 +17,52 @@ interface MarkdownContent {
 const route = useRoute();
 const router = useRouter();
 
-const announcements = ref<Announcement[]>([]);
-const selectedTitle = ref('');
-const selectedResource = ref<MarkdownContent | undefined>();
+const manifest = ref<ManifestItem[]>([]);
+const selectedContent = ref<MarkdownContent | undefined>();
 const isLoadingDoc = ref(false);
 const docError = ref('');
 
-const sortedAnnouncements = computed(() => {
-  return [...announcements.value].sort(
+const sortedAnnouncements = computed(() =>
+  [...manifest.value].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
-});
+  )
+);
 
-const currentDocId = computed(() => {
+const currentFile = computed(() => {
   const raw = route.query.doc;
   return Array.isArray(raw) ? raw[0] || '' : String(raw || '');
 });
 
-const isDetailMode = computed(() => Boolean(currentDocId.value));
+const isDetailMode = computed(() => Boolean(currentFile.value));
 
 const formatTime = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
   });
 };
 
-const openAnnouncement = (item: Announcement) => {
-  const resolved = router.resolve({ path: '/announcements', query: { doc: item.id } });
-  window.open(resolved.href, '_blank', 'noopener,noreferrer');
+const openAnnouncement = (item: ManifestItem) => {
+  const href = router.resolve({ path: '/announcements', query: { doc: item.file } }).href;
+  window.open(href, '_blank', 'noopener,noreferrer');
 };
 
 const goBackToList = async () => {
   await router.push('/announcements');
 };
 
-const loadMarkdown = async (id: string) => {
-  const item = announcements.value.find((a) => a.id === id);
-  if (!item) {
-    selectedResource.value = undefined;
-    docError.value = '未找到对应的公告。';
-    return;
-  }
-
+const loadMarkdown = async (file: string) => {
   isLoadingDoc.value = true;
   docError.value = '';
-  selectedTitle.value = item.title;
 
   try {
-    const response = await fetch(`/announcements/${encodeURIComponent(item.markdownFile)}`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const markdown = await response.text();
-    selectedResource.value = { content: markdown };
+    const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    selectedContent.value = { content: await res.text() };
   } catch (error) {
-    selectedResource.value = undefined;
-    docError.value = `加载公告失败：${error instanceof Error ? error.message : '未知错误'}`;
+    selectedContent.value = undefined;
+    docError.value = `加载失败：${error instanceof Error ? error.message : '未知错误'}`;
   } finally {
     isLoadingDoc.value = false;
   }
@@ -86,28 +70,24 @@ const loadMarkdown = async (id: string) => {
 
 onMounted(async () => {
   try {
-    const res = await fetch('/announcements/data.json');
-    announcements.value = await res.json();
-    if (currentDocId.value) {
-      await loadMarkdown(currentDocId.value);
+    const res = await fetch('/announcements/manifest.json');
+    manifest.value = await res.json();
+    if (currentFile.value) {
+      await loadMarkdown(currentFile.value);
     }
   } catch (e) {
-    console.error('Failed to load announcements:', e);
+    console.error('Failed to load manifest:', e);
   }
 });
 
-watch(
-  () => currentDocId.value,
-  async (id) => {
-    if (!id) {
-      selectedTitle.value = '';
-      selectedResource.value = undefined;
-      docError.value = '';
-      return;
-    }
-    await loadMarkdown(id);
-  },
-);
+watch(currentFile, async (file) => {
+  if (!file) {
+    selectedContent.value = undefined;
+    docError.value = '';
+    return;
+  }
+  await loadMarkdown(file);
+});
 </script>
 
 <template>
@@ -129,7 +109,7 @@ watch(
           <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <button
               v-for="item in sortedAnnouncements"
-              :key="item.id"
+              :key="item.file"
               type="button"
               class="announcement-card group"
               @click="openAnnouncement(item)"
@@ -166,7 +146,7 @@ watch(
           <div v-else-if="docError" class="flex min-h-[320px] items-center justify-center p-8 text-center text-rose-500">
             {{ docError }}
           </div>
-          <MarkdownComponent v-else :content="selectedResource" :show-nav="false" :show-heading-links="false" />
+          <MarkdownComponent v-else :content="selectedContent" :show-nav="false" :show-heading-links="false" />
         </div>
       </div>
     </template>
