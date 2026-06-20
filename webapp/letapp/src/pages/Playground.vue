@@ -116,6 +116,7 @@ const selectedLanguage = ref<string>(defaultLanguage.value);
 const previousLanguage = ref<string>(defaultLanguage.value);
 const isLanguageMenuOpen = ref(false);
 const code = ref<string>(getLanguagePreset(defaultLanguage.value));
+const languageCodeMap = ref<Record<string, string>>({});
 const stdin = ref<string>('');
 const output = ref<string>('');
 const outputKind = ref<'info' | 'error'>('info');
@@ -359,9 +360,10 @@ const updateExportFileName = (language: string) => {
 
 const updateLanguage = (language: string) => {
   previousLanguage.value = selectedLanguage.value;
+  languageCodeMap.value[selectedLanguage.value] = code.value;
   selectedLanguage.value = language;
   isLanguageMenuOpen.value = false;
-  code.value = getLanguagePreset(language);
+  code.value = languageCodeMap.value[language] ?? getLanguagePreset(language);
   updateExportFileName(language);
 };
 
@@ -381,6 +383,7 @@ const saveCode = () => {
 };
 
 const resetCode = () => {
+  delete languageCodeMap.value[selectedLanguage.value];
   code.value = getLanguagePreset(selectedLanguage.value);
   stdin.value = '';
   output.value = '';
@@ -417,6 +420,7 @@ const importCode = () => {
 
       const detectedLanguage = extToLanguage[ext];
       if (detectedLanguage) {
+        languageCodeMap.value[detectedLanguage] = code.value;
         selectedLanguage.value = detectedLanguage;
         previousLanguage.value = detectedLanguage;
       }
