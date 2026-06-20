@@ -37,12 +37,6 @@ const currentDocId = computed(() => {
 
 const isDetailMode = computed(() => Boolean(currentDocId.value));
 
-const currentAnnouncement = computed(() =>
-  currentDocId.value
-    ? announcements.value.find((item) => item.id === currentDocId.value)
-    : undefined
-);
-
 const formatTime = (dateStr: string) => {
   const date = new Date(dateStr);
   return date.toLocaleDateString('zh-CN', {
