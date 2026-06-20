@@ -1,0 +1,52 @@
+[
+  {
+    "title": "Let Coding 平台正式上线",
+    "url": "https://example.com/announcements/launch",
+    "updatedAt": "2026-06-20T10:00:00.000Z"
+  },
+  {
+    "title": "新增 Python 3.12 运行环境支持",
+    "url": "https://example.com/announcements/python312",
+    "updatedAt": "2026-06-18T14:30:00.000Z"
+  },
+  {
+    "title": "2026 夏季编程挑战赛报名开启",
+    "url": "https://example.com/announcements/summer-challenge",
+    "updatedAt": "2026-06-15T09:00:00.000Z"
+  },
+  {
+    "title": "系统维护通知 - 6月10日 02:00-04:00",
+    "url": "https://example.com/announcements/maintenance",
+    "updatedAt": "2026-06-08T16:00:00.000Z"
+  },
+  {
+    "title": "学习资源模块新增数据结构专题",
+    "url": "https://example.com/announcements/ds-resources",
+    "updatedAt": "2026-06-05T11:20:00.000Z"
+  },
+  {
+    "title": "代码编辑器支持更多主题配色",
+    "url": "https://example.com/announcements/editor-themes",
+    "updatedAt": "2026-06-01T08:45:00.000Z"
+  },
+  {
+    "title": "用户反馈功能已上线，欢迎提出建议",
+    "url": "https://example.com/announcements/feedback",
+    "updatedAt": "2026-05-28T13:00:00.000Z"
+  },
+  {
+    "title": "修复代码执行超时问题",
+    "url": "https://example.com/announcements/timeout-fix",
+    "updatedAt": "2026-05-25T10:30:00.000Z"
+  },
+  {
+    "title": "集成 GitHub OAuth 登录",
+    "url": "https://example.com/announcements/github-oauth",
+    "updatedAt": "2026-05-22T15:00:00.000Z"
+  },
+  {
+    "title": "移动端适配优化更新",
+    "url": "https://example.com/announcements/mobile-optimize",
+    "updatedAt": "2026-05-20T09:15:00.000Z"
+  }
+]

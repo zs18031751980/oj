@@ -27,6 +27,12 @@ const routes = [
         meta: { title: '学习资源 - Let Coding', requiresAuth: true },
         component: () => import('./pages/Learn.vue'),
       },
+      {
+        path: '/announcements',
+        name: 'Announcements',
+        meta: { title: '公告 - Let Coding' },
+        component: () => import('./pages/Announcements.vue'),
+      },
     ],
   },
   {

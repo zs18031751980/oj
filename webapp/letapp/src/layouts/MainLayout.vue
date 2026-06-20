@@ -129,6 +129,7 @@ const navItems = [
   { label: '首页', to: '/', icon: 'material-symbols:home-rounded' },
   { label: '在线编辑器', to: '/playground', icon: 'material-symbols:code-rounded' },
   { label: '学习资源', to: '/learn', icon: 'material-symbols:school-rounded' },
+  { label: '公告', to: '/announcements', icon: 'material-symbols:campaign-rounded' },
 ];
 
 const DESKTOP_EXPANDED_WIDTH = 288;
