@@ -16,7 +16,13 @@ function announcementsPlugin() {
         const content = readFileSync(p, 'utf-8');
         const m = content.match(/^#\s+(.+)/m);
         const title = m ? m[1].trim() : basename(f, '.md');
-        return {file: f, title, updatedAt: s.mtime.toISOString()};
+        const fm = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+        let permission = 'member';
+        if (fm) {
+          const p = fm[1].match(/^permission:\s*(\S+)/m);
+          if (p) permission = p[1];
+        }
+        return {file: f, title, permission, updatedAt: s.mtime.toISOString()};
       });
       items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       writeFileSync(join(dir, 'manifest.json'), JSON.stringify(items, null, 2));
