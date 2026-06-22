@@ -24,6 +24,12 @@ const ROLE_LABELS: Record<string, string> = {
   manager: '部长',
 };
 
+const PERMISSION_TO_IDENTITY: Record<string, string> = {
+  member: 'Member',
+  staff: 'Department',
+  manager: 'Minister',
+};
+
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -63,7 +69,7 @@ const goBackToList = async () => {
   await router.push('/announcements');
 };
 
-function parseMarkdown(raw: string): { title?: string; content: string } {
+function parseMarkdown(raw: string) {
   const idx = raw.indexOf('---');
   if (idx !== 0) return { content: raw };
   const end = raw.indexOf('---', 3);
@@ -71,8 +77,12 @@ function parseMarkdown(raw: string): { title?: string; content: string } {
   const front = raw.slice(3, end).trim();
   const body = raw.slice(end + 3).trim();
   const titleMatch = front.match(/^title:\s*(.+)/m);
+  const permissionMatch = front.match(/^permission:\s*(.+)/m);
+  const dateMatch = front.match(/^date:\s*(.+)/m);
   return {
     title: titleMatch ? titleMatch[1]!.trim() : undefined,
+    permission: permissionMatch ? permissionMatch[1]!.trim() : undefined,
+    date: dateMatch ? dateMatch[1]!.trim() : undefined,
     content: body,
   };
 }
@@ -85,8 +95,13 @@ const loadMarkdown = async (file: string) => {
     const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.text();
-    const { title, content } = parseMarkdown(raw);
-    selectedContent.value = { title, content };
+    const { title, permission, date, content } = parseMarkdown(raw);
+    selectedContent.value = {
+      title,
+      content,
+      date,
+      identity: permission ? PERMISSION_TO_IDENTITY[permission] || permission : undefined,
+    };
   } catch (error) {
     selectedContent.value = undefined;
     docError.value = `加载失败：${error instanceof Error ? error.message : '未知错误'}`;
