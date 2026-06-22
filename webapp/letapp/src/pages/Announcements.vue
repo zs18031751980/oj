@@ -147,49 +147,28 @@ watch(currentFile, async (file) => {
 
 <template>
   <div class="flex min-h-[calc(100vh-5rem)] flex-col bg-slate-50 text-slate-950 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-50">
-    <template v-if="!authStore.isAuthenticated">
-      <div class="flex flex-1 items-center justify-center p-8">
-        <div class="max-w-md text-center">
-          <div class="mb-6 flex justify-center">
-            <div class="flex h-20 w-20 items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-              <Icon icon="material-symbols:lock-outline" width="40" height="40" class="text-slate-400 dark:text-slate-500" />
+    <template v-if="!isDetailMode">
+      <div class="border-b border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
+        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div class="max-w-3xl">
+              <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Announcements</p>
+              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">最新公告</h1>
+            </div>
+            <div class="flex items-center gap-3">
+              <span v-if="!authStore.isAuthenticated" class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                未登录 · 社员
+              </span>
+              <span v-else class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                {{ ROLE_LABELS[userRole] || userRole }}
+              </span>
+              <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
+                {{ filteredAnnouncements.length }} 条可见
+              </span>
             </div>
           </div>
-          <h2 class="mb-3 text-2xl font-black text-slate-900 dark:text-white">需要登录</h2>
-          <p class="mb-8 leading-relaxed text-slate-500 dark:text-slate-400">
-            公告仅对社团成员开放，请先登录查看。
-          </p>
-          <button
-            class="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-cyan-600/30 transition hover:bg-cyan-700 dark:bg-cyan-500 dark:hover:bg-cyan-600"
-            @click="authStore.startOAuthLogin('iOSClub', '/announcements', true)"
-          >
-            <Icon icon="material-symbols:login" width="20" height="20" />
-            立即登录
-          </button>
         </div>
       </div>
-    </template>
-
-    <template v-else>
-      <template v-if="!isDetailMode">
-        <div class="border-b border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
-          <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div class="max-w-3xl">
-                <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Announcements</p>
-                <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">最新公告</h1>
-              </div>
-              <div class="flex items-center gap-3">
-                <span class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                  {{ ROLE_LABELS[userRole] || userRole }}
-                </span>
-                <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
-                  {{ filteredAnnouncements.length }} 条可见
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div class="flex-1 overflow-y-auto">
           <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -256,7 +235,6 @@ watch(currentFile, async (file) => {
           </div>
         </div>
       </template>
-    </template>
   </div>
 </template>
 
