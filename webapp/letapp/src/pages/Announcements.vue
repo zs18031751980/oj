@@ -87,13 +87,13 @@ const goBackToList = async () => {
 
 const parseFrontmatter = (raw: string): { content: string; permission?: string } => {
   const match = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
-  if (!match) {
+  if (!match || !match[1] || !match[2]) {
     return { content: raw };
   }
   const frontmatterStr = match[1];
   const content = match[2];
-  const perm = frontmatterStr.match(/^permission:\s*(\S+)/m)?.[1];
-  return { content, permission: perm || undefined };
+  const permMatch = frontmatterStr.match(/^permission:\s*(\S+)/m);
+  return { content, permission: permMatch?.[1] || undefined };
 };
 
 const loadMarkdown = async (file: string) => {
