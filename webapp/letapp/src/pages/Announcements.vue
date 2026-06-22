@@ -143,12 +143,6 @@ watch(currentFile, async (file) => {
               <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">最新公告</h1>
             </div>
             <div class="flex items-center gap-3">
-              <span v-if="!authStore.isAuthenticated" class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-400 dark:bg-slate-800 dark:text-slate-500">
-                未登录 · 社员
-              </span>
-              <span v-else class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {{ ROLE_LABELS[userRole] || userRole }}
-              </span>
               <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
                 {{ sortedAnnouncements.length }} 条公告
               </span>
