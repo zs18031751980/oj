@@ -315,7 +315,7 @@ class UserService(DatabaseService, Injectable):
 
         流程：
         1. 根据 provider + provider_id 查找已有用户
-        2. 如果找到，更新用户信息（用户名、邮箱、头像）
+        2. 如果找到，更新用户信息（用户名、邮箱、头像、角色）
         3. 如果未找到，创建新用户
         4. 处理用户名和邮箱的冲突（追加后缀或清空邮箱）
 
@@ -327,6 +327,18 @@ class UserService(DatabaseService, Injectable):
         Returns:
             标准化的用户信息字典（不含 password_hash）
         """
+        def _normalize_role(raw_role: str) -> str:
+            role_map = {
+                'member': 'member',
+                'staff': 'staff',
+                'manager': 'manager',
+                'department': 'staff',
+                'minister': 'manager',
+                'president': 'manager',
+                'founder': 'manager',
+            }
+            return role_map.get((raw_role or '').strip().lower(), 'member')
+
         try:
             # ----- 查找已有用户 -----
             try:
@@ -343,7 +355,7 @@ class UserService(DatabaseService, Injectable):
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
                 if user_info.get('role') and user.role != user_info['role']:
-                    user.role = user_info['role']
+                    user.role = _normalize_role(user_info['role'])
 
                 user.last_login = datetime.now()
                 user.save()
@@ -375,7 +387,7 @@ class UserService(DatabaseService, Injectable):
                     username=username,
                     email=email,
                     password_hash=None,
-                    role=user_info.get('role', 'member'),
+                    role=_normalize_role(user_info.get('role', 'member')),
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),

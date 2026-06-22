@@ -170,7 +170,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
     """
     username = user_info_data.get('username', '') or ''
     email = user_info_data.get('email', '') or ''
-    role = user_info_data.get('role', 'member') or 'member'
+    role = _normalize_role(user_info_data.get('role', 'member'))
     return UserInfo(
         id=str(user_info_data.get('id') or ''),
         username=username,
@@ -253,6 +253,25 @@ def _decode_unverified_jwt(token: str) -> dict:
         return {}
 
 
+def _normalize_role(raw_role: str) -> str:
+    """
+    将提供商返回的角色值标准化为内部格式
+
+    iOSClub 等提供商可能返回 Member/Department/Minister 等值，
+    需要映射为 member/staff/manager 内部标准格式。
+    """
+    role_map = {
+        'member': 'member',
+        'staff': 'staff',
+        'manager': 'manager',
+        'department': 'staff',
+        'minister': 'manager',
+        'president': 'manager',
+        'founder': 'manager',
+    }
+    return role_map.get((raw_role or '').strip().lower(), 'member')
+
+
 def _user_info_from_provider_token(provider: str, identifier: str, token: str) -> dict:
     """
     从外部提供商签发的 JWT 令牌中提取用户信息
@@ -287,7 +306,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     )
     email = claims.get('email') or ''
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
-    role = claims.get('role') or 'member'
+    role = _normalize_role(claims.get('role') or '')
     return {
         'id': str(subject),
         'username': str(username or ''),

@@ -652,6 +652,11 @@ class OIDCService(Injectable, IOIDCService):
                 if roles:
                     role = roles[0]
         role = role or 'member'
+            if isinstance(realm_access, dict):
+                roles = realm_access.get('roles', [])
+                if roles:
+                    role = roles[0]
+        role = role or 'member'
         return {
             'id': str(subject),
             'username': username,
