@@ -253,7 +253,7 @@ def _decode_unverified_jwt(token: str) -> dict:
         return {}
 
 
-def _normalize_role(raw_role: str) -> str:
+def _normalize_role(raw_role: str, logger_service=None) -> str:
     """
     将提供商返回的角色值标准化为内部格式
 
@@ -264,12 +264,22 @@ def _normalize_role(raw_role: str) -> str:
         'member': 'member',
         'staff': 'staff',
         'manager': 'manager',
+        'admin': 'manager',
         'department': 'staff',
         'minister': 'manager',
         'president': 'manager',
         'founder': 'manager',
+        'user': 'member',
     }
-    return role_map.get((raw_role or '').strip().lower(), 'member')
+    cleaned = (raw_role or '').strip().lower()
+    result = role_map.get(cleaned, 'member')
+    if cleaned and cleaned not in role_map:
+        msg = f'Unrecognized role value "{raw_role}" normalized to "{result}"'
+        if logger_service:
+            logger_service.warning(msg)
+        else:
+            print(msg)
+    return result
 
 
 def _user_info_from_provider_token(provider: str, identifier: str, token: str) -> dict:
@@ -306,7 +316,19 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     )
     email = claims.get('email') or ''
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
-    role = _normalize_role(claims.get('role') or '')
+
+    # 从 JWT claims 中提取角色，尝试多个字段
+    raw_role = claims.get('role') or ''
+    if not raw_role:
+        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
+            val = claims.get(field)
+            if val:
+                if isinstance(val, list) and len(val) > 0:
+                    raw_role = val[0]
+                elif isinstance(val, str):
+                    raw_role = val
+                break
+    role = _normalize_role(raw_role)
     return {
         'id': str(subject),
         'username': str(username or ''),

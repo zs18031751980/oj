@@ -644,13 +644,30 @@ class OIDCService(Injectable, IOIDCService):
             or str(subject)
         )
         name = user_data.get('name') or user_data.get('nickname') or username
+
+        # 尝试多个字段提取角色，优先级：role > roles[0] > groups[0] > group > user_type
         role = user_data.get('role')
+        if not role:
+            for field in ('groups', 'group', 'user_type', 'authorities', 'memberOf'):
+                val = user_data.get(field)
+                if val:
+                    if isinstance(val, list) and len(val) > 0:
+                        role = val[0]
+                    elif isinstance(val, str):
+                        role = val
+                    break
         if not role:
             realm_access = user_data.get('realm_access')
             if isinstance(realm_access, dict):
                 roles = realm_access.get('roles', [])
                 if roles:
-                    role = roles[0]
+                    # Keycloak 风格：排除技术角色，取最高权限角色
+                    tech_roles = {'offline_access', 'uma_authorization'}
+                    filtered = [r for r in roles if r.lower() not in tech_roles]
+                    if filtered:
+                        role = filtered[0]
+                    else:
+                        role = roles[0]
         role = role or 'member'
         return {
             'id': str(subject),

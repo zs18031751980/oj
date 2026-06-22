@@ -332,12 +332,18 @@ class UserService(DatabaseService, Injectable):
                 'member': 'member',
                 'staff': 'staff',
                 'manager': 'manager',
+                'admin': 'manager',
                 'department': 'staff',
                 'minister': 'manager',
                 'president': 'manager',
                 'founder': 'manager',
+                'user': 'member',
             }
-            return role_map.get((raw_role or '').strip().lower(), 'member')
+            cleaned = (raw_role or '').strip().lower()
+            result = role_map.get(cleaned, 'member')
+            if cleaned and cleaned not in role_map:
+                print(f'Unrecognized role value "{raw_role}" normalized to "{result}"')
+            return result
 
         try:
             # ----- 查找已有用户 -----
