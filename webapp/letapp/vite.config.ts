@@ -18,11 +18,17 @@ function announcementsPlugin() {
         const title = m ? m[1].trim() : basename(f, '.md');
         const fm = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
         let permission = 'member';
+        let updatedAt = s.mtime.toISOString();
         if (fm) {
           const p = fm[1].match(/^permission:\s*(\S+)/m);
           if (p) permission = p[1];
+          const d = fm[1].match(/^date:\s*(.+)/m);
+          if (d) {
+            const parsed = new Date(d[1].trim());
+            if (!isNaN(parsed.getTime())) updatedAt = parsed.toISOString();
+          }
         }
-        return {file: f, title, permission, updatedAt: s.mtime.toISOString()};
+        return {file: f, title, permission, updatedAt};
       });
       items.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       writeFileSync(join(dir, 'manifest.json'), JSON.stringify(items, null, 2));
