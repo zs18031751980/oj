@@ -22,6 +22,8 @@ import gzip
 import io
 from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
 
+from models.db_models import migrate_add_role_column
+
 # 导入认证和代码执行的 API 命名空间
 from controllers.auth_controller import api as auth_api
 from controllers.code_controller import api as code_api
@@ -277,6 +279,9 @@ def add_cors_headers(response):
 
 # 初始化并注册所有依赖注入服务（配置服务、日志服务、JWT 服务等）
 setup_services(app.config)
+
+# 执行数据库迁移（如已有 users 表缺少 role 列则自动添加）
+migrate_add_role_column()
 
 # 获取依赖注入容器
 container = get_container()

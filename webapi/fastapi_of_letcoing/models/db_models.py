@@ -120,6 +120,7 @@ class User(BaseModel):
     - 第三方登录用户（通过 provider + provider_id 关联）
     - 本地密码登录用户（通过 password_hash 验证）
     - 用户激活/停用状态管理
+    - 角色权限管理（member / staff / manager）
     """
 
     id = AutoField(primary_key=True, verbose_name="用户ID")
@@ -127,6 +128,7 @@ class User(BaseModel):
     email = CharField(max_length=100, unique=True, null=True, verbose_name="邮箱")
     password_hash = CharField(max_length=255, null=True, verbose_name="密码哈希")
     is_active = BooleanField(default=True, verbose_name="是否激活")
+    role = CharField(max_length=20, default="member", verbose_name="用户角色")
     last_login = DateTimeField(null=True, verbose_name="最后登录时间")
     provider = CharField(max_length=50, null=True, verbose_name="登录提供商")
     provider_id = CharField(max_length=255, null=True, verbose_name="提供商用户ID")
@@ -179,3 +181,20 @@ def close_database():
     db = get_database()
     if not db.is_closed():
         db.close()
+
+
+def migrate_add_role_column():
+    """
+    迁移：为已有 users 表添加 role 列（如果尚不存在）
+
+    兼容已有数据库：如果 users 表在 role 列加入之前已创建，
+    此函数通过执行 PostgreSQL 的 ALTER TABLE ... ADD COLUMN IF NOT EXISTS
+    来安全地添加缺失的列。
+    """
+    db = get_database()
+    try:
+        db.execute_sql(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'member';"
+        )
+    except Exception:
+        pass

@@ -7,6 +7,7 @@ export interface UserInfo {
   name?: string;
   avatar_url?: string;
   provider?: string;
+  role?: string;
   created_at?: string;
 }
 

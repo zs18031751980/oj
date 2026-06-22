@@ -64,6 +64,7 @@ class UserInfo:
     name: str = ""                 # 显示名称
     avatar_url: str = ""           # 头像 URL
     provider: str = ""             # 登录提供商（如 github, password）
+    role: str = "member"           # 用户角色（member / staff / manager）
     created_at: datetime = field(default_factory=datetime.now)  # 创建时间
 
     def to_dict(self) -> Dict[str, Any]:
@@ -75,6 +76,7 @@ class UserInfo:
             'name': self.name,
             'avatar_url': self.avatar_url,
             'provider': self.provider,
+            'role': self.role,
             'created_at': self.created_at.isoformat()
         }
 

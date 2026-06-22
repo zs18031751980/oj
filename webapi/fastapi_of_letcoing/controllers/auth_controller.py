@@ -170,6 +170,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
     """
     username = user_info_data.get('username', '') or ''
     email = user_info_data.get('email', '') or ''
+    role = user_info_data.get('role', 'member') or 'member'
     return UserInfo(
         id=str(user_info_data.get('id') or ''),
         username=username,
@@ -177,6 +178,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
         name=user_info_data.get('name') or username or email,
         avatar_url=user_info_data.get('avatar_url', '') or '',
         provider=user_info_data.get('provider', provider),
+        role=role,
     )
 
 
@@ -285,6 +287,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     )
     email = claims.get('email') or ''
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
+    role = claims.get('role') or 'member'
     return {
         'id': str(subject),
         'username': str(username or ''),
@@ -297,6 +300,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
             or ''
         ),
         'provider': provider,
+        'role': role,
     }
 
 
@@ -542,6 +546,7 @@ class AuthPasswordLoginController(Resource):
             'name': user_data.get('username', '') or user_data.get('email', ''),
             'avatar_url': user_data.get('avatar_url', '') or '',
             'provider': 'password',
+            'role': user_data.get('role', 'member'),
         })
         jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
         token_response = TokenResponse(

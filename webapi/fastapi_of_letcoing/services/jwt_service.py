@@ -72,6 +72,7 @@ class JWTService(Injectable, IJWTService):
             'username': user_info.get('username', ''),
             'email': user_info.get('email', ''),
             'provider': user_info.get('provider', ''),
+            'role': user_info.get('role', 'member'),
             'exp': access_expire,      # 过期时间
             'iat': now,                # 签发时间
             'type': 'access'           # 令牌类型：访问令牌
@@ -137,7 +138,8 @@ class JWTService(Injectable, IJWTService):
                 'id': payload['user_id'],
                 'username': payload.get('username', ''),
                 'email': payload.get('email', ''),
-                'provider': payload.get('provider', '')
+                'provider': payload.get('provider', ''),
+                'role': payload.get('role', 'member')
             }
 
         except jwt.ExpiredSignatureError:

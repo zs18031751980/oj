@@ -53,6 +53,7 @@ class UserService(DatabaseService, Injectable):
             'email': user.email,
             'password_hash': user.password_hash,
             'is_active': user.is_active,
+            'role': user.role,
             'provider': user.provider,
             'provider_id': user.provider_id,
             'avatar_url': user.avatar_url,

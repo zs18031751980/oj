@@ -108,6 +108,7 @@ export const useAuthStore = defineStore('auth', () => {
   const displayName = computed(() => (
     userInfo.value?.name || userInfo.value?.username || userInfo.value?.email || '已登录用户'
   ));
+  const userRole = computed(() => userInfo.value?.role || 'member');
 
   const shouldClearAuthState = (error: unknown) => (
     error instanceof ApiError && [400, 401, 403].includes(error.status)
@@ -340,6 +341,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     refreshToken,
     userInfo,
+    userRole,
     supportedProviders,
     isAuthenticated,
     isVerifying,
