@@ -5,6 +5,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import MarkdownComponent from '../components/MarkdownComponent.vue';
 
+interface Content {
+  title?: string;
+  date?: string;
+  content: string;
+  identity?: string;
+}
+
 interface ManifestItem {
   file: string;
   title: string;
@@ -22,7 +29,7 @@ const router = useRouter();
 const authStore = useAuthStore();
 
 const manifest = ref<ManifestItem[]>([]);
-const selectedContent = ref<string | undefined>();
+const selectedContent = ref<Content | undefined>();
 const isLoadingDoc = ref(false);
 const docError = ref('');
 
@@ -56,10 +63,19 @@ const goBackToList = async () => {
   await router.push('/announcements');
 };
 
-const parseMarkdown = (raw: string): string => {
-  const match = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
-  return match?.[2] || raw;
-};
+function parseMarkdown(raw: string): { title?: string; content: string } {
+  const idx = raw.indexOf('---');
+  if (idx !== 0) return { content: raw };
+  const end = raw.indexOf('---', 3);
+  if (end === -1) return { content: raw };
+  const front = raw.slice(3, end).trim();
+  const body = raw.slice(end + 3).trim();
+  const titleMatch = front.match(/^title:\s*(.+)/m);
+  return {
+    title: titleMatch ? titleMatch[1]!.trim() : undefined,
+    content: body,
+  };
+}
 
 const loadMarkdown = async (file: string) => {
   isLoadingDoc.value = true;
@@ -69,7 +85,8 @@ const loadMarkdown = async (file: string) => {
     const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.text();
-    selectedContent.value = parseMarkdown(raw);
+    const { title, content } = parseMarkdown(raw);
+    selectedContent.value = { title, content };
   } catch (error) {
     selectedContent.value = undefined;
     docError.value = `加载失败：${error instanceof Error ? error.message : '未知错误'}`;
