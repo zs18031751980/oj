@@ -647,8 +647,10 @@ class OIDCService(Injectable, IOIDCService):
 
         # 尝试多个字段提取角色，优先级：role > roles[0] > groups[0] > group > user_type
         role = user_data.get('role')
+        if isinstance(role, list):
+            role = role[0] if role else None
         if not role:
-            for field in ('groups', 'group', 'user_type', 'authorities', 'memberOf'):
+            for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
                 val = user_data.get(field)
                 if val:
                     if isinstance(val, list) and len(val) > 0:

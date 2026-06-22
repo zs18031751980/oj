@@ -9,14 +9,7 @@ interface ManifestItem {
   file: string;
   title: string;
   updatedAt: string;
-  permission?: string;
 }
-
-const ROLE_HIERARCHY: Record<string, number> = {
-  member: 0,
-  staff: 1,
-  manager: 2,
-};
 
 const ROLE_LABELS: Record<string, string> = {
   member: '社员',
@@ -24,40 +17,19 @@ const ROLE_LABELS: Record<string, string> = {
   manager: '部长',
 };
 
-const PERMISSION_LABELS: Record<string, string> = {
-  member: '全体可见',
-  staff: '部员及以上',
-  manager: '仅部长',
-};
-
-const PERMISSION_COLORS: Record<string, string> = {
-  member: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300',
-  staff: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300',
-  manager: 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300',
-};
-
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
 const manifest = ref<ManifestItem[]>([]);
-const selectedContent = ref<{ content: string; permission?: string } | undefined>();
+const selectedContent = ref<string | undefined>();
 const isLoadingDoc = ref(false);
 const docError = ref('');
-const permissionDenied = ref(false);
 
 const userRole = computed(() => authStore.userRole);
 
-const canViewPermission = (perm: string) => {
-  const userLevel = ROLE_HIERARCHY[userRole.value] ?? 0;
-  const requiredLevel = ROLE_HIERARCHY[perm || 'member'] ?? 0;
-  return userLevel >= requiredLevel;
-};
-
-const filteredAnnouncements = computed(() =>
-  manifest.value
-    .filter((item) => canViewPermission(item.permission || 'member'))
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+const sortedAnnouncements = computed(() =>
+  [...manifest.value].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 );
 
 const currentFile = computed(() => {
@@ -81,39 +53,23 @@ const openAnnouncement = (item: ManifestItem) => {
 };
 
 const goBackToList = async () => {
-  permissionDenied.value = false;
   await router.push('/announcements');
 };
 
-const parseFrontmatter = (raw: string): { content: string; permission?: string } => {
+const parseMarkdown = (raw: string): string => {
   const match = raw.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
-  if (!match || !match[1] || !match[2]) {
-    return { content: raw };
-  }
-  const frontmatterStr = match[1];
-  const content = match[2];
-  const permMatch = frontmatterStr.match(/^permission:\s*(\S+)/m);
-  return { content, permission: permMatch?.[1] || undefined };
+  return match?.[2] || raw;
 };
 
 const loadMarkdown = async (file: string) => {
   isLoadingDoc.value = true;
   docError.value = '';
-  permissionDenied.value = false;
 
   try {
     const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.text();
-    const parsed = parseFrontmatter(raw);
-
-    if (parsed.permission && !canViewPermission(parsed.permission)) {
-      selectedContent.value = undefined;
-      permissionDenied.value = true;
-      return;
-    }
-
-    selectedContent.value = parsed;
+    selectedContent.value = parseMarkdown(raw);
   } catch (error) {
     selectedContent.value = undefined;
     docError.value = `加载失败：${error instanceof Error ? error.message : '未知错误'}`;
@@ -135,7 +91,6 @@ onMounted(async () => {
 });
 
 watch(currentFile, async (file) => {
-  permissionDenied.value = false;
   if (!file) {
     selectedContent.value = undefined;
     docError.value = '';
@@ -163,7 +118,7 @@ watch(currentFile, async (file) => {
                 {{ ROLE_LABELS[userRole] || userRole }}
               </span>
               <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
-                {{ filteredAnnouncements.length }} 条可见
+                {{ sortedAnnouncements.length }} 条公告
               </span>
             </div>
           </div>
@@ -172,16 +127,16 @@ watch(currentFile, async (file) => {
 
         <div class="flex-1 overflow-y-auto">
           <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div v-if="filteredAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+            <div v-if="sortedAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
               <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
                 <Icon icon="material-symbols:campaign-outline" width="32" height="32" class="text-slate-400 dark:text-slate-500" />
               </div>
-              <p class="text-lg font-bold text-slate-500 dark:text-slate-400">暂无适合你级别的公告</p>
-              <p class="mt-2 text-sm text-slate-400 dark:text-slate-500">更高权限的公告将不会在此显示</p>
+              <p class="text-lg font-bold text-slate-500 dark:text-slate-400">暂无公告</p>
+              <p class="mt-2 text-sm text-slate-400 dark:text-slate-500">请稍后再来看看</p>
             </div>
             <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <button
-                v-for="item in filteredAnnouncements"
+                v-for="item in sortedAnnouncements"
                 :key="item.file"
                 type="button"
                 class="announcement-card group"
@@ -190,9 +145,6 @@ watch(currentFile, async (file) => {
                 <div class="card-content">
                   <div class="card-title">{{ item.title }}</div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="rounded-full px-2 py-0.5 text-[11px] font-bold" :class="PERMISSION_COLORS[item.permission || 'member']">
-                      {{ PERMISSION_LABELS[item.permission || 'member'] || item.permission }}
-                    </span>
                     <span class="card-time">{{ formatTime(item.updatedAt) }}</span>
                   </div>
                 </div>
@@ -220,13 +172,6 @@ watch(currentFile, async (file) => {
           <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
             <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
               正在加载公告内容...
-            </div>
-            <div v-else-if="permissionDenied" class="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-              <div class="flex h-16 w-16 items-center justify-center rounded-[2rem] border-2 border-dashed border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950">
-                <Icon icon="material-symbols:shield-lock-outline" width="32" height="32" class="text-rose-400" />
-              </div>
-              <p class="text-lg font-bold text-rose-600 dark:text-rose-400">权限不足</p>
-              <p class="text-sm text-slate-500 dark:text-slate-400">你的角色（{{ ROLE_LABELS[userRole] || userRole }}）无法查看此公告</p>
             </div>
             <div v-else-if="docError" class="flex min-h-[320px] items-center justify-center p-8 text-center text-rose-500">
               {{ docError }}

@@ -327,7 +327,10 @@ class UserService(DatabaseService, Injectable):
         Returns:
             标准化的用户信息字典（不含 password_hash）
         """
-        def _normalize_role(raw_role: str) -> str:
+        def _normalize_role(raw_role) -> str:
+            if isinstance(raw_role, list):
+                raw_role = raw_role[0] if raw_role else ''
+
             role_map = {
                 'member': 'member',
                 'staff': 'staff',
@@ -338,8 +341,27 @@ class UserService(DatabaseService, Injectable):
                 'president': 'manager',
                 'founder': 'manager',
                 'user': 'member',
+                # 中文角色名
+                '部长': 'manager',
+                '部员': 'staff',
+                '社员': 'member',
+                '社长': 'manager',
+                '副社长': 'manager',
+                '副部长': 'manager',
+                '干事': 'staff',
+                '部门主管': 'manager',
+                # 常见英文变体
+                'role_admin': 'manager',
+                'role_manager': 'manager',
+                'role_staff': 'staff',
+                'role_member': 'member',
+                'role_user': 'member',
+                'administrator': 'manager',
+                'superuser': 'manager',
+                '普通用户': 'member',
+                '管理员': 'manager',
             }
-            cleaned = (raw_role or '').strip().lower()
+            cleaned = (str(raw_role or '')).strip().lower()
             result = role_map.get(cleaned, 'member')
             if cleaned and cleaned not in role_map:
                 print(f'Unrecognized role value "{raw_role}" normalized to "{result}"')

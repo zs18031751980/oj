@@ -253,13 +253,17 @@ def _decode_unverified_jwt(token: str) -> dict:
         return {}
 
 
-def _normalize_role(raw_role: str, logger_service=None) -> str:
+def _normalize_role(raw_role, logger_service=None) -> str:
     """
     将提供商返回的角色值标准化为内部格式
 
-    iOSClub 等提供商可能返回 Member/Department/Minister 等值，
-    需要映射为 member/staff/manager 内部标准格式。
+    iOSClub 等提供商可能返回 Member/Department/Minister 或
+    中文 部长/部员/社员 等值，需要映射为 member/staff/manager 内部标准格式。
+    也处理 role 为列表类型的情况（如 ['Minister']）。
     """
+    if isinstance(raw_role, list):
+        raw_role = raw_role[0] if raw_role else ''
+
     role_map = {
         'member': 'member',
         'staff': 'staff',
@@ -270,8 +274,27 @@ def _normalize_role(raw_role: str, logger_service=None) -> str:
         'president': 'manager',
         'founder': 'manager',
         'user': 'member',
+        # 中文角色名
+        '部长': 'manager',
+        '部员': 'staff',
+        '社员': 'member',
+        '社长': 'manager',
+        '副社长': 'manager',
+        '副部长': 'manager',
+        '干事': 'staff',
+        '部门主管': 'manager',
+        # 常见英文变体
+        'role_admin': 'manager',
+        'role_manager': 'manager',
+        'role_staff': 'staff',
+        'role_member': 'member',
+        'role_user': 'member',
+        'administrator': 'manager',
+        'superuser': 'manager',
+        '普通用户': 'member',
+        '管理员': 'manager',
     }
-    cleaned = (raw_role or '').strip().lower()
+    cleaned = (str(raw_role or '')).strip().lower()
     result = role_map.get(cleaned, 'member')
     if cleaned and cleaned not in role_map:
         msg = f'Unrecognized role value "{raw_role}" normalized to "{result}"'
@@ -319,6 +342,8 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
 
     # 从 JWT claims 中提取角色，尝试多个字段
     raw_role = claims.get('role') or ''
+    if isinstance(raw_role, list):
+        raw_role = raw_role[0] if raw_role else ''
     if not raw_role:
         for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
             val = claims.get(field)
