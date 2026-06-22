@@ -342,6 +342,8 @@ class UserService(DatabaseService, Injectable):
                     user.email = user_info['email']
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
+                if user_info.get('role') and user.role != user_info['role']:
+                    user.role = user_info['role']
 
                 user.last_login = datetime.now()
                 user.save()
@@ -373,6 +375,7 @@ class UserService(DatabaseService, Injectable):
                     username=username,
                     email=email,
                     password_hash=None,
+                    role=user_info.get('role', 'member'),
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),

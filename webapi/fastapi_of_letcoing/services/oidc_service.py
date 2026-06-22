@@ -644,6 +644,14 @@ class OIDCService(Injectable, IOIDCService):
             or str(subject)
         )
         name = user_data.get('name') or user_data.get('nickname') or username
+        role = user_data.get('role')
+        if not role:
+            realm_access = user_data.get('realm_access')
+            if isinstance(realm_access, dict):
+                roles = realm_access.get('roles', [])
+                if roles:
+                    role = roles[0]
+        role = role or 'member'
         return {
             'id': str(subject),
             'username': username,
@@ -656,6 +664,7 @@ class OIDCService(Injectable, IOIDCService):
                 or ''
             ),
             'provider': provider,
+            'role': role,
         }
 
     def _get_user_info(self, provider: str, client, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
