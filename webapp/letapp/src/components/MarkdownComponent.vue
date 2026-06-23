@@ -30,7 +30,6 @@ interface Content {
   date?: string;
   watch?: number;
   content: string;
-  identity?: string;
 }
 
 interface HeadingItem {
@@ -214,35 +213,7 @@ watch(
 
 const anchorLinks = computed(() => headings.value);
 const date = computed(() => (props.content?.date ? new Date(props.content.date).toLocaleDateString('zh-CN') : ''));
-const hasHeaderMeta = computed(() => Boolean(props.content?.title || props.content?.date || props.content?.watch || props.content?.identity));
-
-const getIdentityLabel = computed(() => {
-  const options = [
-    { label: '所有人', value: 'Member' },
-    { label: '部员', value: 'Department' },
-    { label: '部长', value: 'Minister' },
-    { label: '社长', value: 'President' },
-    { label: '创始人', value: 'Founder' },
-  ];
-  return options.find((item) => item.value === props.content?.identity)?.label || '未知';
-});
-
-const getIdentityClass = (identity: string) => {
-  switch (identity) {
-    case 'Member':
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-100';
-    case 'Department':
-      return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-100';
-    case 'Minister':
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-100';
-    case 'President':
-      return 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-100';
-    case 'Founder':
-      return 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-100';
-    default:
-      return 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100';
-  }
-};
+const hasHeaderMeta = computed(() => Boolean(props.content?.title || props.content?.date || props.content?.watch));
 
 const handleAnchorClick = (event: Event, href: string) => {
   event.preventDefault();
@@ -295,9 +266,6 @@ onUnmounted(() => {
             <span class="flex items-center gap-1">
               <Icon icon="mdi:eye" width="16" height="16" />
               {{ content.watch }} 次阅读
-            </span>
-            <span v-if="content.identity" class="rounded-full px-3 py-1 text-xs font-bold" :class="getIdentityClass(content.identity)">
-              {{ getIdentityLabel }}
             </span>
           </div>
         </header>

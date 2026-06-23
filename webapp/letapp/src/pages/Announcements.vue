@@ -2,14 +2,12 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
 import MarkdownComponent from '../components/MarkdownComponent.vue';
 
 interface Content {
   title?: string;
   date?: string;
   content: string;
-  identity?: string;
 }
 
 interface ManifestItem {
@@ -18,28 +16,12 @@ interface ManifestItem {
   updatedAt: string;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  member: '社员',
-  staff: '部员',
-  manager: '部长',
-};
-
-const PERMISSION_TO_IDENTITY: Record<string, string> = {
-  member: 'Member',
-  staff: 'Department',
-  manager: 'Minister',
-};
-
 const route = useRoute();
 const router = useRouter();
-const authStore = useAuthStore();
-
 const manifest = ref<ManifestItem[]>([]);
 const selectedContent = ref<Content | undefined>();
 const isLoadingDoc = ref(false);
 const docError = ref('');
-
-const userRole = computed(() => authStore.userRole);
 
 const sortedAnnouncements = computed(() =>
   [...manifest.value].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
@@ -95,12 +77,11 @@ const loadMarkdown = async (file: string) => {
     const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.text();
-    const { title, permission, date, content } = parseMarkdown(raw);
+    const { title, date, content } = parseMarkdown(raw);
     selectedContent.value = {
       title,
       content,
       date,
-      identity: permission ? PERMISSION_TO_IDENTITY[permission] || permission : undefined,
     };
   } catch (error) {
     selectedContent.value = undefined;
