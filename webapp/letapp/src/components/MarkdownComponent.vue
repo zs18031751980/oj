@@ -265,7 +265,6 @@ onUnmounted(() => {
             </time>
             <span class="flex items-center gap-1">
               <Icon icon="mdi:eye" width="16" height="16" />
-              {{ content.watch }} 次阅读
             </span>
           </div>
         </header>
