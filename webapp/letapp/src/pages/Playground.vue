@@ -1024,8 +1024,14 @@ watch(isFullscreen, (active) => {
 }
 
 .plain-textarea {
-  @apply w-full resize-none border-none bg-white p-5 font-mono text-sm text-slate-800 outline-none transition-colors duration-300 placeholder:text-slate-400 focus:ring-0;
+  @apply w-full resize-none border-none p-5 font-mono text-sm outline-none transition-colors duration-300 placeholder:text-slate-400 focus:ring-0;
+  background-color: #ffffff;
+  color: #1e293b;
   tab-size: 2;
+}
+.dark .plain-textarea {
+  background-color: #1e293b !important;
+  color: #e2e8f0 !important;
 }
 
 .panel-textarea {
@@ -1252,6 +1258,33 @@ watch(isFullscreen, (active) => {
 
   .bottom-panels {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bottom-panels .surface-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .bottom-panels .collapse-body {
+    flex: 1;
+    overflow: hidden;
+  }
+  .bottom-panels .panel-textarea {
+    height: 100%;
+    max-height: none;
+  }
+  .bottom-panels .output-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .bottom-panels .output-body .output-box {
+    flex: 1;
+    min-height: 0;
+  }
+  .bottom-panels .output-body .output-status {
+    flex-shrink: 0;
   }
 }
 
