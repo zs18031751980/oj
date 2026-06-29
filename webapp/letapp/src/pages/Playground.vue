@@ -119,6 +119,8 @@ const code = ref<string>(getLanguagePreset(defaultLanguage.value));
 const languageCodeMap = ref<Record<string, string>>({});
 const stdin = ref<string>('');
 const output = ref<string>('');
+const expectedOutput = ref<string>('');
+const testVerdict = ref<'pass' | 'failed' | null>(null);
 const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
@@ -264,6 +266,7 @@ const runCode = async () => {
   isExecuting.value = true;
   output.value = '';
   outputKind.value = 'info';
+  testVerdict.value = null;
   bottomPanelsCollapsed.value = false;
 
   try {
@@ -281,6 +284,10 @@ const runCode = async () => {
     const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
     output.value = text || '程序已运行，但没有产生输出。';
     outputKind.value = result.stderr ? 'error' : 'info';
+
+    if (expectedOutput.value.trim()) {
+      testVerdict.value = output.value.trim() === expectedOutput.value.trim() ? 'pass' : 'failed';
+    }
   } catch (error) {
     outputKind.value = 'error';
     output.value = `执行错误: ${error instanceof Error ? error.message : '未知错误'}`;
@@ -654,6 +661,12 @@ watch(isFullscreen, (active) => {
                     placeholder="如果程序需要输入，可以在这里填写测试数据。"
                     @keydown="handleStdinKeydown"
                   ></textarea>
+                  <textarea
+                    v-model="expectedOutput"
+                    class="plain-textarea panel-textarea"
+                    placeholder="预期结果（选填）：填写后自动对比实际输出"
+                    style="margin-top: 8px;"
+                  ></textarea>
                 </div>
               </section>
 
@@ -671,6 +684,9 @@ watch(isFullscreen, (active) => {
                       :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                     >{{ output }}</pre>
                     <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                  </div>
+                  <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
+                    {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
                   </div>
                 </div>
               </section>
@@ -697,6 +713,12 @@ watch(isFullscreen, (active) => {
                     placeholder="如果程序需要输入，可以在这里填写测试数据。"
                     @keydown="handleStdinKeydown"
                   ></textarea>
+                  <textarea
+                    v-model="expectedOutput"
+                    class="plain-textarea panel-textarea"
+                    placeholder="预期结果（选填）：填写后自动对比实际输出"
+                    style="margin-top: 8px;"
+                  ></textarea>
                 </div>
               </section>
               <section class="surface-panel fullscreen-panel-item">
@@ -713,6 +735,9 @@ watch(isFullscreen, (active) => {
                       :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                     >{{ output }}</pre>
                     <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+                  </div>
+                  <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
+                    {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
                   </div>
                 </div>
               </section>
@@ -769,6 +794,12 @@ watch(isFullscreen, (active) => {
                 placeholder="如果程序需要输入，可以在这里填写测试数据。"
                 @keydown="handleStdinKeydown"
               ></textarea>
+              <textarea
+                v-model="expectedOutput"
+                class="plain-textarea panel-textarea"
+                placeholder="预期结果（选填）：填写后自动对比实际输出"
+                style="margin-top: 8px;"
+              ></textarea>
             </div>
           </section>
 
@@ -786,6 +817,9 @@ watch(isFullscreen, (active) => {
                   :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
                 >{{ output }}</pre>
                 <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
+              </div>
+              <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
+                {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
               </div>
             </div>
           </section>
@@ -1453,5 +1487,31 @@ html:not(.dark) .plain-textarea {
 
 html:not(.dark) .output-box pre {
   color: inherit !important;
+}
+
+.test-verdict {
+  margin-top: 12px;
+  border-radius: 12px;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+.test-verdict.pass {
+  background-color: #d1fae5;
+  color: #047857;
+}
+.dark .test-verdict.pass {
+  background-color: rgba(6, 95, 70, 0.4);
+  color: #6ee7b7;
+}
+.test-verdict.failed {
+  background-color: #ffe4e6;
+  color: #be123c;
+}
+.dark .test-verdict.failed {
+  background-color: rgba(136, 19, 55, 0.4);
+  color: #fda4af;
 }
 </style>
