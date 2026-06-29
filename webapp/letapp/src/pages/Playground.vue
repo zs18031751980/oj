@@ -119,6 +119,7 @@ const code = ref<string>(getLanguagePreset(defaultLanguage.value));
 const languageCodeMap = ref<Record<string, string>>({});
 const stdin = ref<string>('');
 const output = ref<string>('');
+const executionStatus = ref<string>('');
 const expectedOutput = ref<string>('');
 const testVerdict = ref<'pass' | 'failed' | null>(null);
 const outputKind = ref<'info' | 'error'>('info');
@@ -265,6 +266,7 @@ const runCode = async () => {
 
   isExecuting.value = true;
   output.value = '';
+  executionStatus.value = '';
   outputKind.value = 'info';
   testVerdict.value = null;
   bottomPanelsCollapsed.value = false;
@@ -281,12 +283,23 @@ const runCode = async () => {
       }),
     });
 
-    const text = [result.stdout, result.message, result.stderr].filter(Boolean).join('\n').trim();
-    output.value = text || '程序已运行，但没有产生输出。';
-    outputKind.value = result.stderr ? 'error' : 'info';
+    const stderrText = (result.stderr || '').trim();
+    const stdoutText = (result.stdout || '').trim();
+    const messageText = (result.message || '').trim();
+
+    if (stderrText) {
+      output.value = stderrText;
+      outputKind.value = 'error';
+      executionStatus.value = '编译错误';
+    } else {
+      output.value = stdoutText || messageText;
+      outputKind.value = 'info';
+      executionStatus.value = output.value ? '执行成功' : '程序已运行，但没有产生输出。';
+    }
 
     if (expectedOutput.value.trim()) {
-      testVerdict.value = output.value.trim() === expectedOutput.value.trim() ? 'pass' : 'failed';
+      const compareText = stdoutText || messageText;
+      testVerdict.value = compareText.trim() === expectedOutput.value.trim() ? 'pass' : 'failed';
     }
   } catch (error) {
     outputKind.value = 'error';
@@ -644,7 +657,7 @@ watch(isFullscreen, (active) => {
               :class="{ 'fullscreen-side-io-panel': isFullscreen }"
             >
               <section class="surface-panel side-io-section">
-                <div class="collapse-header input-header">
+                <div class="collapse-header">
                   <div class="flex items-center gap-2">
                     <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                     <span>输入数据</span>
@@ -677,16 +690,17 @@ watch(isFullscreen, (active) => {
                     <span>输出</span>
                   </div>
                 </div>
-                <div class="collapse-body">
-                  <div class="output-box">
-                    <pre
-                      v-if="output"
-                      :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
-                    >{{ output }}</pre>
+                <div class="collapse-body output-body">
+                  <div class="output-box" :class="{ 'has-output': output, 'is-error': outputKind === 'error' }">
+                    <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-300' : 'text-emerald-300'">{{ output }}</pre>
                     <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
                   </div>
-                  <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
-                    {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
+                  <div v-if="executionStatus" class="output-status">
+                    <div class="status-divider"></div>
+                    <div class="status-content">
+                      <span class="status-text" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ executionStatus }}</span>
+                      <span v-if="testVerdict" class="test-badge" :class="testVerdict">{{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -696,7 +710,7 @@ watch(isFullscreen, (active) => {
           <template v-if="isFullscreen && outputPosition === 'bottom'">
             <div v-if="!bottomPanelsCollapsed" class="fullscreen-panels">
               <section class="surface-panel fullscreen-panel-item">
-                <div class="collapse-header input-header">
+                <div class="collapse-header">
                   <div class="flex items-center gap-2">
                     <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                     <span>输入数据</span>
@@ -728,16 +742,17 @@ watch(isFullscreen, (active) => {
                     <span>输出</span>
                   </div>
                 </div>
-                <div class="collapse-body">
-                  <div class="output-box">
-                    <pre
-                      v-if="output"
-                      :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
-                    >{{ output }}</pre>
+                <div class="collapse-body output-body">
+                  <div class="output-box" :class="{ 'has-output': output, 'is-error': outputKind === 'error' }">
+                    <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-300' : 'text-emerald-300'">{{ output }}</pre>
                     <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
                   </div>
-                  <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
-                    {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
+                  <div v-if="executionStatus" class="output-status">
+                    <div class="status-divider"></div>
+                    <div class="status-content">
+                      <span class="status-text" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ executionStatus }}</span>
+                      <span v-if="testVerdict" class="test-badge" :class="testVerdict">{{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -777,7 +792,7 @@ watch(isFullscreen, (active) => {
       <div class="playground-container fixed-panels-inner">
         <div class="bottom-panels">
           <section class="surface-panel">
-            <div class="collapse-header input-header">
+            <div class="collapse-header">
               <div class="flex items-center gap-2">
                 <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
                 <span>输入数据</span>
@@ -810,16 +825,17 @@ watch(isFullscreen, (active) => {
                 <span>输出</span>
               </div>
             </div>
-            <div class="collapse-body">
-              <div class="output-box">
-                <pre
-                  v-if="output"
-                  :class="outputKind === 'error' ? 'text-rose-500 dark:text-rose-300' : 'text-emerald-600 dark:text-emerald-300'"
-                >{{ output }}</pre>
+            <div class="collapse-body output-body">
+              <div class="output-box" :class="{ 'has-output': output, 'is-error': outputKind === 'error' }">
+                <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-300' : 'text-emerald-300'">{{ output }}</pre>
                 <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
               </div>
-              <div v-if="testVerdict" class="test-verdict" :class="testVerdict">
-                {{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}
+              <div v-if="executionStatus" class="output-status">
+                <div class="status-divider"></div>
+                <div class="status-content">
+                  <span class="status-text" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ executionStatus }}</span>
+                  <span v-if="testVerdict" class="test-badge" :class="testVerdict">{{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
+                </div>
               </div>
             </div>
           </section>
@@ -897,12 +913,79 @@ watch(isFullscreen, (active) => {
   @apply flex w-full items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 text-left text-sm font-black text-slate-800;
 }
 
-.input-header {
-  @apply gap-3;
-}
-
 .collapse-body {
   @apply overflow-hidden;
+}
+
+.output-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.output-box {
+  flex: 1;
+  min-height: 120px;
+  padding: 20px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: auto;
+  background: linear-gradient(to bottom, #0f172a 95%, #1e293b 95%, #1e293b 100%);
+  color: #6ee7b7;
+}
+.dark .output-box {
+  background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
+  color: #6ee7b7;
+}
+.output-box.is-error {
+  color: #fca5a5;
+}
+.output-box.has-output {
+  min-height: 60px;
+}
+
+.output-status {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: #1e293b;
+}
+.dark .output-status {
+  background: #0f172a;
+}
+
+.status-divider {
+  height: 1px;
+  border-top: 1px dashed #475569;
+  margin-bottom: 8px;
+}
+
+.status-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-text {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.test-badge {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  padding: 2px 12px;
+  border-radius: 999px;
+}
+.test-badge.pass {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+}
+.test-badge.failed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
 }
 
 .editor-toolbar {
@@ -949,11 +1032,7 @@ watch(isFullscreen, (active) => {
   height: 220px;
 }
 
-.output-box {
-  @apply min-h-[220px] bg-white p-5 font-mono text-sm text-slate-900 transition-colors duration-300;
-  max-height: 220px;
-  overflow: auto;
-}
+
 
 .floating-collapse-button {
   @apply inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-2xl shadow-slate-900/25 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:shadow-cyan-950/30 dark:hover:bg-cyan-300;
@@ -1008,10 +1087,12 @@ watch(isFullscreen, (active) => {
     @apply p-4 text-[13px] leading-6;
   }
 
-  .panel-textarea,
-  .output-box {
+  .panel-textarea {
     height: 160px;
     max-height: 160px;
+  }
+  .output-body .output-box {
+    min-height: 80px;
   }
 
   .fixed-panels-inner {
@@ -1059,18 +1140,28 @@ watch(isFullscreen, (active) => {
 .side-io-section .collapse-body {
   flex: 1;
   overflow: hidden;
-}
-
-.side-io-section .collapse-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.side-io-section .panel-textarea,
-.side-io-section .output-box {
+.side-io-section .panel-textarea {
   flex: 1;
   min-height: 0;
   max-height: none;
+  height: auto;
+}
+.side-io-section .output-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.side-io-section .output-body .output-box {
+  flex: 1;
+  min-height: 0;
+}
+.side-io-section .output-body .output-status {
+  flex-shrink: 0;
 }
 
 @media (max-width: 1023px) {
@@ -1114,10 +1205,12 @@ watch(isFullscreen, (active) => {
     height: 500px;
   }
 
-  .panel-textarea,
-  .output-box {
+  .panel-textarea {
     height: 180px;
     max-height: 180px;
+  }
+  .output-body .output-box {
+    min-height: 100px;
   }
 }
 
@@ -1181,10 +1274,22 @@ watch(isFullscreen, (active) => {
     overflow: hidden;
   }
 
-  .bottom-panels .panel-textarea,
-  .bottom-panels .output-box {
+  .bottom-panels .panel-textarea {
     height: 100%;
     max-height: none;
+  }
+  .bottom-panels .output-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .bottom-panels .output-body .output-box {
+    flex: 1;
+    min-height: 0;
+  }
+  .bottom-panels .output-body .output-status {
+    flex-shrink: 0;
   }
 
   .floating-button-group {
@@ -1313,18 +1418,28 @@ watch(isFullscreen, (active) => {
   flex: 1;
   overflow: hidden;
   min-height: 0;
-}
-
-.fullscreen-panels .collapse-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.fullscreen-panels .panel-textarea,
-.fullscreen-panels .output-box {
+.fullscreen-panels .panel-textarea {
   flex: 1;
   min-height: 0;
   max-height: none;
+  height: auto;
+}
+.fullscreen-panels .output-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.fullscreen-panels .output-body .output-box {
+  flex: 1;
+  min-height: 0;
+}
+.fullscreen-panels .output-body .output-status {
+  flex-shrink: 0;
 }
 
 .fullscreen-panel-item {
@@ -1449,19 +1564,13 @@ html.dark .export-file-chip {
 }
 
 html.dark .plain-textarea,
-html.dark .output-box {
-  background-color: #020617 !important;
-  color: #f8fafc !important;
-}
-
 html.dark .plain-textarea {
   caret-color: #ffffff !important;
 }
 
 html:not(.dark) .editor-panel,
 html:not(.dark) .surface-panel,
-html:not(.dark) .plain-textarea,
-html:not(.dark) .output-box {
+html:not(.dark) .plain-textarea {
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
@@ -1497,33 +1606,7 @@ html:not(.dark) .plain-textarea {
   caret-color: #0f172a !important;
 }
 
-html:not(.dark) .output-box pre {
-  color: inherit !important;
-}
 
-.test-verdict {
-  margin-top: 12px;
-  border-radius: 12px;
-  padding: 8px 16px;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-}
-.test-verdict.pass {
-  background-color: #d1fae5;
-  color: #047857;
-}
-.dark .test-verdict.pass {
-  background-color: rgba(6, 95, 70, 0.4);
-  color: #6ee7b7;
-}
-.test-verdict.failed {
-  background-color: #ffe4e6;
-  color: #be123c;
-}
-.dark .test-verdict.failed {
-  background-color: rgba(136, 19, 55, 0.4);
-  color: #fda4af;
-}
+
+
 </style>
