@@ -931,14 +931,17 @@ watch(isFullscreen, (active) => {
   font-size: 14px;
   line-height: 1.6;
   overflow: auto;
-  background: linear-gradient(to bottom, #0f172a 95%, #1e293b 95%, #1e293b 100%);
-  color: #6ee7b7;
+  background: linear-gradient(to bottom, #f1f5f9 95%, #e2e8f0 95%, #e2e8f0 100%);
+  color: #1e293b;
 }
 .dark .output-box {
   background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
   color: #6ee7b7;
 }
 .output-box.is-error {
+  color: #dc2626;
+}
+.dark .output-box.is-error {
   color: #fca5a5;
 }
 .output-box.has-output {
@@ -948,7 +951,7 @@ watch(isFullscreen, (active) => {
 .output-status {
   flex-shrink: 0;
   padding: 8px 16px;
-  background: #1e293b;
+  background: #e2e8f0;
 }
 .dark .output-status {
   background: #0f172a;
@@ -956,8 +959,11 @@ watch(isFullscreen, (active) => {
 
 .status-divider {
   height: 1px;
-  border-top: 1px dashed #475569;
+  border-top: 1px dashed #94a3b8;
   margin-bottom: 8px;
+}
+.dark .status-divider {
+  border-top-color: #475569;
 }
 
 .status-content {
@@ -1268,16 +1274,22 @@ watch(isFullscreen, (active) => {
   .bottom-panels .collapse-body {
     flex: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
   .bottom-panels .panel-textarea {
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     max-height: none;
+    height: auto;
   }
   .bottom-panels .output-body {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
+    gap: 0;
   }
   .bottom-panels .output-body .output-box {
     flex: 1;
@@ -1305,11 +1317,16 @@ watch(isFullscreen, (active) => {
   .bottom-panels .collapse-body {
     flex: 1;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .bottom-panels .panel-textarea {
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     max-height: none;
+    height: auto;
   }
   .bottom-panels .output-body {
     flex: 1;
