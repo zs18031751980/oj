@@ -99,7 +99,7 @@ const handleLogout = async () => {
           <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Secure Sign In</p>
           <h2 class="mt-3 text-3xl font-black tracking-tight">登录 Let Coding</h2>
           <p class="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">
-            输入你的 iOSClub 账号和密码。密码只会提交给本站后端，由后端按环境变量中的 provider 配置向认证服务验证。
+            输入你的 iOSClub 账号和密码。
           </p>
 
           <div v-if="authStore.isAuthenticated" class="mt-8 rounded-[1.5rem] border border-emerald-200 bg-emerald-50 p-5 text-sm leading-7 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100">
