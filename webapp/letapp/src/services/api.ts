@@ -4,19 +4,6 @@ const resolveApiBaseUrl = () => {
     return envBaseUrl;
   }
 
-  if (typeof window !== 'undefined') {
-    const hostApiMap: Record<string, string> = {
-      'oj.xauat.site': 'https://ojapi.xauat.site',
-      'www.xauat.site': 'https://ojapi.xauat.site',
-      'xauat.site': 'https://ojapi.xauat.site',
-    };
-
-    const mappedApiBaseUrl = hostApiMap[window.location.hostname];
-    if (mappedApiBaseUrl) {
-      return mappedApiBaseUrl;
-    }
-  }
-
   return 'http://localhost:6173';
 };
 

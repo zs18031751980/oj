@@ -19,6 +19,10 @@ const USER_INFO_KEY = 'user_info';
 const OAUTH_REMEMBER_KEY = 'oauth_login_remember';
 const OAUTH_PROVIDER_KEY = 'oauth_login_provider';
 const OAUTH_NEXT_KEY = 'oauth_login_next';
+const IOSCLUB_OAUTH_URL = String(import.meta.env.VITE_IOSCLUB_OAUTH_URL || '').trim();
+const IOSCLUB_CLIENT_ID = String(import.meta.env.VITE_IOSCLUB_CLIENT_ID || '').trim();
+const IOSCLUB_REDIRECT_URI = String(import.meta.env.VITE_IOSCLUB_REDIRECT_URI || '').trim();
+const IOSCLUB_SCOPE = String(import.meta.env.VITE_IOSCLUB_SCOPE || 'openid profile').trim();
 
 type SessionPayload = TokenResponse | {
   access_token: string;
@@ -95,6 +99,45 @@ const normalizeOAuthErrorMessage = (error: string, errorDescription: string) => 
   return errorDescription || error || '登录失败，请稍后重试。';
 };
 
+const createRandomToken = () => {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+};
+
+const encodeOAuthState = (payload: Record<string, string>) => btoa(JSON.stringify(payload));
+
+const buildDirectProviderLoginUrl = (provider: string) => {
+  if (provider !== 'iOSClub') {
+    return null;
+  }
+
+  if (!IOSCLUB_OAUTH_URL || !IOSCLUB_CLIENT_ID || !IOSCLUB_REDIRECT_URI) {
+    return null;
+  }
+
+  const loginUrl = new URL(IOSCLUB_OAUTH_URL);
+  loginUrl.searchParams.set('state', encodeOAuthState({
+    ClientId: IOSCLUB_CLIENT_ID,
+    RedirectUri: IOSCLUB_REDIRECT_URI,
+    State: createRandomToken(),
+    ResponseType: 'code',
+    CodeChallenge: '',
+    CodeChallengeMethod: '',
+    Scope: IOSCLUB_SCOPE || 'openid profile',
+    Nonce: createRandomToken(),
+  }));
+  loginUrl.searchParams.set('client_id', IOSCLUB_CLIENT_ID);
+  loginUrl.searchParams.set('redirect_uri', IOSCLUB_REDIRECT_URI);
+  loginUrl.searchParams.set('response_type', 'code');
+  loginUrl.searchParams.set('scope', IOSCLUB_SCOPE || 'openid profile');
+  return loginUrl;
+};
+
 export const useAuthStore = defineStore('auth', () => {
   const storageMode = ref<AuthStorageMode>(getAuthStorageMode());
   const accessToken = ref(getAuthStorage(storageMode.value).getItem(ACCESS_TOKEN_KEY) || '');
@@ -153,8 +196,12 @@ export const useAuthStore = defineStore('auth', () => {
     const safeNext = next.startsWith('/') ? next : '/';
     sessionStorage.setItem(OAUTH_PROVIDER_KEY, provider);
     sessionStorage.setItem(OAUTH_NEXT_KEY, safeNext);
-    const loginUrl = new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
-    loginUrl.searchParams.set('next', safeNext);
+    const directLoginUrl = buildDirectProviderLoginUrl(provider);
+    const loginUrl = directLoginUrl
+      ?? new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
+    if (!directLoginUrl) {
+      loginUrl.searchParams.set('next', safeNext);
+    }
     window.location.href = loginUrl.toString();
   };
 

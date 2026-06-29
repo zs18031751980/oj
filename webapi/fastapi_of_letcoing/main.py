@@ -44,7 +44,7 @@ CURRENT_FILE_PATH = Path(__file__).resolve()
 BACKEND_DOTENV_PATH = CURRENT_FILE_PATH.with_name('.env')
 
 # 在本地开发环境下，仓库根目录在 main.py 的上两级目录
-# 在 Zeabur 部署平台上，服务挂载路径可能更浅，所以需要动态判断
+# 不同部署平台的挂载路径深度可能不同，所以这里做兼容判断
 ROOT_DOTENV_PATH = (
     CURRENT_FILE_PATH.parents[2] / '.env'   # 本地开发：项目根目录下的 .env
     if len(CURRENT_FILE_PATH.parents) > 2
@@ -86,7 +86,7 @@ def _load_oidc_providers_config():
             try:
                 parsed = parser(raw_value)
                 if isinstance(parsed, (dict, list)):
-                    return parsed
+                    return _merge_oidc_providers_with_env(parsed)
             except Exception:
                 pass
 
@@ -116,11 +116,97 @@ def _load_oidc_providers_config():
             try:
                 parsed = parser(raw_block)
                 if isinstance(parsed, (dict, list)):
-                    return parsed
+                    return _merge_oidc_providers_with_env(parsed)
             except Exception:
                 pass
 
-    return {}
+    return _merge_oidc_providers_with_env({})
+
+
+def _normalize_provider_env_prefix(provider_name: str) -> str:
+    """将 provider 名称转换为环境变量前缀，如 iOSClub -> IOSCLUB"""
+    return re.sub(r'[^A-Za-z0-9]+', '_', str(provider_name or '').strip()).upper()
+
+
+def _provider_config_from_env(provider_name: str):
+    """
+    从独立环境变量中构建单个 OIDC provider 配置。
+
+    支持的变量：
+    - <PROVIDER>_ISSUER
+    - <PROVIDER>_CLIENT_ID
+    - <PROVIDER>_CLIENT_SECRET
+    - <PROVIDER>_REDIRECT_URI
+    - <PROVIDER>_CALLBACK_URL
+    - <PROVIDER>_SCOPE
+    """
+    env_prefix = _normalize_provider_env_prefix(provider_name)
+    issuer = os.environ.get(f'{env_prefix}_ISSUER', '').strip()
+    client_id = os.environ.get(f'{env_prefix}_CLIENT_ID', '').strip()
+    client_secret = os.environ.get(f'{env_prefix}_CLIENT_SECRET', '').strip()
+    redirect_uri = os.environ.get(f'{env_prefix}_REDIRECT_URI', '').strip()
+    callback_url = os.environ.get(f'{env_prefix}_CALLBACK_URL', '').strip()
+    scope = os.environ.get(f'{env_prefix}_SCOPE', '').strip()
+
+    if not any((issuer, client_id, client_secret, redirect_uri, callback_url, scope)):
+        return None
+
+    provider_config = {'name': provider_name}
+    if issuer:
+        provider_config['issuer'] = issuer
+    if client_id:
+        provider_config['client_id'] = client_id
+    if client_secret:
+        provider_config['client_secret'] = client_secret
+    if redirect_uri:
+        provider_config['redirect_uri'] = redirect_uri
+    if callback_url:
+        provider_config['callback_url'] = callback_url
+    if scope:
+        provider_config['client_kwargs'] = {'scope': scope}
+
+    return provider_config
+
+
+def _merge_oidc_providers_with_env(base_config):
+    """
+    将 OIDC_PROVIDERS 与独立环境变量合并。
+
+    这样域名、issuer、redirect_uri 等可以通过环境变量覆盖，
+    后续换域名时无需修改代码或 JSON 配置块。
+    """
+    merged_configs = {}
+
+    if isinstance(base_config, dict):
+        for provider_name, config in base_config.items():
+            if isinstance(config, dict):
+                normalized_config = dict(config)
+                normalized_config.setdefault('name', provider_name)
+                merged_configs[str(provider_name)] = normalized_config
+    elif isinstance(base_config, list):
+        for config in base_config:
+            if not isinstance(config, dict):
+                continue
+            provider_name = str(config.get('name') or '').strip()
+            if not provider_name:
+                continue
+            merged_configs[provider_name] = dict(config)
+
+    declared_provider_names = [
+        name.strip()
+        for name in os.environ.get('OIDC_PROVIDER_NAMES', '').split(',')
+        if name.strip()
+    ]
+
+    for provider_name in declared_provider_names:
+        merged_configs.setdefault(provider_name, {'name': provider_name})
+
+    for provider_name in list(merged_configs.keys()):
+        env_config = _provider_config_from_env(provider_name)
+        if env_config:
+            merged_configs[provider_name].update(env_config)
+
+    return list(merged_configs.values())
 
 # ============================================================
 # 3. Flask 应用初始化与配置

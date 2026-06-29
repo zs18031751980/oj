@@ -20,12 +20,21 @@ const sanitizeNext = (value: unknown) => {
   return next.startsWith('/') ? next : '/';
 };
 
+const resolveNextPath = () => {
+  const queryNext = sanitizeNext(route.query.next);
+  if (queryNext !== '/') {
+    return queryNext;
+  }
+
+  return sanitizeNext(sessionStorage.getItem('oauth_login_next'));
+};
+
 const retryLogin = () => {
   authStore.startOAuthLogin('iOSClub', retryNext.value, true);
 };
 
 onMounted(async () => {
-  retryNext.value = sanitizeNext(route.query.next);
+  retryNext.value = resolveNextPath();
 
   try {
     authStore.completeOAuthCallback(route.query);
