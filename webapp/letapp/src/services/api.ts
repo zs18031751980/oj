@@ -1,4 +1,26 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:6173';
+const resolveApiBaseUrl = () => {
+  const envBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
+  if (envBaseUrl) {
+    return envBaseUrl;
+  }
+
+  if (typeof window !== 'undefined') {
+    const hostApiMap: Record<string, string> = {
+      'oj.xauat.site': 'https://ojapi.xauat.site',
+      'www.xauat.site': 'https://ojapi.xauat.site',
+      'xauat.site': 'https://ojapi.xauat.site',
+    };
+
+    const mappedApiBaseUrl = hostApiMap[window.location.hostname];
+    if (mappedApiBaseUrl) {
+      return mappedApiBaseUrl;
+    }
+  }
+
+  return 'http://localhost:6173';
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export interface UserInfo {
   id: string;
