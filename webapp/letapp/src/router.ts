@@ -1,13 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import MainLayout from './layouts/MainLayout.vue';
-import AdminLayout from './layouts/AdminLayout.vue';
 import { useAuthStore } from './stores/auth';
 
 const routes = [
   {
     path: '',
     name: 'main',
-    component: MainLayout,
+    component: () => import('./layouts/MainLayout.vue'),
     children: [
       {
         path: '',
@@ -50,7 +48,7 @@ const routes = [
   {
     path: '/admin',
     name: 'admin',
-    component: AdminLayout,
+    component: () => import('./layouts/AdminLayout.vue'),
     meta: { title: '管理后台 - Let Coding' },
     children: [
       {
