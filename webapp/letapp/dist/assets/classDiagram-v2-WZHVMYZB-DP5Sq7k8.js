@@ -1,0 +1,25 @@
+import { s as a, c as s, a as t, C as e } from "./chunk-B4BG7PRW-BZWrpeyU.js";
+import { _ as i } from "./MarkdownComponent-J92OtoSn.js";
+import "./chunk-FMBD7UC4-Dsn2JnWt.js";
+import "./chunk-55IACEB6-DbU0WgPO.js";
+import "./chunk-QN33PNHL-DsUBJvSL.js";
+import "./vendor-icons-DUK5cEDW.js";
+import "./vendor-vue-D0UmDA62.js";
+import "./vendor-markdown-HlADSkmp.js";
+import "./vendor-monaco-CQJlpWvK.js";
+import "./vendor-naive-Co-etydz.js";
+import "./vendor-prism-DA50wpei.js";
+import "./index-1cb05Ked.js";
+var w = {
+  parser: t,
+  get db() {
+    return new e();
+  },
+  renderer: s,
+  styles: a,
+  init: i((r) => {
+    (r.class || (r.class = {}),
+      (r.class.arrowMarkerAbsolute = r.arrowMarkerAbsolute));
+  }, "init"),
+};
+export { w as diagram };
