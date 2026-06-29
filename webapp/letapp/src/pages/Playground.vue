@@ -925,7 +925,7 @@ watch(isFullscreen, (active) => {
 
 .output-box {
   flex: 1;
-  min-height: 120px;
+  min-height: 180px;
   padding: 20px;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 14px;
@@ -1041,7 +1041,7 @@ watch(isFullscreen, (active) => {
 }
 
 .panel-textarea {
-  height: 220px;
+  height: 330px;
 }
 
 
@@ -1100,8 +1100,8 @@ watch(isFullscreen, (active) => {
   }
 
   .panel-textarea {
-    height: 160px;
-    max-height: 160px;
+    height: 240px;
+    max-height: 240px;
   }
   .output-body .output-box {
     min-height: 80px;
@@ -1218,8 +1218,8 @@ watch(isFullscreen, (active) => {
   }
 
   .panel-textarea {
-    height: 180px;
-    max-height: 180px;
+    height: 270px;
+    max-height: 270px;
   }
   .output-body .output-box {
     min-height: 100px;
