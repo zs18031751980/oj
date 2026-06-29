@@ -1061,9 +1061,15 @@ watch(isFullscreen, (active) => {
   overflow: hidden;
 }
 
+.side-io-section .collapse-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .side-io-section .panel-textarea,
 .side-io-section .output-box {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   max-height: none;
 }
 
@@ -1309,9 +1315,15 @@ watch(isFullscreen, (active) => {
   min-height: 0;
 }
 
+.fullscreen-panels .collapse-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .fullscreen-panels .panel-textarea,
 .fullscreen-panels .output-box {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   max-height: none;
 }
 
