@@ -51,7 +51,7 @@ const goBackToList = async () => {
   await router.push('/announcements');
 };
 
-function parseMarkdown(raw: string) {
+function parseMarkdown(raw: string): { title?: string; date?: string; content: string } {
   const idx = raw.indexOf('---');
   if (idx !== 0) return { content: raw };
   const end = raw.indexOf('---', 3);
@@ -59,11 +59,9 @@ function parseMarkdown(raw: string) {
   const front = raw.slice(3, end).trim();
   const body = raw.slice(end + 3).trim();
   const titleMatch = front.match(/^title:\s*(.+)/m);
-  const permissionMatch = front.match(/^permission:\s*(.+)/m);
   const dateMatch = front.match(/^date:\s*(.+)/m);
   return {
     title: titleMatch ? titleMatch[1]!.trim() : undefined,
-    permission: permissionMatch ? permissionMatch[1]!.trim() : undefined,
     date: dateMatch ? dateMatch[1]!.trim() : undefined,
     content: body,
   };
@@ -202,11 +200,7 @@ watch(currentFile, async (file) => {
 }
 
 .card-title {
-  @apply text-base font-black leading-snug text-slate-950 transition group-hover:text-cyan-600 dark:text-white dark:group-hover:text-cyan-400;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  @apply text-base font-black leading-snug text-slate-950 transition group-hover:text-cyan-600 dark:text-white dark:group-hover:text-cyan-400 line-clamp-3;
 }
 
 .card-time {
