@@ -111,30 +111,32 @@ const createRandomToken = () => {
 
 const encodeOAuthState = (payload: Record<string, string>) => btoa(JSON.stringify(payload));
 
-const buildDirectProviderLoginUrl = (provider: string) => {
-  if (provider !== 'iOSClub') {
-    return null;
+const buildProviderLoginUrl = (provider: string, next: string) => {
+  if (provider === 'iOSClub') {
+    if (!IOSCLUB_OAUTH_URL || !IOSCLUB_CLIENT_ID || !IOSCLUB_REDIRECT_URI) {
+      throw new Error('iOSClub OAuth 登录配置缺失，请检查前端环境变量。');
+    }
+
+    const loginUrl = new URL(IOSCLUB_OAUTH_URL);
+    loginUrl.searchParams.set('state', encodeOAuthState({
+      ClientId: IOSCLUB_CLIENT_ID,
+      RedirectUri: IOSCLUB_REDIRECT_URI,
+      State: createRandomToken(),
+      ResponseType: 'code',
+      CodeChallenge: '',
+      CodeChallengeMethod: '',
+      Scope: IOSCLUB_SCOPE || 'openid profile',
+      Nonce: createRandomToken(),
+    }));
+    loginUrl.searchParams.set('client_id', IOSCLUB_CLIENT_ID);
+    loginUrl.searchParams.set('redirect_uri', IOSCLUB_REDIRECT_URI);
+    loginUrl.searchParams.set('response_type', 'code');
+    loginUrl.searchParams.set('scope', IOSCLUB_SCOPE || 'openid profile');
+    return loginUrl;
   }
 
-  if (!IOSCLUB_OAUTH_URL || !IOSCLUB_CLIENT_ID || !IOSCLUB_REDIRECT_URI) {
-    return null;
-  }
-
-  const loginUrl = new URL(IOSCLUB_OAUTH_URL);
-  loginUrl.searchParams.set('state', encodeOAuthState({
-    ClientId: IOSCLUB_CLIENT_ID,
-    RedirectUri: IOSCLUB_REDIRECT_URI,
-    State: createRandomToken(),
-    ResponseType: 'code',
-    CodeChallenge: '',
-    CodeChallengeMethod: '',
-    Scope: IOSCLUB_SCOPE || 'openid profile',
-    Nonce: createRandomToken(),
-  }));
-  loginUrl.searchParams.set('client_id', IOSCLUB_CLIENT_ID);
-  loginUrl.searchParams.set('redirect_uri', IOSCLUB_REDIRECT_URI);
-  loginUrl.searchParams.set('response_type', 'code');
-  loginUrl.searchParams.set('scope', IOSCLUB_SCOPE || 'openid profile');
+  const loginUrl = new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
+  loginUrl.searchParams.set('next', next);
   return loginUrl;
 };
 
@@ -196,12 +198,7 @@ export const useAuthStore = defineStore('auth', () => {
     const safeNext = next.startsWith('/') ? next : '/';
     sessionStorage.setItem(OAUTH_PROVIDER_KEY, provider);
     sessionStorage.setItem(OAUTH_NEXT_KEY, safeNext);
-    const directLoginUrl = buildDirectProviderLoginUrl(provider);
-    const loginUrl = directLoginUrl
-      ?? new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
-    if (!directLoginUrl) {
-      loginUrl.searchParams.set('next', safeNext);
-    }
+    const loginUrl = buildProviderLoginUrl(provider, safeNext);
     window.location.href = loginUrl.toString();
   };
 
