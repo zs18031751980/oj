@@ -23,6 +23,7 @@ const IOSCLUB_OAUTH_URL = String(import.meta.env.VITE_IOSCLUB_OAUTH_URL || '').t
 const IOSCLUB_CLIENT_ID = String(import.meta.env.VITE_IOSCLUB_CLIENT_ID || '').trim();
 const IOSCLUB_REDIRECT_URI = String(import.meta.env.VITE_IOSCLUB_REDIRECT_URI || '').trim();
 const IOSCLUB_SCOPE = String(import.meta.env.VITE_IOSCLUB_SCOPE || 'openid profile').trim();
+const AUTH_ROUTE_PREFIXES = ['/login', '/auth/callback'];
 
 type SessionPayload = TokenResponse | {
   access_token: string;
@@ -111,6 +112,11 @@ const createRandomToken = () => {
 
 const encodeOAuthState = (payload: Record<string, string>) => btoa(JSON.stringify(payload));
 
+const normalizeNextPath = (next: string) => {
+  const safeNext = next.startsWith('/') ? next : '/';
+  return AUTH_ROUTE_PREFIXES.some((prefix) => safeNext.startsWith(prefix)) ? '/' : safeNext;
+};
+
 const buildProviderLoginUrl = (provider: string, next: string) => {
   if (provider === 'iOSClub') {
     if (!IOSCLUB_OAUTH_URL || !IOSCLUB_CLIENT_ID || !IOSCLUB_REDIRECT_URI) {
@@ -195,7 +201,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const startOAuthLogin = (provider: string, next = '/', remember = true) => {
     sessionStorage.setItem(OAUTH_REMEMBER_KEY, remember ? '1' : '0');
-    const safeNext = next.startsWith('/') ? next : '/';
+    const safeNext = normalizeNextPath(next);
     sessionStorage.setItem(OAUTH_PROVIDER_KEY, provider);
     sessionStorage.setItem(OAUTH_NEXT_KEY, safeNext);
     const loginUrl = buildProviderLoginUrl(provider, safeNext);
