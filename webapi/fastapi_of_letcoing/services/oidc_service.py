@@ -401,7 +401,7 @@ class OIDCService(Injectable, IOIDCService):
 
         return True
 
-    def _authorize_access_token_without_id_token_validation(self, client) -> Dict[str, Any]:
+    def _authorize_access_token_without_id_token_validation(self, client, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
         """
         跳过 ID Token 验证的 OAuth 回调令牌交换
 
@@ -423,6 +423,8 @@ class OIDCService(Injectable, IOIDCService):
         state_data = client.framework.get_state_data(session, params.get('state'))
         client.framework.clear_state_data(session, params.get('state'))
         params = client._format_state_params(state_data, params)
+        if redirect_uri and 'redirect_uri' not in params:
+            params['redirect_uri'] = redirect_uri
         token = client.fetch_access_token(**params)
         client.token = token
         return token
@@ -551,14 +553,12 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'OAuth provider not found: {resolved_provider}')
                 return None
 
-            # Authlib 的 Flask 集成会自动持久化授权时使用的 redirect_uri，
-            # 并在换取令牌时自动复用。再次传递 redirect_uri 可能与已存储的值冲突。
             if self._should_skip_id_token_validation(resolved_provider):
                 self._logger_service.warning(
                     'Skipping OIDC id_token validation and using userinfo endpoint: '
                     f'provider={resolved_provider}'
                 )
-                token = self._authorize_access_token_without_id_token_validation(client)
+                token = self._authorize_access_token_without_id_token_validation(client, redirect_uri)
             else:
                 token = client.authorize_access_token()
 
