@@ -289,6 +289,15 @@ const runSelfTest = async () => {
   isSelfTesting.value = false;
 };
 
+const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    message.success('已复制');
+  } catch {
+    message.error('复制失败');
+  }
+};
+
 const handleKeyboard = (e: KeyboardEvent) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isSubmitting.value) {
     e.preventDefault();
@@ -353,8 +362,14 @@ onUnmounted(() => {
           <div v-for="(sample, i) in problem.samples" :key="i" class="mb-3">
             <div class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">样例 #{{ i + 1 }}</div>
             <div class="grid gap-3 sm:grid-cols-2">
-              <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.input }}</pre>
-              <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.output }}</pre>
+              <div class="relative group">
+                <button class="absolute top-1.5 right-1.5 z-10 rounded-md bg-slate-800/80 px-2 py-1 text-[10px] font-bold text-slate-300 opacity-0 transition hover:bg-slate-700 group-hover:opacity-100" @click="copyText(sample.input)">复制</button>
+                <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.input }}</pre>
+              </div>
+              <div class="relative group">
+                <button class="absolute top-1.5 right-1.5 z-10 rounded-md bg-slate-800/80 px-2 py-1 text-[10px] font-bold text-slate-300 opacity-0 transition hover:bg-slate-700 group-hover:opacity-100" @click="copyText(sample.output)">复制</button>
+                <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.output }}</pre>
+              </div>
             </div>
           </div>
         </div>
