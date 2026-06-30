@@ -1,12 +1,12 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiRequest } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 import { useThemeStore } from '../stores/theme';
-import MonacoEditor from '../components/MonacoEditor.vue';
-import * as monaco from 'monaco-editor';
+
+const MonacoEditor = defineAsyncComponent(() => import('../components/MonacoEditor.vue'));
 
 interface ExecutionResponse {
   stdout?: string;
@@ -309,11 +309,11 @@ const runCode = async () => {
   }
 };
 
-const handleMonacoReady = (editor: monaco.editor.IStandaloneCodeEditor) => {
+const handleMonacoReady = (editor: { addAction: (action: { id: string; label: string; keybindings: number[]; run: () => void }) => void }) => {
   editor.addAction({
     id: 'run-code',
     label: 'Run Code',
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+    keybindings: [2048 | 3],
     run: () => {
       if (!isExecuting.value) {
         void runCode();
