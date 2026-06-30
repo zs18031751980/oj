@@ -336,7 +336,7 @@ onUnmounted(() => {
           <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'testcases' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'testcases'">测试用例 ({{ problem.testCases.length }})</button>
         </div>
 
-        <div v-show="activeTab === 'desc'" class="flex-1 overflow-y-auto px-5 py-5">
+        <div v-show="activeTab === 'desc'" class="px-5 py-5">
           <div class="mb-6 flex flex-wrap gap-6 text-sm text-slate-500 dark:text-slate-400">
             <span>时间限制：{{ problem.timeLimit }}ms</span>
             <span>内存限制：{{ problem.memoryLimit }}MB</span>
@@ -361,7 +361,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-show="activeTab === 'testcases'" class="flex-1 overflow-y-auto px-5 py-5">
+        <div v-show="activeTab === 'testcases'" class="px-5 py-5">
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">以下为判题使用的测试数据（隐藏），提交代码后将自动运行这些测试点。</p>
           <div v-for="(tc, i) in problem.testCases" :key="i" class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
             <div class="mb-1 text-xs font-bold text-slate-500 dark:text-slate-400">测试点 #{{ i + 1 }}</div>
@@ -386,7 +386,7 @@ onUnmounted(() => {
       </div>
 
       <div class="flex flex-1 min-w-0">
-        <div class="flex flex-col flex-1 min-w-0">
+        <div class="relative flex flex-col flex-1 min-w-0">
           <div class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
             <div class="flex items-center gap-2">
               <button class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" @click="leftPanelOpen = !leftPanelOpen">
@@ -403,7 +403,7 @@ onUnmounted(() => {
             <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
           </div>
 
-          <SelfTestPanel
+          <SelfTestPanel class="absolute bottom-0 left-0 right-0 z-10"
             :stdin="stdin"
             :expected-output="expectedOutput"
             :output="selfTestOutput"

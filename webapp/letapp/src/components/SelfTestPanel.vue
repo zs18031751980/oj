@@ -27,7 +27,7 @@ const onDragStart = (e: MouseEvent) => {
   const startHeight = panelHeight.value
   const onMouseMove = (ev: MouseEvent) => {
     const delta = startY - ev.clientY
-    panelHeight.value = Math.max(180, Math.min(700, startHeight + delta))
+    panelHeight.value = Math.max(180, startHeight + delta)
   }
   const onMouseUp = () => {
     dragging.value = false
@@ -122,9 +122,9 @@ const onDragStart = (e: MouseEvent) => {
 
 <style scoped>
 .self-test-panel {
-  border-top: 1px solid #e2e8f0;
   background: #fff;
   position: relative;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .panel-collapsed .panel-body {
@@ -297,8 +297,8 @@ const onDragStart = (e: MouseEvent) => {
 
 <style>
 html.dark .self-test-panel {
-  border-color: #1e293b !important;
   background: #0f172a !important;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 html.dark .drag-handle {
   background: #1e293b !important;
