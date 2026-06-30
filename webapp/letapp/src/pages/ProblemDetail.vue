@@ -39,6 +39,16 @@ const isSubmitting = ref(false);
 const submitResult = ref<string | null>(null);
 const activeTab = ref<'desc' | 'testcases'>('desc');
 
+interface TestResult {
+  testCaseIndex: number;
+  passed: boolean;
+  actualOutput: string;
+}
+
+const testResults = ref<TestResult[]>([]);
+const currentResultPage = ref(0);
+const failedTestCaseIndex = ref<number | null>(null);
+
 const problems: Record<number, Problem> = {
   1001: {
     id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'],
@@ -115,9 +125,39 @@ const submitCode = async () => {
   }
   isSubmitting.value = true;
   submitResult.value = null;
+  testResults.value = [];
+  failedTestCaseIndex.value = null;
+  currentResultPage.value = 0;
+
   await new Promise(r => setTimeout(r, 1500));
-  const outcomes = ['AC', 'WA', 'RE'];
-  submitResult.value = outcomes[Math.floor(Math.random() * outcomes.length)] || 'RE';
+
+  const p = problem.value;
+  if (!p) return;
+
+  let firstFailed: number | null = null;
+  const results: TestResult[] = [];
+
+  for (let i = 0; i < p.testCases.length; i++) {
+    const passed = firstFailed === null && Math.random() > 0.3;
+    if (!passed && firstFailed === null) firstFailed = i;
+    results.push({
+      testCaseIndex: i,
+      passed,
+      actualOutput: passed ? p.testCases[i].output : `(模拟输出) 测试点 #${i + 1} 输出错误`,
+    });
+  }
+
+  testResults.value = results;
+
+  if (firstFailed !== null) {
+    submitResult.value = 'WA';
+    failedTestCaseIndex.value = firstFailed;
+    currentResultPage.value = firstFailed;
+  } else {
+    submitResult.value = 'AC';
+    currentResultPage.value = 0;
+  }
+
   isSubmitting.value = false;
 };
 
@@ -202,36 +242,91 @@ const editorLanguageMap: Record<string, string> = {
         </div>
       </div>
 
-      <button v-if="!leftPanelOpen" class="fixed left-4 top-1/2 z-10 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
-        <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
-      </button>
+      <div class="flex flex-1 min-w-0">
+        <button v-if="!leftPanelOpen" class="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
+          <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
+        </button>
+        <div class="flex flex-col flex-1 min-w-0">
+          <div class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
+            <div class="flex items-center gap-2">
+              <button class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" @click="leftPanelOpen = !leftPanelOpen">
+                <Icon icon="material-symbols:menu" class="h-5 w-5" />
+              </button>
+              <div class="flex gap-2">
+                <button v-for="lang in [{v:'cpp',l:'C++'},{v:'python',l:'Python'},{v:'java',l:'Java'}]" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
+              </div>
+            </div>
+            <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
+          </div>
 
-      <div class="flex flex-1 flex-col min-w-0">
-        <div class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
-          <div class="flex items-center gap-2">
-            <button class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" @click="leftPanelOpen = !leftPanelOpen">
-              <Icon icon="material-symbols:menu" class="h-5 w-5" />
-            </button>
-            <div class="flex gap-2">
-              <button v-for="lang in [{v:'cpp',l:'C++'},{v:'python',l:'Python'},{v:'java',l:'Java'}]" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
+          <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
+        </div>
+
+        <div v-if="submitResult" class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+          <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+            <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
+            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="submitResult === 'AC' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? 'ACCEPTED' : 'WRONG ANSWER' }}</span>
+          </div>
+
+          <div class="flex flex-col flex-1 min-h-0">
+            <div class="px-5 py-4 overflow-y-auto space-y-1.5">
+              <div v-for="(tr, i) in testResults" :key="i" class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer transition" :class="currentResultPage === i ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'" @click="currentResultPage = i">
+                <Icon :icon="tr.passed ? 'material-symbols:check-circle' : 'material-symbols:cancel'" :class="tr.passed ? 'text-emerald-500' : 'text-rose-500'" class="h-4 w-4 shrink-0" />
+                <span class="text-slate-600 dark:text-slate-400">测试点 #{{ i + 1 }}</span>
+                <span class="ml-auto" :class="tr.passed ? 'text-emerald-500' : 'text-rose-500'">{{ tr.passed ? '通过' : '未通过' }}</span>
+              </div>
+            </div>
+
+            <div class="border-t border-slate-200 dark:border-slate-800 flex flex-col flex-1 min-h-0">
+              <div class="flex items-center justify-between px-5 py-3">
+                <span class="text-sm font-bold text-slate-700 dark:text-slate-300">测试点 #{{ currentResultPage + 1 }}</span>
+                <div class="flex items-center gap-1">
+                  <button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30" :disabled="currentResultPage === 0" @click="currentResultPage--">
+                    <Icon icon="material-symbols:chevron-left" class="h-4 w-4" />
+                  </button>
+                  <span class="text-xs text-slate-400 px-1">{{ currentResultPage + 1 }} / {{ testResults.length }}</span>
+                  <button class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30" :disabled="currentResultPage >= testResults.length - 1" @click="currentResultPage++">
+                    <Icon icon="material-symbols:chevron-right" class="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex-1 overflow-y-auto px-5 pb-4 space-y-3">
+                <div>
+                  <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">输入</div>
+                  <pre class="output-box font-mono text-sm leading-relaxed overflow-auto" style="min-height:60px;padding:16px 20px;">{{ problem.testCases[currentResultPage].input }}</pre>
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">期望输出</div>
+                  <pre class="output-box font-mono text-sm leading-relaxed overflow-auto" style="min-height:60px;padding:16px 20px;">{{ problem.testCases[currentResultPage].output }}</pre>
+                </div>
+                <div>
+                  <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">实际输出</div>
+                  <pre class="output-box font-mono text-sm leading-relaxed overflow-auto" :class="{ 'is-error': !testResults[currentResultPage].passed }" style="min-height:60px;padding:16px 20px;">{{ testResults[currentResultPage].actualOutput }}</pre>
+                </div>
+              </div>
             </div>
           </div>
-          <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
-        </div>
-
-        <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
-
-        <div v-if="submitResult" class="border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
-          <div class="flex items-center gap-3">
-            <span class="rounded-full px-4 py-1.5 text-sm font-black tracking-wider" :style="{ background: submitResult === 'AC' ? '#d1fae5' : '#fee2e2', color: submitResult === 'AC' ? '#10b981' : '#ef4444' }">{{ submitResult === 'AC' ? 'Accepted' : submitResult === 'WA' ? 'Wrong Answer' : 'Runtime Error' }}</span>
-            <span class="text-xs text-slate-400">通过 {{ submitResult === 'AC' ? '全部' : '部分' }} 测试点</span>
-          </div>
-        </div>
-
-        <div v-else class="border-t border-slate-200 bg-white px-5 py-4 text-center text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500">
-          使用 Monaco Editor 编写代码，点击「提交」查看评测结果
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.output-box {
+  background: linear-gradient(to bottom, #f1f5f9 95%, #e2e8f0 95%, #e2e8f0 100%);
+  color: #1e293b;
+  border-radius: 0.75rem;
+}
+:global(.dark) .output-box {
+  background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
+  color: #6ee7b7;
+}
+.output-box.is-error {
+  color: #dc2626;
+}
+:global(.dark) .output-box.is-error {
+  color: #fca5a5;
+}
+</style>
