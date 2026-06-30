@@ -126,10 +126,6 @@ const onDragStart = (e: MouseEvent) => {
   background: #fff;
   position: relative;
 }
-:global(.dark) .self-test-panel {
-  border-color: #1e293b;
-  background: #0f172a;
-}
 
 .panel-collapsed .panel-body {
   display: none;
@@ -145,17 +141,9 @@ const onDragStart = (e: MouseEvent) => {
   border-bottom: 1px solid #e2e8f0;
   user-select: none;
 }
-:global(.dark) .drag-handle {
-  background: #1e293b;
-  border-color: #334155;
-}
 .drag-handle:hover,
 .drag-active {
   background: #e2e8f0;
-}
-:global(.dark) .drag-handle:hover,
-:global(.dark) .drag-active {
-  background: #334155;
 }
 
 .drag-icon {
@@ -191,13 +179,6 @@ const onDragStart = (e: MouseEvent) => {
   opacity: 0.5;
   cursor: not-allowed;
 }
-:global(.dark) .run-btn {
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.15);
-}
-:global(.dark) .run-btn:hover:not(:disabled) {
-  background: rgba(52, 211, 153, 0.25);
-}
 
 .collapse-btn {
   display: inline-flex;
@@ -213,9 +194,6 @@ const onDragStart = (e: MouseEvent) => {
 }
 .collapse-btn:hover {
   background: #f1f5f9;
-}
-:global(.dark) .collapse-btn:hover {
-  background: #1e293b;
 }
 
 .panel-body {
@@ -249,22 +227,11 @@ const onDragStart = (e: MouseEvent) => {
 .panel-textarea:focus {
   border-color: #22d3ee;
 }
-:global(.dark) .panel-textarea {
-  border-color: #334155;
-  background: rgba(30, 41, 59, 0.5);
-  color: #f1f5f9;
-}
-:global(.dark) .panel-textarea:focus {
-  border-color: #22d3ee;
-}
 
 .result-section {
   border: 1px solid #e2e8f0;
   border-radius: 1rem;
   overflow: hidden;
-}
-:global(.dark) .result-section {
-  border-color: #1e293b;
 }
 
 .result-header {
@@ -278,11 +245,6 @@ const onDragStart = (e: MouseEvent) => {
   color: #1e293b;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
-}
-:global(.dark) .result-header {
-  color: #f8fafc;
-  background: #0f172a;
-  border-color: #1e293b;
 }
 
 .result-body-wrap {
@@ -300,16 +262,9 @@ const onDragStart = (e: MouseEvent) => {
   background: linear-gradient(to bottom, #f1f5f9 95%, #e2e8f0 95%, #e2e8f0 100%);
   color: #1e293b;
 }
-:global(.dark) .result-body {
-  background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
-  color: #6ee7b7;
-}
 
 .result-error {
   color: #dc2626;
-}
-:global(.dark) .result-error {
-  color: #fca5a5;
 }
 
 .result-footer {
@@ -321,10 +276,6 @@ const onDragStart = (e: MouseEvent) => {
   font-weight: 600;
   background: #e2e8f0;
   border-top: 1px dashed #94a3b8;
-}
-:global(.dark) .result-footer {
-  background: #0f172a;
-  border-color: #475569;
 }
 
 .result-badge {
@@ -340,6 +291,58 @@ const onDragStart = (e: MouseEvent) => {
 }
 .badge-fail {
   color: #ef4444;
-  background: rgba(68, 68, 239, 0.15);
+  background: rgba(239, 68, 68, 0.15);
+}
+</style>
+
+<style>
+html.dark .self-test-panel {
+  border-color: #1e293b !important;
+  background: #0f172a !important;
+}
+html.dark .drag-handle {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+html.dark .drag-handle:hover,
+html.dark .drag-active {
+  background: #334155 !important;
+}
+html.dark .run-btn {
+  color: #34d399 !important;
+  background: rgba(52, 211, 153, 0.15) !important;
+}
+html.dark .run-btn:hover:not(:disabled) {
+  background: rgba(52, 211, 153, 0.25) !important;
+}
+html.dark .collapse-btn:hover {
+  background: #1e293b !important;
+}
+html.dark .panel-textarea {
+  border-color: #334155 !important;
+  background: rgba(30, 41, 59, 0.5) !important;
+  color: #f1f5f9 !important;
+}
+html.dark .panel-textarea:focus {
+  border-color: #22d3ee !important;
+}
+html.dark .result-section {
+  border-color: #1e293b !important;
+}
+html.dark .result-header {
+  color: #f8fafc !important;
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+html.dark .result-body {
+  background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%) !important;
+  color: #6ee7b7 !important;
+}
+html.dark .result-error {
+  color: #fca5a5 !important;
+}
+html.dark .result-footer {
+  background: #0f172a !important;
+  border-color: #475569 !important;
 }
 </style>
