@@ -422,7 +422,8 @@ class OIDCService(Injectable, IOIDCService):
 
         state_data = client.framework.get_state_data(session, params.get('state'))
         client.framework.clear_state_data(session, params.get('state'))
-        params = client._format_state_params(state_data, params)
+        if state_data:
+            params = client._format_state_params(state_data, params)
         if redirect_uri and 'redirect_uri' not in params:
             params['redirect_uri'] = redirect_uri
         token = client.fetch_access_token(**params)
