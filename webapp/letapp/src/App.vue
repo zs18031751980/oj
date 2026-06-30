@@ -2,11 +2,7 @@
   <n-config-provider :theme="theme">
     <n-dialog-provider>
       <n-message-provider>
-        <router-view v-slot="{ Component }">
-          <keep-alive :include="['Home', 'Playground', 'Learn', 'Problems', 'ProblemDetail', 'Announcements', 'AdminDashboard', 'AdminUsers']">
-            <component :is="Component" />
-          </keep-alive>
-        </router-view>
+        <router-view/>
       </n-message-provider>
     </n-dialog-provider>
   </n-config-provider>
