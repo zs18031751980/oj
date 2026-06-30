@@ -326,14 +326,9 @@ onUnmounted(() => {
             <Icon icon="material-symbols:arrow-back" class="h-3.5 w-3.5" />返回
           </button>
         </div>
-        <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-          <div class="flex items-center gap-3 min-w-0">
-            <span class="text-lg font-black truncate">{{ problem.id }}. {{ problem.title }}</span>
-            <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
-          </div>
-          <button class="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="收起左侧" @click="leftPanelOpen = false">
-            <Icon icon="material-symbols:chevron-left" class="h-5 w-5" />
-          </button>
+        <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <span class="text-lg font-black truncate">{{ problem.id }}. {{ problem.title }}</span>
+          <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
         </div>
 
         <div class="flex gap-1 border-b border-slate-100 px-5 dark:border-slate-800">
