@@ -399,9 +399,11 @@ onUnmounted(() => {
             <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
           </div>
 
-          <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
+          <div class="flex-1 min-h-0">
+            <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
+          </div>
 
-          <SelfTestPanel
+          <SelfTestPanel v-show="leftPanelOpen"
             :stdin="stdin"
             :expected-output="expectedOutput"
             :output="selfTestOutput"
