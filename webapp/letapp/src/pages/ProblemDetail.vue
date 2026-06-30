@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { NButton, useMessage } from 'naive-ui';
@@ -164,6 +164,21 @@ const submitCode = async () => {
 const editorLanguageMap: Record<string, string> = {
   cpp: 'cpp', python: 'python', java: 'java',
 };
+
+const handleKeyboard = (e: KeyboardEvent) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isSubmitting.value) {
+    e.preventDefault();
+    submitCode();
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyboard);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyboard);
+});
 </script>
 
 <template>
