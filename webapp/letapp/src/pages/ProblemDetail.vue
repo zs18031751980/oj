@@ -320,7 +320,12 @@ onUnmounted(() => {
 
   <div v-else class="flex min-h-[calc(100vh-5rem)] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <div class="flex flex-1 flex-col lg:flex-row relative">
-      <div class="relative flex flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
+      <div class="relative flex flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
+        <div class="flex items-center gap-2 border-b border-slate-100 px-5 py-2.5 dark:border-slate-800">
+          <button class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" @click="router.push('/problems')">
+            <Icon icon="material-symbols:arrow-back" class="h-3.5 w-3.5" />返回
+          </button>
+        </div>
         <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <div class="flex items-center gap-3 min-w-0">
             <span class="text-lg font-black truncate">{{ problem.id }}. {{ problem.title }}</span>
@@ -376,12 +381,6 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-        </div>
-
-        <div class="flex items-center gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">
-          <button class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" @click="router.push('/problems')">
-            <Icon icon="material-symbols:arrow-back" class="h-4 w-4" />返回
-          </button>
         </div>
       </div>
 
