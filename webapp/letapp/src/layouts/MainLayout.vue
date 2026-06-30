@@ -6,7 +6,7 @@
         :class="sidebarExpanded ? 'w-72' : 'w-24'"
       >
         <div class="flex h-20 items-center justify-between gap-3 px-5">
-          <router-link to="/" class="group flex min-w-0 items-center gap-3 overflow-hidden" @click="closeMenu">
+          <a href="https://www.xauat.site/" target="_blank" rel="noopener noreferrer" class="group flex min-w-0 items-center gap-3 overflow-hidden">
             <span class="relative grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white shadow-lg shadow-cyan-500/15 dark:bg-slate-950">
               <img src="/assets/logo.png" alt="Let Coding Logo" class="h-8 w-8 transition-transform group-hover:scale-110" />
             </span>
@@ -14,7 +14,7 @@
               <div class="truncate text-lg font-black tracking-tight">Let Coding</div>
               <div class="-mt-1 text-[11px] font-medium uppercase tracking-[0.24em] text-slate-400">Online Judge</div>
             </div>
-          </router-link>
+          </a>
         </div>
 
         <nav class="flex-1 space-y-2 px-4 pb-6">
@@ -54,12 +54,12 @@
             :style="headerPaddingStyle"
           >
             <div class="flex min-h-14 w-full min-w-0 items-center justify-between gap-3">
-              <router-link to="/" class="flex min-w-0 items-center gap-3 md:hidden" @click="closeMenu">
+              <a href="https://www.xauat.site/" target="_blank" rel="noopener noreferrer" class="flex min-w-0 items-center gap-3 md:hidden">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-white dark:bg-slate-950">
                   <img src="/assets/logo.png" alt="Let Coding Logo" class="h-7 w-7" />
                 </span>
                 <span class="truncate text-base font-black">Let Coding</span>
-              </router-link>
+              </a>
 
               <div class="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
                 <div class="relative shrink-0">
