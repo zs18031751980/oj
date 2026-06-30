@@ -64,9 +64,9 @@ const features = [
             </span>
           </h1>
 
-          <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
+          <!-- <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
             let coding.
-          </p>
+          </p> -->
 
           <div class="mt-8 flex flex-wrap gap-4">
             <button class="hero-primary" @click="router.push('/playground')">
