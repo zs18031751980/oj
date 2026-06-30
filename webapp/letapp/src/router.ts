@@ -26,6 +26,18 @@ const routes = [
         component: () => import('./pages/Learn.vue'),
       },
       {
+        path: '/problems',
+        name: 'Problems',
+        meta: { title: '题库 - Let Coding' },
+        component: () => import('./pages/Problems.vue'),
+      },
+      {
+        path: '/problems/:id',
+        name: 'ProblemDetail',
+        meta: { title: '题目 - Let Coding' },
+        component: () => import('./pages/ProblemDetail.vue'),
+      },
+      {
         path: '/announcements',
         name: 'Announcements',
         meta: { title: '公告 - Let Coding' },

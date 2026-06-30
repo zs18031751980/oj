@@ -3,7 +3,7 @@
     <n-dialog-provider>
       <n-message-provider>
         <router-view v-slot="{ Component }">
-          <keep-alive :include="['Home', 'Playground', 'Learn', 'Announcements', 'AdminDashboard', 'AdminUsers']">
+          <keep-alive :include="['Home', 'Playground', 'Learn', 'Problems', 'ProblemDetail', 'Announcements', 'AdminDashboard', 'AdminUsers']">
             <component :is="Component" />
           </keep-alive>
         </router-view>
