@@ -517,7 +517,7 @@ watch(isFullscreen, (active) => {
             </button>
             <div class="min-w-0">
               <h1 class="truncate text-2xl font-black tracking-tight">在线代码编辑器</h1>
-              <p class="text-sm text-slate-500 dark:text-slate-400">支持多语言运行、标准输入，以及统一输出结果显示。</p>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Ctrl + Enter 运行</p>
             </div>
           </div>
 

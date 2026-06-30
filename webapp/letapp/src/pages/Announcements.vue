@@ -119,7 +119,7 @@ watch(currentFile, async (file) => {
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
               <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Announcements</p>
-              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">最新公告</h1>
+              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">公告</h1>
             </div>
             <div class="flex items-center gap-3">
               <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
