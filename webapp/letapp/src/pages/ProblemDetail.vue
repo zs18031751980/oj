@@ -445,23 +445,34 @@ onUnmounted(() => {
               </div>
 
               <div v-if="testResults.length > 0" class="flex-1 overflow-y-auto px-5 pb-4 space-y-3">
-                <div class="result-section">
-                  <div class="result-header">输入</div>
-                  <pre class="result-body">{{ problem.testCases[currentResultPage]?.input }}</pre>
-                </div>
-                <div class="result-section">
-                  <div class="result-header">期望输出</div>
-                  <pre class="result-body">{{ problem.testCases[currentResultPage]?.output }}</pre>
-                </div>
-                <div class="result-section">
-                  <div class="result-header">
-                    <span>实际输出</span>
-                    <span class="result-badge" :class="(testResults[currentResultPage]?.passed ? 'badge-pass' : 'badge-fail')">{{ testResults[currentResultPage]?.passed ? '✓ PASS' : '✗ FAILED' }}</span>
+                <div class="surface-panel">
+                  <div class="collapse-header">
+                    <span>输入</span>
                   </div>
-                  <div class="result-body-wrap">
-                    <pre class="result-body" :class="{ 'result-error': !testResults[currentResultPage]?.passed }">{{ testResults[currentResultPage]?.actualOutput }}</pre>
-                    <div class="result-footer">
-                      <span :class="submitResult === 'AC' ? 'text-emerald-500' : 'text-rose-500'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage]?.passed ? '通过' : '未通过' }}</span>
+                  <div class="collapse-body">
+                    <pre class="output-box">{{ problem.testCases[currentResultPage]?.input }}</pre>
+                  </div>
+                </div>
+                <div class="surface-panel">
+                  <div class="collapse-header">
+                    <span>期望输出</span>
+                  </div>
+                  <div class="collapse-body">
+                    <pre class="output-box">{{ problem.testCases[currentResultPage]?.output }}</pre>
+                  </div>
+                </div>
+                <div class="surface-panel">
+                  <div class="collapse-header">
+                    <span>实际输出</span>
+                    <span class="test-badge" :class="testResults[currentResultPage]?.passed ? 'pass' : 'failed'">{{ testResults[currentResultPage]?.passed ? '✓ PASS' : '✗ FAILED' }}</span>
+                  </div>
+                  <div class="collapse-body output-body">
+                    <pre class="output-box" :class="{ 'is-error': !testResults[currentResultPage]?.passed }">{{ testResults[currentResultPage]?.actualOutput }}</pre>
+                    <div class="output-status">
+                      <div class="status-divider"></div>
+                      <div class="status-content">
+                        <span class="status-text" :class="submitResult === 'AC' ? 'text-emerald-400' : 'text-rose-400'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage]?.passed ? '通过' : '未通过' }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -479,16 +490,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.result-section {
+.surface-panel {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.75rem;
   border: 1px solid #e2e8f0;
-  border-radius: 1rem;
   overflow: hidden;
 }
-:global(.dark) .result-section {
-  border-color: #1e293b;
+:global(.dark) .surface-panel {
+  border-color: #334155;
 }
 
-.result-header {
+.collapse-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -497,22 +510,30 @@ onUnmounted(() => {
   font-size: 0.75rem;
   font-weight: 800;
   color: #1e293b;
-  background: #fff;
+  background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
-:global(.dark) .result-header {
+:global(.dark) .collapse-header {
   color: #f8fafc;
-  background: #0f172a;
-  border-color: #1e293b;
+  background: #1e293b;
+  border-color: #334155;
 }
 
-.result-body-wrap {
-  overflow: hidden;
+.collapse-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.result-body {
-  min-height: 64px;
-  padding: 14px 18px;
+.output-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.output-box {
+  min-height: 48px;
+  padding: 12px 16px;
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
@@ -521,45 +542,59 @@ onUnmounted(() => {
   background: linear-gradient(to bottom, #f1f5f9 95%, #e2e8f0 95%, #e2e8f0 100%);
   color: #1e293b;
 }
-:global(.dark) .result-body {
+:global(.dark) .output-box {
   background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
   color: #6ee7b7;
 }
-
-.result-error {
+.output-box.is-error {
   color: #dc2626;
 }
-:global(.dark) .result-error {
+:global(.dark) .output-box.is-error {
   color: #fca5a5;
 }
 
-.result-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.7rem;
-  font-weight: 600;
+.output-status {
+  flex-shrink: 0;
+  padding: 6px 12px;
   background: #e2e8f0;
-  border-top: 1px dashed #94a3b8;
 }
-:global(.dark) .result-footer {
+:global(.dark) .output-status {
   background: #0f172a;
+}
+
+.status-divider {
+  height: 1px;
+  border-top: 1px dashed #94a3b8;
+  margin-bottom: 6px;
+}
+:global(.dark) .status-divider {
   border-color: #475569;
 }
 
-.result-badge {
-  font-size: 10px;
+.status-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.test-badge {
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.05em;
-  padding: 1px 8px;
+  padding: 2px 10px;
   border-radius: 999px;
 }
-.badge-pass {
+.test-badge.pass {
   color: #10b981;
   background: rgba(16, 185, 129, 0.15);
 }
-.badge-fail {
+.test-badge.failed {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.15);
 }
