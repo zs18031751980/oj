@@ -11,7 +11,7 @@
 
 from functools import wraps
 
-from flask import g, jsonify, request  # g: 请求全局上下文
+from flask import g, request  # g: 请求全局上下文
 
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
@@ -44,16 +44,16 @@ class AuthMiddleware:
             auth_header = request.headers.get('Authorization', '')
 
             if not auth_header:
-                return jsonify({'error': 'Missing Authorization header'}), 401
+                return {'error': 'Missing Authorization header'}, 401
 
             if not auth_header.startswith('Bearer '):
-                return jsonify({'error': 'Invalid Authorization format'}), 401
+                return {'error': 'Invalid Authorization format'}, 401
 
             token = auth_header[7:]
             user_info = jwt_service.verify_access_token(token)
 
             if not user_info:
-                return jsonify({'error': 'Token is invalid or expired'}), 401
+                return {'error': 'Token is invalid or expired'}, 401
 
             # 将用户信息存储到请求全局变量中，供后续处理使用
             g.current_user = user_info
@@ -124,11 +124,11 @@ class RateLimitMiddleware:
                         key = f'rate_limit:{user_id}'
 
                         if not redis_service.rate_limit_check(key, max_requests, window_seconds):
-                            return jsonify({
+                            return {
                                 'error': '请求过于频繁，请稍后再试',
                                 'limit': max_requests,
                                 'window': window_seconds,
-                            }), 429
+                            }, 429
                     except Exception:
                         pass
 
@@ -169,11 +169,11 @@ class RoleBasedAuth:
                 user_info = getattr(g, 'current_user', None)
 
                 if not user_info:
-                    return jsonify({'error': 'Authentication required'}), 401
+                    return {'error': 'Authentication required'}, 401
 
                 user_role = user_info.get('role', 'user')
                 if user_role != required_role and user_role != 'admin':
-                    return jsonify({'error': 'Insufficient permissions'}), 403
+                    return {'error': 'Insufficient permissions'}, 403
 
                 return f(*args, **kwargs)
 
