@@ -403,7 +403,7 @@ onUnmounted(() => {
             <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
           </div>
 
-          <SelfTestPanel v-show="leftPanelOpen"
+          <SelfTestPanel
             :stdin="stdin"
             :expected-output="expectedOutput"
             :output="selfTestOutput"
