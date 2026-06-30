@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { NButton, useMessage } from 'naive-ui';
@@ -38,6 +38,7 @@ onMounted(async () => {
 
   try {
     authStore.completeOAuthCallback(route.query);
+    await nextTick();
     message.success('登录成功');
     await router.replace(retryNext.value);
   } catch (error) {
@@ -51,6 +52,7 @@ onMounted(async () => {
       ? `登录提供方：${provider}。如果持续失败，说明问题很可能出在第三方统一认证页面或其会话服务。`
       : '如果持续失败，说明问题很可能出在第三方统一认证页面或其会话服务。';
     loginFailed.value = true;
+    await nextTick();
     message.error(errorMessage);
   }
 });
