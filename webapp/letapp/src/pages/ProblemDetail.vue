@@ -50,6 +50,13 @@ const testResults = ref<TestResult[]>([]);
 const currentResultPage = ref(0);
 const failedTestCaseIndex = ref<number | null>(null);
 
+const stdin = ref('');
+const expectedOutput = ref('');
+const selfTestOutput = ref('');
+const selfTestStatus = ref('');
+const isSelfTesting = ref(false);
+const selfTestVerdict = ref<'pass' | 'fail' | null>(null);
+
 const problems: Record<number, Problem> = {
   1001: {
     id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'],
@@ -234,6 +241,53 @@ const editorLanguageMap: Record<string, string> = {
   cpp: 'cpp', python: 'python', java: 'java',
 };
 
+const runSelfTest = async () => {
+  if (!code.value.trim()) {
+    message.warning('请先编写代码');
+    return;
+  }
+  isSelfTesting.value = true;
+  selfTestOutput.value = '';
+  selfTestStatus.value = '';
+  selfTestVerdict.value = null;
+  try {
+    const res = await apiRequest<any>('/code/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        code: code.value,
+        language: editorLanguageMap[language.value] || language.value,
+        stdin: stdin.value,
+      }),
+    });
+    const stderr = (res.stderr || '').trim();
+    let stdout = (res.stdout || '').trim();
+    if (stderr) {
+      selfTestOutput.value = stderr;
+      selfTestStatus.value = '运行出错';
+      selfTestVerdict.value = 'fail';
+    } else {
+      selfTestOutput.value = stdout;
+      const expected = expectedOutput.value.trim();
+      if (expected) {
+        if (stdout === expected) {
+          selfTestStatus.value = '通过';
+          selfTestVerdict.value = 'pass';
+        } else {
+          selfTestStatus.value = '未通过';
+          selfTestVerdict.value = 'fail';
+        }
+      } else {
+        selfTestStatus.value = stdout ? '执行成功' : '程序无输出';
+      }
+    }
+  } catch {
+    selfTestOutput.value = '请求失败，请重试';
+    selfTestStatus.value = '网络错误';
+    selfTestVerdict.value = 'fail';
+  }
+  isSelfTesting.value = false;
+};
+
 const handleKeyboard = (e: KeyboardEvent) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isSubmitting.value) {
     e.preventDefault();
@@ -330,10 +384,10 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <button v-if="!leftPanelOpen" class="fixed left-3 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
+        <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
+      </button>
       <div class="flex flex-1 min-w-0">
-        <button v-if="!leftPanelOpen" class="fixed left-3 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
-          <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
-        </button>
         <div class="flex flex-col flex-1 min-w-0">
           <div class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
             <div class="flex items-center gap-2">
@@ -348,6 +402,32 @@ onUnmounted(() => {
           </div>
 
           <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
+
+          <div class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+            <div class="flex items-center justify-between px-5 py-2.5">
+              <span class="text-xs font-bold text-slate-600 dark:text-slate-400">自测运行</span>
+              <button class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 transition disabled:opacity-50" :disabled="isSelfTesting" @click="runSelfTest">
+                <Icon :icon="isSelfTesting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-3.5 w-3.5" :class="{ 'animate-spin': isSelfTesting }" />
+                {{ isSelfTesting ? '运行中...' : '运行' }}
+              </button>
+            </div>
+            <div class="px-5 pb-3 space-y-2">
+              <textarea v-model="stdin" class="block w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-mono text-slate-800 placeholder-slate-400 outline-none transition focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100 dark:placeholder-slate-500" rows="3" placeholder="如果代码需要输入，可以在这里填写测试数据。"></textarea>
+              <textarea v-model="expectedOutput" class="block w-full rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs font-mono text-slate-800 placeholder-slate-400 outline-none transition focus:border-cyan-400 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-100 dark:placeholder-slate-500" rows="2" placeholder="预期结果（选填）：填写后自动对比实际输出。"></textarea>
+              <div v-if="selfTestOutput" class="result-section">
+                <div class="result-header">
+                  <span>输出</span>
+                  <span v-if="selfTestVerdict" class="result-badge" :class="selfTestVerdict === 'pass' ? 'badge-pass' : 'badge-fail'">{{ selfTestVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
+                </div>
+                <div class="result-body-wrap">
+                  <pre class="result-body" :class="{ 'result-error': selfTestVerdict === 'fail' }">{{ selfTestOutput }}</pre>
+                  <div v-if="selfTestStatus" class="result-footer">
+                    <span :class="selfTestVerdict === 'pass' ? 'text-emerald-500' : 'text-rose-500'">{{ selfTestStatus }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div v-if="submitResult" class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
