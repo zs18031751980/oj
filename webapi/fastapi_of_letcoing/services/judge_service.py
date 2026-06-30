@@ -29,6 +29,7 @@ class JudgeWorker:
         self.logger = logger
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def start(self):
         """启动后台判题线程"""
@@ -46,17 +47,23 @@ class JudgeWorker:
 
     def _run_loop(self):
         """主循环：不断从 Redis 队列拉取判题任务"""
-        while self._running:
-            try:
-                raw = self.redis.list_pop("judge_queue")
-                if raw:
-                    task = json.loads(raw) if isinstance(raw, str) else raw
-                    self._process_task(task)
-                else:
-                    time.sleep(0.5)
-            except Exception as e:
-                self.logger.error("JudgeWorker loop error", e)
-                time.sleep(1)
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            while self._running:
+                try:
+                    raw = self.redis.list_pop("judge_queue")
+                    if raw:
+                        task = json.loads(raw) if isinstance(raw, str) else raw
+                        self._process_task(task)
+                    else:
+                        time.sleep(0.5)
+                except Exception as e:
+                    self.logger.error("JudgeWorker loop error", e)
+                    time.sleep(1)
+        finally:
+            self._loop.close()
+            self._loop = None
 
     def _process_task(self, task: dict):
         """处理单个判题任务"""
@@ -116,12 +123,9 @@ class JudgeWorker:
 
     def _judge_single(self, code: str, language: str, stdin: str, expected: str) -> dict:
         """执行单个测试点并对比输出"""
+        request = CodeExecutionRequest(code=code, language=language, stdin=stdin)
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            request = CodeExecutionRequest(code=code, language=language, stdin=stdin)
-            response = loop.run_until_complete(self.code_service.execute_code(request))
-            loop.close()
+            response = self._loop.run_until_complete(self.code_service.execute_code(request))
         except Exception as e:
             self.logger.error(f"Judge execution error", e)
             return {

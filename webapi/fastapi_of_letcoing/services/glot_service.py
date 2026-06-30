@@ -54,10 +54,18 @@ class GlotService(ICodeExecutionService, Injectable):
         self._logger_service = logger_service
         self._timeout = aiohttp.ClientTimeout(total=config_service.get_timeout())
         self._session: Optional[aiohttp.ClientSession] = None
+        self._session_loop_id: Optional[int] = None
 
     def _get_session(self) -> aiohttp.ClientSession:
         """获取或创建复用的 aiohttp 会话，避免每次请求重建 TCP 连接"""
-        if self._session is None or self._session.closed:
+        try:
+            current_loop = asyncio.get_running_loop()
+            current_loop_id = id(current_loop)
+        except RuntimeError:
+            current_loop_id = None
+
+        if (self._session is None or self._session.closed or
+                (current_loop_id is not None and self._session_loop_id != current_loop_id)):
             connector = aiohttp.TCPConnector(
                 limit=10,
                 ttl_dns_cache=300,
@@ -67,6 +75,7 @@ class GlotService(ICodeExecutionService, Injectable):
                 timeout=self._timeout,
                 connector=connector,
             )
+            self._session_loop_id = current_loop_id
         return self._session
 
     async def close(self):
