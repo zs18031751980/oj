@@ -258,7 +258,7 @@ onUnmounted(() => {
       </div>
 
       <div class="flex flex-1 min-w-0">
-        <button v-if="!leftPanelOpen" class="absolute left-1 top-1/2 z-20 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
+        <button v-if="!leftPanelOpen" class="fixed left-3 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
           <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
         </button>
         <div class="flex flex-col flex-1 min-w-0">
@@ -307,37 +307,26 @@ onUnmounted(() => {
               </div>
 
               <div class="flex-1 overflow-y-auto px-5 pb-4 space-y-3">
-                <section class="surface-panel">
-                  <div class="collapse-header">
-                    <span>输入</span>
-                  </div>
-                  <div class="collapse-body">
-                    <pre class="output-box">{{ problem.testCases[currentResultPage].input }}</pre>
-                  </div>
-                </section>
-                <section class="surface-panel">
-                  <div class="collapse-header">
-                    <span>期望输出</span>
-                  </div>
-                  <div class="collapse-body">
-                    <pre class="output-box">{{ problem.testCases[currentResultPage].output }}</pre>
-                  </div>
-                </section>
-                <section class="surface-panel">
-                  <div class="collapse-header">
+                <div class="result-section">
+                  <div class="result-header">输入</div>
+                  <pre class="result-body">{{ problem.testCases[currentResultPage].input }}</pre>
+                </div>
+                <div class="result-section">
+                  <div class="result-header">期望输出</div>
+                  <pre class="result-body">{{ problem.testCases[currentResultPage].output }}</pre>
+                </div>
+                <div class="result-section">
+                  <div class="result-header">
                     <span>实际输出</span>
-                    <span v-if="submitResult" class="test-badge" :class="testResults[currentResultPage].passed ? 'pass' : 'failed'">{{ testResults[currentResultPage].passed ? '✓ PASS' : '✗ FAILED' }}</span>
+                    <span class="result-badge" :class="testResults[currentResultPage].passed ? 'badge-pass' : 'badge-fail'">{{ testResults[currentResultPage].passed ? '✓ PASS' : '✗ FAILED' }}</span>
                   </div>
-                  <div class="collapse-body output-body">
-                    <pre class="output-box" :class="{ 'is-error': !testResults[currentResultPage].passed }">{{ testResults[currentResultPage].actualOutput }}</pre>
-                    <div class="output-status">
-                      <div class="status-divider"></div>
-                      <div class="status-content">
-                        <span class="status-text" :class="submitResult === 'AC' ? 'text-emerald-500' : 'text-rose-500'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage].passed ? '通过' : '未通过' }}</span>
-                      </div>
+                  <div class="result-body-wrap">
+                    <pre class="result-body" :class="{ 'result-error': !testResults[currentResultPage].passed }">{{ testResults[currentResultPage].actualOutput }}</pre>
+                    <div class="result-footer">
+                      <span :class="submitResult === 'AC' ? 'text-emerald-500' : 'text-rose-500'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage].passed ? '通过' : '未通过' }}</span>
                     </div>
                   </div>
-                </section>
+                </div>
               </div>
             </div>
           </div>
@@ -348,111 +337,87 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.surface-panel {
-  overflow: hidden;
-  border-radius: 1.25rem;
+.result-section {
   border: 1px solid #e2e8f0;
-  background: #fff;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.025);
+  border-radius: 1rem;
+  overflow: hidden;
 }
-:global(.dark) .surface-panel {
+:global(.dark) .result-section {
   border-color: #1e293b;
-  background: #0f172a;
 }
 
-.collapse-header {
+.result-header {
   display: flex;
-  width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 0.6rem 1rem;
-  text-align: left;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 800;
   color: #1e293b;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
 }
-:global(.dark) .collapse-header {
-  border-color: #1e293b;
+:global(.dark) .result-header {
   color: #f8fafc;
+  background: #0f172a;
+  border-color: #1e293b;
 }
 
-.collapse-body {
+.result-body-wrap {
   overflow: hidden;
 }
 
-.output-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.output-box {
-  flex: 1;
-  min-height: 80px;
-  padding: 16px 20px;
+.result-body {
+  min-height: 64px;
+  padding: 14px 18px;
+  margin: 0;
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
   overflow: auto;
   background: linear-gradient(to bottom, #f1f5f9 95%, #e2e8f0 95%, #e2e8f0 100%);
   color: #1e293b;
-  margin: 0;
 }
-:global(.dark) .output-box {
+:global(.dark) .result-body {
   background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%);
   color: #6ee7b7;
 }
-.output-box.is-error {
+
+.result-error {
   color: #dc2626;
 }
-:global(.dark) .output-box.is-error {
+:global(.dark) .result-error {
   color: #fca5a5;
 }
 
-.output-status {
-  flex-shrink: 0;
-  padding: 6px 12px;
-  background: #e2e8f0;
-}
-:global(.dark) .output-status {
-  background: #0f172a;
-}
-
-.status-divider {
-  height: 1px;
-  border-top: 1px dashed #94a3b8;
-  margin-bottom: 6px;
-}
-:global(.dark) .status-divider {
-  border-top-color: #475569;
-}
-
-.status-content {
+.result-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.status-text {
-  font-size: 12px;
+  justify-content: flex-end;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
+  background: #e2e8f0;
+  border-top: 1px dashed #94a3b8;
+}
+:global(.dark) .result-footer {
+  background: #0f172a;
+  border-color: #475569;
 }
 
-.test-badge {
-  font-size: 11px;
+.result-badge {
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.05em;
-  padding: 1px 10px;
+  padding: 1px 8px;
   border-radius: 999px;
 }
-.test-badge.pass {
+.badge-pass {
   color: #10b981;
   background: rgba(16, 185, 129, 0.15);
 }
-.test-badge.failed {
+.badge-fail {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.15);
 }
