@@ -65,7 +65,7 @@ const features = [
           </h1>
 
           <p class="mt-6 max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
-            直接开始代码编写。
+            let coding.
           </p>
 
           <div class="mt-8 flex flex-wrap gap-4">
