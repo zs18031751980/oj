@@ -103,8 +103,8 @@ class SubmissionListCreateController(Resource):
         user = None
         if current_user:
             try:
-                user = User.get_by_id(current_user['id'])
-            except User.DoesNotExist:
+                user = User.get_by_id(int(current_user['id']))
+            except Exception:
                 pass
 
         submission = Submission.create(

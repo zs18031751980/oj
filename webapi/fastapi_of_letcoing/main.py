@@ -322,8 +322,16 @@ def healthcheck():
 
 
 # ============================================================
-# 5. 全局请求钩子
+# 5. 全局错误处理器与请求钩子
 # ============================================================
+
+import traceback
+
+@app.errorhandler(Exception)
+def handle_uncaught_error(e):
+    """捕获所有未处理的异常，返回 JSON 格式的错误信息"""
+    app.logger.error(f"Unhandled exception: {traceback.format_exc()}")
+    return {"error": f"服务器内部错误: {str(e)}", "detail": traceback.format_exc() if app.debug else ""}, 500
 
 @app.after_request
 def add_cors_headers(response):
