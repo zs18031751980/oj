@@ -245,14 +245,14 @@ const floatingButtonBottom = computed(() => {
   }
 
   if (viewportWidth.value < 768) {
-    return '41rem';
+    return '28rem';
   }
 
   if (viewportWidth.value < 900) {
-    return '39rem';
+    return '26rem';
   }
 
-  return '24rem';
+  return '11rem';
 });
 
 const runCode = async () => {
