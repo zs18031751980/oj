@@ -367,10 +367,17 @@ def add_cors_headers(response):
 # 初始化并注册所有依赖注入服务（配置服务、日志服务、JWT 服务等）
 setup_services(app.config)
 
-# 创建数据库表（如不存在）
-create_tables()
+# 创建数据库表（如不存在），失败时只打印警告，避免阻塞启动
+try:
+    create_tables()
+except Exception as e:
+    app.logger.warning(f"Database table creation failed (app will still start): {e}")
+
 # 执行数据库迁移（如已有 users 表缺少 role 列则自动添加）
-migrate_add_role_column()
+try:
+    migrate_add_role_column()
+except Exception as e:
+    app.logger.warning(f"Database migration failed (app will still start): {e}")
 
 # 获取依赖注入容器
 container = get_container()
@@ -379,9 +386,12 @@ container = get_container()
 oidc_service = container.resolve(IOIDCService)
 oidc_service.initialize_oauth(app)
 
-# 启动后台判题 Worker
+# 启动后台判题 Worker（在 try-except 中防止启动失败导致整个服务崩溃）
 from services.judge_service import start_judge_worker
-start_judge_worker()
+try:
+    start_judge_worker()
+except Exception as e:
+    app.logger.error(f"Failed to start judge worker: {e}")
 
 # 创建 Flask-RESTX API 实例，自动生成 Swagger 文档
 api = Api(
