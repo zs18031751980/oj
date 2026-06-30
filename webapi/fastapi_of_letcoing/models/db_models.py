@@ -150,11 +150,80 @@ class User(BaseModel):
 
 
 # ============================================================
-# 3. 表管理与数据库维护方法
+# 3. 题目、测试用例、提交记录模型
+# ============================================================
+
+class Problem(BaseModel):
+    """题目 ORM 模型"""
+    id = AutoField(primary_key=True, verbose_name="题目ID")
+    title = CharField(max_length=200, verbose_name="题目标题")
+    description = TextField(verbose_name="题目描述")
+    input_desc = TextField(default="", verbose_name="输入格式描述")
+    output_desc = TextField(default="", verbose_name="输出格式描述")
+    difficulty = CharField(max_length=20, default="简单", verbose_name="难度")
+    time_limit = IntegerField(default=1000, verbose_name="时间限制(ms)")
+    memory_limit = IntegerField(default=256, verbose_name="内存限制(MB)")
+    created_by = IntegerField(null=True, verbose_name="创建者用户ID")
+    is_public = BooleanField(default=True, verbose_name="是否公开")
+
+    class Meta:
+        table_name = "problems"
+
+
+class Testcase(BaseModel):
+    """测试用例 ORM 模型"""
+    id = AutoField(primary_key=True)
+    problem = ForeignKeyField(Problem, backref="testcases", verbose_name="所属题目")
+    input_data = TextField(verbose_name="输入数据")
+    output_data = TextField(verbose_name="期望输出")
+    is_sample = BooleanField(default=False, verbose_name="是否为样例")
+    sort_order = IntegerField(default=0, verbose_name="排序序号")
+
+    class Meta:
+        table_name = "testcases"
+
+
+class Submission(BaseModel):
+    """提交记录 ORM 模型"""
+    PENDING = "Pending"
+    RUNNING = "Running"
+    AC = "AC"
+    WA = "WA"
+    TLE = "TLE"
+    RE = "RE"
+    CE = "CE"
+
+    id = AutoField(primary_key=True)
+    user = ForeignKeyField(User, backref="submissions", null=True, verbose_name="提交用户")
+    problem = ForeignKeyField(Problem, backref="submissions", verbose_name="所属题目")
+    code = TextField(verbose_name="提交代码")
+    language = CharField(max_length=50, verbose_name="编程语言")
+    status = CharField(max_length=20, default=PENDING, verbose_name="判题状态")
+    time_used = IntegerField(null=True, verbose_name="运行时间(ms)")
+    memory_used = IntegerField(null=True, verbose_name="内存消耗(KB)")
+    testcase_results = TextField(null=True, verbose_name="各测试点结果(JSON)")
+    fail_testcase_index = IntegerField(null=True, verbose_name="首个失败测试点索引")
+
+    class Meta:
+        table_name = "submissions"
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        if isinstance(data.get("testcase_results"), str):
+            try:
+                import json
+                data["testcase_results"] = json.loads(data["testcase_results"])
+            except Exception:
+                pass
+        return data
+
+
+# ============================================================
+# 4. 表管理与数据库维护方法
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User]
+MODELS = [User, Problem, Testcase, Submission]
 
 
 def create_tables():

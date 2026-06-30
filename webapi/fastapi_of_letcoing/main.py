@@ -22,11 +22,12 @@ import gzip
 import io
 from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
 
-from models.db_models import migrate_add_role_column
+from models.db_models import create_tables, migrate_add_role_column
 
-# 导入认证和代码执行的 API 命名空间
+# 导入 API 命名空间
 from controllers.auth_controller import api as auth_api
 from controllers.code_controller import api as code_api
+from controllers.submission_controller import api as submission_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
@@ -366,6 +367,8 @@ def add_cors_headers(response):
 # 初始化并注册所有依赖注入服务（配置服务、日志服务、JWT 服务等）
 setup_services(app.config)
 
+# 创建数据库表（如不存在）
+create_tables()
 # 执行数据库迁移（如已有 users 表缺少 role 列则自动添加）
 migrate_add_role_column()
 
@@ -376,6 +379,10 @@ container = get_container()
 oidc_service = container.resolve(IOIDCService)
 oidc_service.initialize_oauth(app)
 
+# 启动后台判题 Worker
+from services.judge_service import start_judge_worker
+start_judge_worker()
+
 # 创建 Flask-RESTX API 实例，自动生成 Swagger 文档
 api = Api(
     app,
@@ -385,11 +392,10 @@ api = Api(
     doc='/swagger/',           # Swagger UI 的访问路径
 )
 
-# 注册 API 命名空间（Namespace），相当于路由分组
-# /code 路径下的所有端点由 code_api 处理（代码执行相关）
+# 注册 API 命名空间
 api.add_namespace(code_api, path='/code')
-# /auth 路径下的所有端点由 auth_api 处理（用户认证相关）
 api.add_namespace(auth_api, path='/auth')
+api.add_namespace(submission_api, path='/submissions')
 
 
 # ============================================================

@@ -6,6 +6,7 @@ import { NButton, useMessage } from 'naive-ui';
 import { useThemeStore } from '../stores/theme';
 import { storeToRefs } from 'pinia';
 import MonacoEditor from '../components/MonacoEditor.vue';
+import { apiRequest } from '../services/api';
 
 interface TestCase {
   input: string;
@@ -116,12 +117,30 @@ const updateLanguage = (lang: string) => {
   language.value = lang;
   code.value = languageTemplates[lang] || '';
   submitResult.value = null;
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value);
+    pollTimer.value = null;
+  }
 };
+
+interface SubmissionResponse {
+  id: number;
+  status: string;
+  testcase_results?: any[];
+  fail_testcase_index?: number | null;
+  time_used?: number;
+}
+
+const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
 
 const submitCode = async () => {
   if (!code.value.trim()) {
     message.warning('请先编写代码');
     return;
+  }
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value);
+    pollTimer.value = null;
   }
   isSubmitting.value = true;
   submitResult.value = null;
@@ -129,33 +148,83 @@ const submitCode = async () => {
   failedTestCaseIndex.value = null;
   currentResultPage.value = 0;
 
-  await new Promise(r => setTimeout(r, 1500));
-
   const p = problem.value;
   if (!p) return;
 
-  let firstFailed: number | null = null;
+  try {
+    const created = await apiRequest<SubmissionResponse>('/submissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        problem_id: p.id,
+        code: code.value,
+        language: language.value,
+      }),
+    });
+
+    if (created.status === 'Pending' || created.status === 'Running') {
+      pollTimer.value = setInterval(async () => {
+        try {
+          const res = await apiRequest<SubmissionResponse>(`/submissions/${created.id}`);
+          if (res.status !== 'Pending' && res.status !== 'Running') {
+            if (pollTimer.value) {
+              clearInterval(pollTimer.value);
+              pollTimer.value = null;
+            }
+            _handleJudgeResult(res, p);
+          }
+        } catch {
+          if (pollTimer.value) {
+            clearInterval(pollTimer.value);
+            pollTimer.value = null;
+          }
+          isSubmitting.value = false;
+          message.error('查询判题结果失败');
+        }
+      }, 1000);
+    } else {
+      _handleJudgeResult(created, p);
+    }
+  } catch (e: any) {
+    message.error(e?.message || '提交失败');
+    isSubmitting.value = false;
+  }
+};
+
+const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
   const results: TestResult[] = [];
 
-  for (let i = 0; i < p.testCases.length; i++) {
-    const passed = firstFailed === null && Math.random() > 0.3;
-    if (!passed && firstFailed === null) firstFailed = i;
-    results.push({
-      testCaseIndex: i,
-      passed,
-      actualOutput: passed ? p.testCases[i].output : `(模拟输出) 测试点 #${i + 1} 输出错误`,
-    });
+  if (res.testcase_results && res.testcase_results.length > 0) {
+    for (const tr of res.testcase_results) {
+      const idx = tr.testCaseIndex ?? 0;
+      results.push({
+        testCaseIndex: idx,
+        passed: tr.passed,
+        actualOutput: tr.actualOutput || tr.stdout || '',
+      });
+    }
+  } else {
+    const total = p.testCases.length;
+    const firstFailedIdx = res.fail_testcase_index;
+    for (let i = 0; i < total; i++) {
+      const passed = firstFailedIdx === null || firstFailedIdx === undefined || i < firstFailedIdx;
+      results.push({
+        testCaseIndex: i,
+        passed,
+        actualOutput: passed ? (p.testCases[i]?.output ?? '') : '(实际输出未记录)',
+      });
+    }
   }
 
   testResults.value = results;
 
-  if (firstFailed !== null) {
-    submitResult.value = 'WA';
-    failedTestCaseIndex.value = firstFailed;
-    currentResultPage.value = firstFailed;
-  } else {
+  if (res.status === 'AC') {
     submitResult.value = 'AC';
     currentResultPage.value = 0;
+  } else {
+    submitResult.value = 'WA';
+    const failedIdx = res.fail_testcase_index ?? 0;
+    failedTestCaseIndex.value = failedIdx;
+    currentResultPage.value = failedIdx;
   }
 
   isSubmitting.value = false;
@@ -178,6 +247,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboard);
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value);
+    pollTimer.value = null;
+  }
 });
 </script>
 
@@ -306,24 +379,24 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <div class="flex-1 overflow-y-auto px-5 pb-4 space-y-3">
+              <div v-if="testResults.length > 0" class="flex-1 overflow-y-auto px-5 pb-4 space-y-3">
                 <div class="result-section">
                   <div class="result-header">输入</div>
-                  <pre class="result-body">{{ problem.testCases[currentResultPage].input }}</pre>
+                  <pre class="result-body">{{ problem.testCases[currentResultPage]?.input }}</pre>
                 </div>
                 <div class="result-section">
                   <div class="result-header">期望输出</div>
-                  <pre class="result-body">{{ problem.testCases[currentResultPage].output }}</pre>
+                  <pre class="result-body">{{ problem.testCases[currentResultPage]?.output }}</pre>
                 </div>
                 <div class="result-section">
                   <div class="result-header">
                     <span>实际输出</span>
-                    <span class="result-badge" :class="testResults[currentResultPage].passed ? 'badge-pass' : 'badge-fail'">{{ testResults[currentResultPage].passed ? '✓ PASS' : '✗ FAILED' }}</span>
+                    <span class="result-badge" :class="(testResults[currentResultPage]?.passed ? 'badge-pass' : 'badge-fail')">{{ testResults[currentResultPage]?.passed ? '✓ PASS' : '✗ FAILED' }}</span>
                   </div>
                   <div class="result-body-wrap">
-                    <pre class="result-body" :class="{ 'result-error': !testResults[currentResultPage].passed }">{{ testResults[currentResultPage].actualOutput }}</pre>
+                    <pre class="result-body" :class="{ 'result-error': !testResults[currentResultPage]?.passed }">{{ testResults[currentResultPage]?.actualOutput }}</pre>
                     <div class="result-footer">
-                      <span :class="submitResult === 'AC' ? 'text-emerald-500' : 'text-rose-500'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage].passed ? '通过' : '未通过' }}</span>
+                      <span :class="submitResult === 'AC' ? 'text-emerald-500' : 'text-rose-500'">测试点 #{{ currentResultPage + 1 }} — {{ submitResult === 'AC' ? '通过全部' : testResults[currentResultPage]?.passed ? '通过' : '未通过' }}</span>
                     </div>
                   </div>
                 </div>
