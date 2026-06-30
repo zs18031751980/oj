@@ -215,6 +215,11 @@ class Submission(BaseModel):
                 data["testcase_results"] = json.loads(data["testcase_results"])
             except Exception:
                 pass
+        related_fields = {'user', 'problem'}
+        for fk in related_fields:
+            val = data.get(fk)
+            if val is not None and not isinstance(val, (int, str)):
+                data[fk] = getattr(val, 'id', None)
         return data
 
 

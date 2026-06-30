@@ -12,6 +12,7 @@ import asyncio
 import json
 import threading
 import time
+from typing import Optional
 
 from core.di_container import get_container
 from interfaces.service_interfaces import ICodeExecutionService, ILoggerService, IRedisService
@@ -27,7 +28,7 @@ class JudgeWorker:
         self.code_service = code_service
         self.logger = logger
         self._running = False
-        self._thread: threading.Thread | None = None
+        self._thread: Optional[threading.Thread] = None
 
     def start(self):
         """启动后台判题线程"""
@@ -146,7 +147,7 @@ class JudgeWorker:
         }
 
 
-_worker_instance: JudgeWorker | None = None
+_worker_instance: Optional['JudgeWorker'] = None
 
 
 def start_judge_worker():

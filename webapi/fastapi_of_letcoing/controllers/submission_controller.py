@@ -5,17 +5,13 @@
 判题流程异步化：提交 -> Redis队列 -> Worker处理 -> 结果可查询。
 """
 
-import asyncio
-import json
-
 from flask import g, request
 from flask_restx import Namespace, Resource, fields
 
 from core.di_container import inject
-from interfaces.service_interfaces import ICodeExecutionService, IRedisService
+from interfaces.service_interfaces import IRedisService
 from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
 from models.db_models import Submission, Problem, Testcase, User
-from models.glot_models import CodeExecutionRequest
 
 api = Namespace('submissions', description='提交判题相关接口')
 
@@ -121,13 +117,12 @@ class SubmissionCreateController(Resource):
         )
 
         redis_service = inject(IRedisService)
-        queue_data = json.dumps({
+        redis_service.list_push('judge_queue', {
             'submission_id': submission.id,
             'problem_id': problem_id,
             'code': code,
             'language': language,
         })
-        redis_service.list_push('judge_queue', queue_data)
 
         return submission.to_dict(), 201
 
