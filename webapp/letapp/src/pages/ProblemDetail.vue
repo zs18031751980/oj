@@ -71,6 +71,9 @@ const problems: Record<number, Problem> = {
     testCases: [
       { input: '5 10\n1 3 5 7 9', output: '2 4' },
       { input: '4 0\n0 2 4 6', output: '0 0' },
+      { input: '3 15\n-1 5 10 15', output: '1 2' },
+      { input: '6 20\n2 4 6 8 10 12', output: '3 5' },
+      { input: '2 100\n50 50', output: '0 1' },
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
@@ -86,6 +89,10 @@ const problems: Record<number, Problem> = {
     testCases: [
       { input: 'abc123', output: '321cba' },
       { input: 'x', output: 'x' },
+      { input: '12345', output: '54321' },
+      { input: 'a b c', output: 'c b a' },
+      { input: '!@#$%', output: '%$#@!' },
+      { input: 'racecar', output: 'racecar' },
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
@@ -100,7 +107,11 @@ const problems: Record<number, Problem> = {
     ],
     testCases: [
       { input: '0', output: '0' },
+      { input: '1', output: '1' },
+      { input: '2', output: '1' },
+      { input: '15', output: '610' },
       { input: '20', output: '6765' },
+      { input: '30', output: '832040' },
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
