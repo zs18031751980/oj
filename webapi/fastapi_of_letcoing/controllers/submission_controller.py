@@ -38,46 +38,45 @@ error_model = api.model('ErrorResponse', {
 
 def _get_or_create_problem(problem_id: int):
     """从数据库查询题目，不存在则从内存数据创建"""
-    try:
-        return Problem.get_by_id(problem_id)
-    except Problem.DoesNotExist:
-        pass
     from pages.problem_data import PROBLEMS
     pdata = PROBLEMS.get(problem_id)
     if not pdata:
         return None
-    problem = Problem.create(
-        id=pdata["id"],
-        title=pdata["title"],
-        description=pdata["description"],
-        input_desc=pdata.get("inputFormat", ""),
-        output_desc=pdata.get("outputFormat", ""),
-        difficulty=pdata.get("difficulty", "简单"),
-        time_limit=pdata.get("timeLimit", 1000),
-        memory_limit=pdata.get("memoryLimit", 256),
-        is_public=True,
+    problem, created = Problem.get_or_create(
+        id=problem_id,
+        defaults=dict(
+            title=pdata["title"],
+            description=pdata["description"],
+            input_desc=pdata.get("inputFormat", ""),
+            output_desc=pdata.get("outputFormat", ""),
+            difficulty=pdata.get("difficulty", "简单"),
+            time_limit=pdata.get("timeLimit", 1000),
+            memory_limit=pdata.get("memoryLimit", 256),
+            is_public=True,
+        ),
     )
-    for idx, tc in enumerate(pdata.get("testCases", [])):
-        Testcase.create(
-            problem=problem,
-            input_data=tc["input"],
-            output_data=tc["output"],
-            is_sample=False,
-            sort_order=idx,
-        )
-    for idx, sc in enumerate(pdata.get("samples", [])):
-        Testcase.create(
-            problem=problem,
-            input_data=sc["input"],
-            output_data=sc["output"],
-            is_sample=True,
-            sort_order=idx,
-        )
+    if created:
+        for idx, tc in enumerate(pdata.get("testCases", [])):
+            Testcase.create(
+                problem=problem,
+                input_data=tc["input"],
+                output_data=tc["output"],
+                is_sample=False,
+                sort_order=idx,
+            )
+        for idx, sc in enumerate(pdata.get("samples", [])):
+            Testcase.create(
+                problem=problem,
+                input_data=sc["input"],
+                output_data=sc["output"],
+                is_sample=True,
+                sort_order=idx,
+            )
     return problem
 
 
 @api.route('')
-class SubmissionCreateController(Resource):
+class SubmissionListCreateController(Resource):
     @api.expect(submission_model)
     @api.doc('create_submission')
     @api.response(201, 'Created', submission_status_model)
@@ -105,7 +104,7 @@ class SubmissionCreateController(Resource):
         if current_user:
             try:
                 user = User.get_by_id(current_user['id'])
-            except Exception:
+            except User.DoesNotExist:
                 pass
 
         submission = Submission.create(
@@ -126,24 +125,6 @@ class SubmissionCreateController(Resource):
 
         return submission.to_dict(), 201
 
-
-@api.route('/<int:submission_id>')
-@api.param('submission_id', '提交记录ID')
-class SubmissionStatusController(Resource):
-    @api.doc('get_submission_status')
-    @api.response(200, 'Success', submission_status_model)
-    @api.response(404, 'Not Found', error_model)
-    def get(self, submission_id):
-        """查询提交记录的状态和结果"""
-        try:
-            submission = Submission.get_by_id(submission_id)
-        except Submission.DoesNotExist:
-            return {'error': '提交记录不存在'}, 404
-        return submission.to_dict(), 200
-
-
-@api.route('')
-class SubmissionListController(Resource):
     @api.doc('list_submissions')
     @api.param('problem_id', '题目ID（可选）')
     @api.param('page', '页码（默认1）')
@@ -172,3 +153,18 @@ class SubmissionListController(Resource):
             'per_page': per_page,
             'data': [s.to_dict() for s in submissions],
         }, 200
+
+
+@api.route('/<int:submission_id>')
+@api.param('submission_id', '提交记录ID')
+class SubmissionStatusController(Resource):
+    @api.doc('get_submission_status')
+    @api.response(200, 'Success', submission_status_model)
+    @api.response(404, 'Not Found', error_model)
+    def get(self, submission_id):
+        """查询提交记录的状态和结果"""
+        try:
+            submission = Submission.get_by_id(submission_id)
+        except Submission.DoesNotExist:
+            return {'error': '提交记录不存在'}, 404
+        return submission.to_dict(), 200
