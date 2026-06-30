@@ -325,14 +325,6 @@ def healthcheck():
 # 5. 全局错误处理器与请求钩子
 # ============================================================
 
-import traceback
-
-@app.errorhandler(Exception)
-def handle_uncaught_error(e):
-    """捕获所有未处理的异常，返回 JSON 格式的错误信息"""
-    app.logger.error(f"Unhandled exception: {traceback.format_exc()}")
-    return {"error": f"服务器内部错误: {str(e)}", "detail": traceback.format_exc() if app.debug else ""}, 500
-
 @app.after_request
 def add_cors_headers(response):
     """在每个 HTTP 响应后添加 CORS（跨域资源共享）相关的响应头
@@ -409,6 +401,14 @@ api = Api(
     description='Code execution and authentication API service.',
     doc='/swagger/',           # Swagger UI 的访问路径
 )
+
+import traceback
+
+@api.errorhandler(Exception)
+def handle_uncaught_error(e):
+    """捕获所有未处理的异常，返回 JSON 格式的错误信息"""
+    app.logger.error(f"Unhandled exception: {traceback.format_exc()}")
+    return {"error": f"服务器内部错误: {str(e)}", "detail": traceback.format_exc() if app.debug else ""}, 500
 
 # 注册 API 命名空间
 api.add_namespace(code_api, path='/code')

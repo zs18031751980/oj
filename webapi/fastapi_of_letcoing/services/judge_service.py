@@ -71,50 +71,65 @@ class JudgeWorker:
         problem_id = task.get("problem_id")
         code = task.get("code", "")
         language = task.get("language", "cpp")
+        task_testcases = task.get("testcases", [])
 
-        try:
-            submission = Submission.get_by_id(submission_id)
-        except Exception:
-            self.logger.error(f"Submission {submission_id} not found")
-            return
+        submission = None
+        if submission_id:
+            try:
+                submission = Submission.get_by_id(submission_id)
+            except Exception:
+                pass
 
-        testcases = list(Testcase.select().where(
-            Testcase.problem == problem_id,
-            Testcase.is_sample == False,
-        ).order_by(Testcase.sort_order))
+        from pages.problem_data import PROBLEMS
+        pdata = PROBLEMS.get(problem_id)
+        testcases = task_testcases or (pdata.get("testCases", []) if pdata else [])
 
         if not testcases:
             self.logger.warning(f"No testcases for problem {problem_id}, using empty")
-            submission.status = Submission.AC
-            submission.time_used = 0
-            submission.memory_used = 0
-            submission.testcase_results = json.dumps([])
-            submission.save()
+            if submission:
+                submission.status = Submission.AC
+                submission.time_used = 0
+                submission.memory_used = 0
+                submission.testcase_results = json.dumps([])
+                try:
+                    submission.save()
+                except Exception:
+                    pass
             return
 
-        submission.status = Submission.RUNNING
-        submission.save()
+        if submission:
+            submission.status = Submission.RUNNING
+            try:
+                submission.save()
+            except Exception:
+                pass
 
         results = []
         first_failed = None
 
-        for tc in testcases:
-            result = self._judge_single(code, language, tc.input_data, tc.output_data)
+        for idx, tc in enumerate(testcases):
+            inp = tc.input_data if hasattr(tc, 'input_data') else tc['input']
+            outp = tc.output_data if hasattr(tc, 'output_data') else tc['output']
+            result = self._judge_single(code, language, inp, outp)
             results.append(result)
             if not result["passed"] and first_failed is None:
-                first_failed = tc.sort_order
+                first_failed = idx
                 break
 
         all_passed = first_failed is None
 
         total_time = sum(r.get("time_used", 0) or 0 for r in results)
 
-        submission.status = Submission.AC if all_passed else Submission.WA
-        submission.time_used = total_time
-        submission.memory_used = 0
-        submission.testcase_results = json.dumps(results)
-        submission.fail_testcase_index = first_failed
-        submission.save()
+        if submission:
+            try:
+                submission.status = Submission.AC if all_passed else Submission.WA
+                submission.time_used = total_time
+                submission.memory_used = 0
+                submission.testcase_results = json.dumps(results)
+                submission.fail_testcase_index = first_failed
+                submission.save()
+            except Exception:
+                pass
 
         self.logger.info(
             f"Submission {submission_id} done: {submission.status} "

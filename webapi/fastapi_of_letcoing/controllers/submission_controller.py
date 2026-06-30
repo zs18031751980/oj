@@ -38,41 +38,45 @@ error_model = api.model('ErrorResponse', {
 
 def _get_or_create_problem(problem_id: int):
     """从数据库查询题目，不存在则从内存数据创建"""
+    from peewee import OperationalError
     from pages.problem_data import PROBLEMS
     pdata = PROBLEMS.get(problem_id)
     if not pdata:
         return None
-    problem, created = Problem.get_or_create(
-        id=problem_id,
-        defaults=dict(
-            title=pdata["title"],
-            description=pdata["description"],
-            input_desc=pdata.get("inputFormat", ""),
-            output_desc=pdata.get("outputFormat", ""),
-            difficulty=pdata.get("difficulty", "简单"),
-            time_limit=pdata.get("timeLimit", 1000),
-            memory_limit=pdata.get("memoryLimit", 256),
-            is_public=True,
-        ),
-    )
-    if created:
-        for idx, tc in enumerate(pdata.get("testCases", [])):
-            Testcase.create(
-                problem=problem,
-                input_data=tc["input"],
-                output_data=tc["output"],
-                is_sample=False,
-                sort_order=idx,
-            )
-        for idx, sc in enumerate(pdata.get("samples", [])):
-            Testcase.create(
-                problem=problem,
-                input_data=sc["input"],
-                output_data=sc["output"],
-                is_sample=True,
-                sort_order=idx,
-            )
-    return problem
+    try:
+        problem, created = Problem.get_or_create(
+            id=problem_id,
+            defaults=dict(
+                title=pdata["title"],
+                description=pdata["description"],
+                input_desc=pdata.get("inputFormat", ""),
+                output_desc=pdata.get("outputFormat", ""),
+                difficulty=pdata.get("difficulty", "简单"),
+                time_limit=pdata.get("timeLimit", 1000),
+                memory_limit=pdata.get("memoryLimit", 256),
+                is_public=True,
+            ),
+        )
+        if created:
+            for idx, tc in enumerate(pdata.get("testCases", [])):
+                Testcase.create(
+                    problem=problem,
+                    input_data=tc["input"],
+                    output_data=tc["output"],
+                    is_sample=False,
+                    sort_order=idx,
+                )
+            for idx, sc in enumerate(pdata.get("samples", [])):
+                Testcase.create(
+                    problem=problem,
+                    input_data=sc["input"],
+                    output_data=sc["output"],
+                    is_sample=True,
+                    sort_order=idx,
+                )
+        return problem
+    except OperationalError:
+        return None
 
 
 @api.route('')
@@ -95,10 +99,6 @@ class SubmissionListCreateController(Resource):
         if not code.strip():
             return {'error': '代码不能为空'}, 400
 
-        problem = _get_or_create_problem(problem_id)
-        if not problem:
-            return {'error': '题目不存在'}, 404
-
         current_user = getattr(g, 'current_user', None)
         user = None
         if current_user:
@@ -107,23 +107,39 @@ class SubmissionListCreateController(Resource):
             except Exception:
                 pass
 
-        submission = Submission.create(
-            user=user,
-            problem=problem,
-            code=code,
-            language=language,
-            status=Submission.PENDING,
-        )
+        from pages.problem_data import PROBLEMS
+        pdata = PROBLEMS.get(problem_id)
+        testcase_list = pdata.get("testCases", []) if pdata else []
+
+        problem = _get_or_create_problem(problem_id)
+        pid = problem.id if problem and hasattr(problem, 'id') else problem_id
+        try:
+            submission = Submission.create(
+                user=user,
+                problem=pid,
+                code=code,
+                language=language,
+                status=Submission.PENDING,
+            )
+            sid = submission.id
+        except Exception:
+            sid = None
 
         redis_service = inject(IRedisService)
         redis_service.list_push('judge_queue', {
-            'submission_id': submission.id,
+            'submission_id': sid,
             'problem_id': problem_id,
             'code': code,
             'language': language,
+            'testcases': testcase_list,
         })
 
-        return submission.to_dict(), 201
+        if sid:
+            try:
+                return Submission.get_by_id(sid).to_dict(), 201
+            except Exception:
+                pass
+        return {'id': sid, 'status': 'Pending', 'problem_id': problem_id}, 201
 
     @api.doc('list_submissions')
     @api.param('problem_id', '题目ID（可选）')
