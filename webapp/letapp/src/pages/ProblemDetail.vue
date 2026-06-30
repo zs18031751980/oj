@@ -67,6 +67,7 @@ const problems: Record<number, Problem> = {
     samples: [
       { input: '4 9\n2 7 11 15', output: '0 1' },
       { input: '3 6\n3 2 4', output: '1 2' },
+      { input: '2 6\n3 3', output: '0 1' },
     ],
     testCases: [
       { input: '5 10\n1 3 5 7 9', output: '2 4' },
@@ -84,7 +85,7 @@ const problems: Record<number, Problem> = {
     outputFormat: '输出反转后的字符串。',
     samples: [
       { input: 'hello', output: 'olleh' },
-      { input: 'A man', output: 'nam A' },
+      { input: 'Hannah', output: 'hannaH' },
     ],
     testCases: [
       { input: 'abc123', output: '321cba' },
@@ -102,8 +103,9 @@ const problems: Record<number, Problem> = {
     inputFormat: '一个整数 n（0 ≤ n ≤ 30）。',
     outputFormat: '输出 F(n) 的值。',
     samples: [
+      { input: '2', output: '1' },
+      { input: '3', output: '2' },
       { input: '4', output: '3' },
-      { input: '10', output: '55' },
     ],
     testCases: [
       { input: '0', output: '0' },
