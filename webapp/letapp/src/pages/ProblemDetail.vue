@@ -3,6 +3,14 @@ import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { NButton, useMessage } from 'naive-ui';
+import { useThemeStore } from '../stores/theme';
+import { storeToRefs } from 'pinia';
+import MonacoEditor from '../components/MonacoEditor.vue';
+
+interface TestCase {
+  input: string;
+  output: string;
+}
 
 interface Problem {
   id: number;
@@ -12,7 +20,8 @@ interface Problem {
   description: string;
   inputFormat: string;
   outputFormat: string;
-  samples: { input: string; output: string }[];
+  samples: TestCase[];
+  testCases: TestCase[];
   timeLimit: number;
   memoryLimit: number;
 }
@@ -20,12 +29,15 @@ interface Problem {
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const themeStore = useThemeStore();
+const { isDark } = storeToRefs(themeStore);
 
+const leftPanelOpen = ref(true);
 const language = ref('cpp');
 const code = ref('');
 const isSubmitting = ref(false);
 const submitResult = ref<string | null>(null);
-
+const activeTab = ref<'desc' | 'testcases'>('desc');
 
 const problems: Record<number, Problem> = {
   1001: {
@@ -36,6 +48,10 @@ const problems: Record<number, Problem> = {
     samples: [
       { input: '4 9\n2 7 11 15', output: '0 1' },
       { input: '3 6\n3 2 4', output: '1 2' },
+    ],
+    testCases: [
+      { input: '5 10\n1 3 5 7 9', output: '2 4' },
+      { input: '4 0\n0 2 4 6', output: '0 0' },
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
@@ -48,6 +64,10 @@ const problems: Record<number, Problem> = {
       { input: 'hello', output: 'olleh' },
       { input: 'A man', output: 'nam A' },
     ],
+    testCases: [
+      { input: 'abc123', output: '321cba' },
+      { input: 'x', output: 'x' },
+    ],
     timeLimit: 1000, memoryLimit: 256,
   },
   1003: {
@@ -58,6 +78,10 @@ const problems: Record<number, Problem> = {
     samples: [
       { input: '4', output: '3' },
       { input: '10', output: '55' },
+    ],
+    testCases: [
+      { input: '0', output: '0' },
+      { input: '20', output: '6765' },
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
@@ -97,9 +121,8 @@ const submitCode = async () => {
   isSubmitting.value = false;
 };
 
-const statusColor = (s: string) => {
-  if (s === 'AC') return { color: '#10b981', bg: '#d1fae5' };
-  return { color: '#ef4444', bg: '#fee2e2' };
+const editorLanguageMap: Record<string, string> = {
+  cpp: 'cpp', python: 'python', java: 'java',
 };
 </script>
 
@@ -112,67 +135,101 @@ const statusColor = (s: string) => {
     </div>
   </div>
 
-  <div v-else class="flex min-h-[calc(100vh-5rem)] flex-col bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <div class="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:flex-row">
-      <div class="flex-1 overflow-y-auto">
-        <div class="mb-4 flex flex-wrap items-center gap-3">
+  <div v-else class="flex min-h-[calc(100vh-5rem)] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+    <div class="flex flex-1 flex-col lg:flex-row">
+      <div class="relative flex flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
+        <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-lg font-black truncate">{{ problem.id }}. {{ problem.title }}</span>
+            <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
+          </div>
+          <button class="shrink-0 rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="收起左侧" @click="leftPanelOpen = false">
+            <Icon icon="material-symbols:chevron-left" class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="flex gap-1 border-b border-slate-100 px-5 dark:border-slate-800">
+          <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'desc' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'desc'">题目</button>
+          <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'testcases' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'testcases'">测试用例 ({{ problem.testCases.length }})</button>
+        </div>
+
+        <div v-show="activeTab === 'desc'" class="flex-1 overflow-y-auto px-5 py-5">
+          <div class="mb-6 flex flex-wrap gap-6 text-sm text-slate-500 dark:text-slate-400">
+            <span>时间限制：{{ problem.timeLimit }}ms</span>
+            <span>内存限制：{{ problem.memoryLimit }}MB</span>
+          </div>
+
+          <h3 class="text-base font-black mb-2">题目描述</h3>
+          <p class="whitespace-pre-line leading-7 text-sm text-slate-700 dark:text-slate-300">{{ problem.description }}</p>
+
+          <h3 class="mt-5 text-base font-black mb-2">输入格式</h3>
+          <p class="whitespace-pre-line leading-7 text-sm text-slate-700 dark:text-slate-300">{{ problem.inputFormat }}</p>
+
+          <h3 class="mt-5 text-base font-black mb-2">输出格式</h3>
+          <p class="whitespace-pre-line leading-7 text-sm text-slate-700 dark:text-slate-300">{{ problem.outputFormat }}</p>
+
+          <h3 class="mt-5 text-base font-black mb-3">样例</h3>
+          <div v-for="(sample, i) in problem.samples" :key="i" class="mb-3">
+            <div class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">样例 #{{ i + 1 }}</div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.input }}</pre>
+              <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.output }}</pre>
+            </div>
+          </div>
+        </div>
+
+        <div v-show="activeTab === 'testcases'" class="flex-1 overflow-y-auto px-5 py-5">
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">以下为判题使用的测试数据（隐藏），提交代码后将自动运行这些测试点。</p>
+          <div v-for="(tc, i) in problem.testCases" :key="i" class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+            <div class="mb-1 text-xs font-bold text-slate-500 dark:text-slate-400">测试点 #{{ i + 1 }}</div>
+            <div class="grid gap-2">
+              <div>
+                <div class="text-xs text-slate-400 mb-0.5">输入</div>
+                <pre class="rounded-lg bg-slate-900 p-2 font-mono text-xs text-emerald-300 overflow-x-auto">{{ tc.input }}</pre>
+              </div>
+              <div>
+                <div class="text-xs text-slate-400 mb-0.5">期望输出</div>
+                <pre class="rounded-lg bg-slate-900 p-2 font-mono text-xs text-emerald-300 overflow-x-auto">{{ tc.output }}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">
           <button class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100" @click="router.push('/problems')">
             <Icon icon="material-symbols:arrow-back" class="h-4 w-4" />返回
           </button>
-          <span class="text-2xl font-black">{{ problem.id }}. {{ problem.title }}</span>
-          <span class="rounded-full px-3 py-1 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
-        </div>
-
-        <div class="mb-6 flex flex-wrap gap-6 text-sm text-slate-500 dark:text-slate-400">
-          <span>时间限制：{{ problem.timeLimit }}ms</span>
-          <span>内存限制：{{ problem.memoryLimit }}MB</span>
-        </div>
-
-        <div class="prose prose-slate dark:prose-invert max-w-none">
-          <h3 class="text-lg font-black">题目描述</h3>
-          <p class="whitespace-pre-line leading-7 text-slate-700 dark:text-slate-300">{{ problem.description }}</p>
-
-          <h3 class="mt-6 text-lg font-black">输入格式</h3>
-          <p class="whitespace-pre-line leading-7 text-slate-700 dark:text-slate-300">{{ problem.inputFormat }}</p>
-
-          <h3 class="mt-6 text-lg font-black">输出格式</h3>
-          <p class="whitespace-pre-line leading-7 text-slate-700 dark:text-slate-300">{{ problem.outputFormat }}</p>
-
-          <h3 class="mt-6 text-lg font-black">样例</h3>
-          <div v-for="(sample, i) in problem.samples" :key="i" class="mb-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <div class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">输入 #{{ i + 1 }}</div>
-              <pre class="rounded-xl bg-slate-900 p-4 font-mono text-sm text-emerald-300 overflow-x-auto">{{ sample.input }}</pre>
-            </div>
-            <div>
-              <div class="mb-1 text-xs font-bold uppercase tracking-wider text-slate-400">输出 #{{ i + 1 }}</div>
-              <pre class="rounded-xl bg-slate-900 p-4 font-mono text-sm text-emerald-300 overflow-x-auto">{{ sample.output }}</pre>
-            </div>
-          </div>
         </div>
       </div>
 
-      <div class="w-full shrink-0 lg:w-[480px]">
-        <div class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
-          <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+      <button v-if="!leftPanelOpen" class="fixed left-4 top-1/2 z-10 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
+        <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
+      </button>
+
+      <div class="flex flex-1 flex-col min-w-0">
+        <div class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3 dark:border-slate-800 dark:bg-slate-900">
+          <div class="flex items-center gap-2">
+            <button class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" @click="leftPanelOpen = !leftPanelOpen">
+              <Icon icon="material-symbols:menu" class="h-5 w-5" />
+            </button>
             <div class="flex gap-2">
               <button v-for="lang in [{v:'cpp',l:'C++'},{v:'python',l:'Python'},{v:'java',l:'Java'}]" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
             </div>
-            <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
           </div>
+          <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
+        </div>
 
-          <textarea v-model="code" class="h-[400px] w-full resize-none border-none bg-slate-950 p-5 font-mono text-sm text-emerald-300 outline-none" spellcheck="false"></textarea>
+        <MonacoEditor v-model="code" :language="editorLanguageMap[language] || 'cpp'" :is-dark="isDark" height="100%" />
 
-          <div v-if="submitResult" class="border-t border-slate-100 px-5 py-4 dark:border-slate-800">
-            <div class="flex items-center gap-3">
-              <span class="rounded-full px-4 py-1.5 text-sm font-black tracking-wider" :style="{ background: statusColor(submitResult).bg, color: statusColor(submitResult).color }">{{ submitResult === 'AC' ? 'Accepted' : submitResult === 'WA' ? 'Wrong Answer' : 'Runtime Error' }}</span>
-              <span class="text-xs text-slate-400">通过 {{ submitResult === 'AC' ? '全部' : '部分' }} 测试点</span>
-            </div>
+        <div v-if="submitResult" class="border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
+          <div class="flex items-center gap-3">
+            <span class="rounded-full px-4 py-1.5 text-sm font-black tracking-wider" :style="{ background: submitResult === 'AC' ? '#d1fae5' : '#fee2e2', color: submitResult === 'AC' ? '#10b981' : '#ef4444' }">{{ submitResult === 'AC' ? 'Accepted' : submitResult === 'WA' ? 'Wrong Answer' : 'Runtime Error' }}</span>
+            <span class="text-xs text-slate-400">通过 {{ submitResult === 'AC' ? '全部' : '部分' }} 测试点</span>
           </div>
+        </div>
 
-          <div v-else class="border-t border-slate-100 px-5 py-4 text-center text-sm text-slate-400 dark:border-slate-800 dark:text-slate-500">
-            编写代码后点击「提交」查看评测结果
-          </div>
+        <div v-else class="border-t border-slate-200 bg-white px-5 py-4 text-center text-sm text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500">
+          使用 Monaco Editor 编写代码，点击「提交」查看评测结果
         </div>
       </div>
     </div>
