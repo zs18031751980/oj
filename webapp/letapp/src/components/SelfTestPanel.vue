@@ -26,7 +26,7 @@ const onDragStart = (e: MouseEvent) => {
   const startY = e.clientY
   const startHeight = panelHeight.value
   const onMouseMove = (ev: MouseEvent) => {
-    const delta = startY - ev.clientY
+    const delta = ev.clientY - startY
     panelHeight.value = Math.max(220, startHeight + delta)
   }
   const onMouseUp = () => {
