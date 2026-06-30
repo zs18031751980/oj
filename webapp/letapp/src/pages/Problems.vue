@@ -20,13 +20,7 @@ const problems = ref<Problem[]>([
   { id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'], accepted: 156, submissions: 312 },
   { id: 1002, title: '反转字符串', difficulty: '简单', tags: ['字符串', '双指针'], accepted: 98, submissions: 145 },
   { id: 1003, title: '斐波那契数列', difficulty: '简单', tags: ['递归', '动态规划'], accepted: 203, submissions: 410 },
-  { id: 1004, title: '有效括号匹配', difficulty: '中等', tags: ['栈', '字符串'], accepted: 87, submissions: 210 },
-  { id: 1005, title: '链表中间节点', difficulty: '中等', tags: ['链表', '快慢指针'], accepted: 64, submissions: 120 },
-  { id: 1006, title: '合并区间', difficulty: '中等', tags: ['排序', '数组'], accepted: 45, submissions: 98 },
-  { id: 1007, title: 'K 个一组翻转链表', difficulty: '困难', tags: ['链表', '递归'], accepted: 23, submissions: 89 },
-  { id: 1008, title: '最长回文子串', difficulty: '中等', tags: ['字符串', '动态规划'], accepted: 56, submissions: 156 },
-  { id: 1009, title: '接雨水', difficulty: '困难', tags: ['栈', '数组', '双指针'], accepted: 18, submissions: 67 },
-  { id: 1010, title: '单词搜索', difficulty: '中等', tags: ['回溯', '矩阵'], accepted: 34, submissions: 78 },
+
 ]);
 
 const filteredProblems = computed(() => {
