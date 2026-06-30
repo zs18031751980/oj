@@ -224,6 +224,7 @@ const onDragStart = (e: MouseEvent) => {
 .body-scroll {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 1.25rem 0.75rem;
   display: flex;
   gap: 0.75rem;
@@ -231,6 +232,7 @@ const onDragStart = (e: MouseEvent) => {
 
 .surface-panel {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-radius: 0.75rem;

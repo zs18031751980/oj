@@ -367,19 +367,10 @@ onUnmounted(() => {
         </div>
 
         <div v-show="activeTab === 'testcases'" class="px-5 py-5">
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">以下为判题使用的测试数据（隐藏），提交代码后将自动运行这些测试点。</p>
-          <div v-for="(tc, i) in problem.testCases" :key="i" class="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-            <div class="mb-1 text-xs font-bold text-slate-500 dark:text-slate-400">测试点 #{{ i + 1 }}</div>
-            <div class="grid gap-2">
-              <div>
-                <div class="text-xs text-slate-400 mb-0.5">输入</div>
-                <pre class="rounded-lg bg-slate-900 p-2 font-mono text-xs text-emerald-300 overflow-x-auto">{{ tc.input }}</pre>
-              </div>
-              <div>
-                <div class="text-xs text-slate-400 mb-0.5">期望输出</div>
-                <pre class="rounded-lg bg-slate-900 p-2 font-mono text-xs text-emerald-300 overflow-x-auto">{{ tc.output }}</pre>
-              </div>
-            </div>
+          <div class="flex flex-col items-center justify-center py-16 text-center">
+            <Icon icon="material-symbols:lock-outline" class="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
+            <p class="text-sm font-bold text-slate-500 dark:text-slate-400">测试数据已隐藏</p>
+            <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">提交代码后将自动进行判题。</p>
           </div>
         </div>
       </div>
