@@ -119,20 +119,25 @@ class JudgeWorker:
 
         results = []
         first_failed = None
+        compile_error = None
 
         for idx, tc in enumerate(testcases):
             inp = tc.input_data if hasattr(tc, 'input_data') else tc['input']
             outp = tc.output_data if hasattr(tc, 'output_data') else tc['output']
             result = self._judge_single(code, language, inp, outp)
+            result['testCaseIndex'] = idx
             results.append(result)
             if not result["passed"] and first_failed is None:
                 first_failed = idx
-                break
+            if result.get("stderr") and compile_error is None:
+                compile_error = result["stderr"]
 
         all_passed = first_failed is None
 
+        all_have_stderr = all(r.get("stderr") for r in results)
+        final_status = 'CE' if all_have_stderr else ('AC' if all_passed else 'WA')
+
         total_time = sum(r.get("time_used", 0) or 0 for r in results)
-        final_status = 'AC' if all_passed else 'WA'
 
         result_data = {
             'id': submission_id,
@@ -141,12 +146,14 @@ class JudgeWorker:
             'memory_used': 0,
             'testcase_results': results,
             'fail_testcase_index': first_failed,
+            'compile_error': compile_error if all_have_stderr else None,
         }
         self._save_to_redis(submission_id, result_data)
 
         if submission:
             try:
-                submission.status = Submission.AC if all_passed else Submission.WA
+                db_status = Submission.AC if final_status == 'AC' else (Submission.WA if final_status == 'WA' else Submission.WA)
+                submission.status = db_status
                 submission.time_used = total_time
                 submission.memory_used = 0
                 submission.testcase_results = json.dumps(results)

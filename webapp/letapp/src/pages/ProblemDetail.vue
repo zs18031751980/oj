@@ -50,6 +50,7 @@ interface TestResult {
 const testResults = ref<TestResult[]>([]);
 const currentResultPage = ref(0);
 const failedTestCaseIndex = ref<number | null>(null);
+const compileErrorMsg = ref('');
 
 const stdin = ref('');
 const expectedOutput = ref('');
@@ -150,6 +151,7 @@ interface SubmissionResponse {
   testcase_results?: any[];
   fail_testcase_index?: number | null;
   time_used?: number;
+  compile_error?: string;
 }
 
 const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
@@ -240,6 +242,10 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
 
   if (res.status === 'AC') {
     submitResult.value = 'AC';
+    currentResultPage.value = 0;
+  } else if (res.status === 'CE') {
+    submitResult.value = 'CE';
+    compileErrorMsg.value = res.compile_error || '';
     currentResultPage.value = 0;
   } else {
     submitResult.value = 'WA';
@@ -430,10 +436,14 @@ onUnmounted(() => {
         <div v-if="submitResult" class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
           <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
-            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="submitResult === 'AC' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? 'ACCEPTED' : 'WRONG ANSWER' }}</span>
+            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="submitResult === 'AC' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : submitResult === 'CE' ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
           </div>
 
-          <div class="flex flex-col flex-1 min-h-0">
+          <div v-if="submitResult === 'CE'" class="flex flex-col flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            <span class="text-sm font-bold text-rose-600 dark:text-rose-400">编译器输出</span>
+            <pre class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-mono text-rose-800 whitespace-pre-wrap dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">{{ compileErrorMsg || '(无错误信息)' }}</pre>
+          </div>
+          <div v-else class="flex flex-col flex-1 min-h-0">
             <div class="px-5 py-4 overflow-y-auto space-y-1.5">
               <div v-for="(tr, i) in testResults" :key="i" class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer transition" :class="currentResultPage === i ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'" @click="currentResultPage = i">
                 <Icon :icon="tr.passed ? 'material-symbols:check-circle' : 'material-symbols:cancel'" :class="tr.passed ? 'text-emerald-500' : 'text-rose-500'" class="h-4 w-4 shrink-0" />
