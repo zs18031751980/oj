@@ -345,7 +345,6 @@ onUnmounted(() => {
       <NButton class="mt-4" @click="router.push('/problems')">返回题库</NButton>
     </div>
   </div>
-
   <div v-else class="flex min-h-[calc(100vh-5rem)] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <div class="flex flex-1 flex-col lg:flex-row relative">
       <div class="relative flex flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
@@ -516,6 +515,7 @@ onUnmounted(() => {
     <button v-if="!leftPanelOpen" class="fixed left-3 top-1/2 z-50 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-2 text-slate-400 shadow-lg hover:text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:text-slate-300" title="展开左侧" @click="leftPanelOpen = true">
       <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
     </button>
+  </div>
   </div>
 </template>
 
