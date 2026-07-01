@@ -440,10 +440,17 @@ onUnmounted(() => {
           </div>
 
           <div v-if="submitResult === 'CE'" class="flex flex-col flex-1 overflow-y-auto px-5 py-4 space-y-3">
-            <span class="text-sm font-bold text-rose-600 dark:text-rose-400">编译器输出</span>
+            <div class="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <Icon icon="material-symbols:error-outline" class="h-5 w-5" />
+              <span class="text-sm font-bold">编译错误</span>
+            </div>
             <pre class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm font-mono text-rose-800 whitespace-pre-wrap dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300">{{ compileErrorMsg || '(无错误信息)' }}</pre>
           </div>
           <div v-else class="flex flex-col flex-1 min-h-0">
+            <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
+              <span class="text-sm font-bold" :class="submitResult === 'AC' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">已通过 {{ testResults.filter(t => t.passed).length }} / {{ testResults.length }} 个测试用例</span>
+              <span v-if="submitResult === 'AC'" class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">全部通过 ✓</span>
+            </div>
             <div class="px-5 py-4 overflow-y-auto space-y-1.5">
               <div v-for="(tr, i) in testResults" :key="i" class="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold cursor-pointer transition" :class="currentResultPage === i ? 'bg-slate-100 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'" @click="currentResultPage = i">
                 <Icon :icon="tr.passed ? 'material-symbols:check-circle' : 'material-symbols:cancel'" :class="tr.passed ? 'text-emerald-500' : 'text-rose-500'" class="h-4 w-4 shrink-0" />
