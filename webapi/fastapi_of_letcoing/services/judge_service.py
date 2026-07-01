@@ -65,6 +65,14 @@ class JudgeWorker:
             self._loop.close()
             self._loop = None
 
+    def _save_to_redis(self, submission_id, data):
+        """将提交结果写入 Redis 缓存"""
+        try:
+            key = f'submission:{submission_id}'
+            self.redis.set(key, data, 3600)
+        except Exception:
+            pass
+
     def _process_task(self, task: dict):
         """处理单个判题任务"""
         submission_id = task.get("submission_id")
@@ -86,6 +94,11 @@ class JudgeWorker:
 
         if not testcases:
             self.logger.warning(f"No testcases for problem {problem_id}, using empty")
+            result_data = {
+                'id': submission_id, 'status': 'AC', 'time_used': 0, 'memory_used': 0,
+                'testcase_results': [], 'fail_testcase_index': None,
+            }
+            self._save_to_redis(submission_id, result_data)
             if submission:
                 submission.status = Submission.AC
                 submission.time_used = 0
@@ -119,6 +132,17 @@ class JudgeWorker:
         all_passed = first_failed is None
 
         total_time = sum(r.get("time_used", 0) or 0 for r in results)
+        final_status = 'AC' if all_passed else 'WA'
+
+        result_data = {
+            'id': submission_id,
+            'status': final_status,
+            'time_used': total_time,
+            'memory_used': 0,
+            'testcase_results': results,
+            'fail_testcase_index': first_failed,
+        }
+        self._save_to_redis(submission_id, result_data)
 
         if submission:
             try:
@@ -132,7 +156,7 @@ class JudgeWorker:
                 pass
 
         self.logger.info(
-            f"Submission {submission_id} done: {submission.status} "
+            f"Submission {submission_id} done: {final_status} "
             f"(passed {sum(1 for r in results if r['passed'])}/{len(results)})"
         )
 
