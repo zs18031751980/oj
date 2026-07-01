@@ -433,7 +433,8 @@ onUnmounted(() => {
           />
         </div>
 
-        <div v-if="submitResult" class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+        <div class="w-96 shrink-0">
+          <div v-if="submitResult" class="h-full border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
           <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
             <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="submitResult === 'AC' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : submitResult === 'CE' ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
