@@ -2,25 +2,24 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import { useProblemStats } from '../composables/useProblemStats';
 
 interface Problem {
   id: number;
   title: string;
   difficulty: '简单' | '中等' | '困难';
   tags: string[];
-  accepted: number;
-  submissions: number;
 }
 
 const router = useRouter();
 const searchQuery = ref('');
 const difficultyFilter = ref<string>('');
+const { getStats } = useProblemStats();
 
 const problems = ref<Problem[]>([
-  { id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'], accepted: 156, submissions: 312 },
-  { id: 1002, title: '反转字符串', difficulty: '简单', tags: ['字符串', '双指针'], accepted: 98, submissions: 145 },
-  { id: 1003, title: '斐波那契数列', difficulty: '简单', tags: ['递归', '动态规划'], accepted: 203, submissions: 410 },
-
+  { id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'] },
+  { id: 1002, title: '反转字符串', difficulty: '简单', tags: ['字符串', '双指针'] },
+  { id: 1003, title: '斐波那契数列', difficulty: '简单', tags: ['递归', '动态规划'] },
 ]);
 
 const filteredProblems = computed(() => {
@@ -106,7 +105,6 @@ const difficultyColor = (d: string) => {
             class="flex cursor-pointer items-center gap-4 px-6 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
             @click="openProblem(problem.id)"
           >
-            <span class="w-16 shrink-0 text-sm font-mono text-slate-400 dark:text-slate-500">{{ problem.id }}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-3">
                 <span class="text-base font-bold text-slate-900 dark:text-white truncate">{{ problem.title }}</span>
@@ -121,8 +119,22 @@ const difficultyColor = (d: string) => {
               </div>
             </div>
             <div class="hidden shrink-0 text-right sm:block">
-              <div class="text-sm font-bold text-emerald-600 dark:text-emerald-400">{{ problem.accepted }}</div>
-              <div class="text-xs text-slate-400 dark:text-slate-500">通过 / {{ problem.submissions }}</div>
+              <div class="text-xs text-slate-400 dark:text-slate-500 mb-1">
+                <span
+                  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
+                  :class="getStats(problem.id).accepted > 0
+                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
+                >
+                  <Icon
+                    :icon="getStats(problem.id).accepted > 0 ? 'material-symbols:check-circle' : 'material-symbols:radio-button-unchecked'"
+                    class="h-3.5 w-3.5"
+                  />
+                  {{ getStats(problem.id).accepted > 0 ? '已通过' : '未通过' }}
+                </span>
+              </div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ getStats(problem.id).accepted }} / {{ getStats(problem.id).submissions }}</div>
+              <div class="text-xs text-slate-400 dark:text-slate-500">通过次数 / 提交总数</div>
             </div>
             <Icon icon="material-symbols:chevron-right" class="shrink-0 h-5 w-5 text-slate-300 dark:text-slate-600" />
           </div>

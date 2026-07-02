@@ -96,11 +96,11 @@ const onDragStart = (e: MouseEvent) => {
               placeholder="如果代码需要输入，可以在这里填写测试数据。"
               @input="emit('update:stdin', ($event.target as HTMLTextAreaElement).value)"
             ></textarea>
+            <div class="divider-visible"></div>
             <textarea
               :value="expectedOutput"
-              class="plain-textarea panel-textarea"
+              class="plain-textarea panel-textarea expected-textarea"
               placeholder="预期结果（选填）：填写后自动对比实际输出"
-              style="margin-top: 8px;"
               @input="emit('update:expectedOutput', ($event.target as HTMLTextAreaElement).value)"
             ></textarea>
           </div>
@@ -345,6 +345,13 @@ const onDragStart = (e: MouseEvent) => {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.15);
 }
+
+.divider-visible {
+  height: 1px;
+  background: #cbd5e1;
+  margin: 0;
+  flex-shrink: 0;
+}
 </style>
 
 <style>
@@ -393,5 +400,8 @@ html.dark .status-divider {
 }
 html.dark .placeholder-copy {
   color: #64748b !important;
+}
+html.dark .divider-visible {
+  background: #475569 !important;
 }
 </style>

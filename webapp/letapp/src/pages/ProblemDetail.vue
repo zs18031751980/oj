@@ -8,6 +8,7 @@ import { storeToRefs } from 'pinia';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import SelfTestPanel from '../components/SelfTestPanel.vue';
 import { apiRequest } from '../services/api';
+import { useProblemStats } from '../composables/useProblemStats';
 
 interface TestCase {
   input: string;
@@ -155,6 +156,7 @@ interface SubmissionResponse {
 }
 
 const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const { incrementSubmissions, incrementAccepted } = useProblemStats();
 
 const submitCode = async () => {
   if (!code.value.trim()) {
@@ -183,6 +185,8 @@ const submitCode = async () => {
         language: language.value,
       }),
     });
+
+    incrementSubmissions(p.id);
 
     if (created.status === 'Pending' || created.status === 'Running') {
       pollTimer.value = setInterval(async () => {
@@ -243,6 +247,7 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
   if (res.status === 'AC') {
     submitResult.value = 'AC';
     currentResultPage.value = 0;
+    incrementAccepted(p.id);
   } else if (res.status === 'CE') {
     submitResult.value = 'CE';
     compileErrorMsg.value = res.compile_error || '';
