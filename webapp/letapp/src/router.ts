@@ -22,7 +22,7 @@ const routes = [
       {
         path: '/learn',
         name: 'Learn',
-        meta: { title: '学习资源 - Let Coding', requiresAuth: true },
+        meta: { title: '学习资源 - Let Coding' },
         component: () => import('./pages/Learn.vue'),
       },
       {

@@ -73,9 +73,9 @@ const features = [
               <Icon icon="material-symbols:play-arrow" class="h-5 w-5" />
               进入在线编辑器
             </button>
-            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : goToOauthLogin()">
-              <Icon :icon="authStore.isAuthenticated ? 'material-symbols:school' : 'mdi:login'" class="h-5 w-5" />
-              {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
+            <button class="hero-secondary" @click="router.push('/learn')">
+              <Icon icon="material-symbols:school" class="h-5 w-5" />
+              查看学习资源
             </button>
           </div>
 

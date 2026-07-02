@@ -2,8 +2,9 @@
 import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
-import { NButton, useMessage } from 'naive-ui';
+import { NButton, useMessage, useDialog } from 'naive-ui';
 import { useThemeStore } from '../stores/theme';
+import { useAuthStore } from '../stores/auth';
 import { storeToRefs } from 'pinia';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import SelfTestPanel from '../components/SelfTestPanel.vue';
@@ -33,7 +34,9 @@ interface Problem {
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const dialog = useDialog();
 const themeStore = useThemeStore();
+const authStore = useAuthStore();
 const { isDark } = storeToRefs(themeStore);
 
 const leftPanelOpen = ref(true);
@@ -179,6 +182,18 @@ const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const { incrementSubmissions, incrementAccepted } = useProblemStats();
 
 const submitCode = async () => {
+  if (!authStore.isAuthenticated) {
+    dialog.warning({
+      title: '提示',
+      content: '请登录后再提交',
+      positiveText: '去登录',
+      negativeText: '取消',
+      onPositiveClick: () => {
+        authStore.startOAuthLogin('iOSClub', route.fullPath, true);
+      },
+    });
+    return;
+  }
   if (!code.value.trim()) {
     message.warning('请先编写代码');
     return;
