@@ -28,6 +28,7 @@ from models.db_models import create_tables, migrate_add_role_column
 from controllers.auth_controller import api as auth_api
 from controllers.code_controller import api as code_api
 from controllers.submission_controller import api as submission_api
+from controllers.user_code_controller import api as user_code_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
@@ -419,6 +420,7 @@ def handle_uncaught_error(e):
 api.add_namespace(code_api, path='/code')
 api.add_namespace(auth_api, path='/auth')
 api.add_namespace(submission_api, path='/submissions')
+api.add_namespace(user_code_api, path='/user')
 
 
 # ============================================================

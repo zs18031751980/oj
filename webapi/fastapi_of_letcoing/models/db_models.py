@@ -183,6 +183,27 @@ class Testcase(BaseModel):
         table_name = "testcases"
 
 
+class UserCode(BaseModel):
+    """用户代码存储模型（每个用户每题每语言最多存一份，最多5题）"""
+    id = AutoField(primary_key=True)
+    user = ForeignKeyField(User, backref="user_codes", verbose_name="用户")
+    problem_id = IntegerField(verbose_name="题目ID")
+    language = CharField(max_length=50, verbose_name="编程语言")
+    code = TextField(verbose_name="用户代码")
+
+    class Meta:
+        table_name = "user_codes"
+        indexes = (
+            (('user', 'problem_id', 'language'), True),
+        )
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        if 'user' in data and not isinstance(data['user'], (int, str)):
+            data['user'] = getattr(data['user'], 'id', None)
+        return data
+
+
 class Submission(BaseModel):
     """提交记录 ORM 模型"""
     PENDING = "Pending"
@@ -228,7 +249,7 @@ class Submission(BaseModel):
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User, Problem, Testcase, Submission]
+MODELS = [User, Problem, Testcase, Submission, UserCode]
 
 
 def create_tables():

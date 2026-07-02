@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue';
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { NButton, useMessage } from 'naive-ui';
@@ -9,6 +9,7 @@ import MonacoEditor from '../components/MonacoEditor.vue';
 import SelfTestPanel from '../components/SelfTestPanel.vue';
 import { apiRequest } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
+import { useProblemCode } from '../composables/useProblemCode';
 
 interface TestCase {
   input: string;
@@ -132,13 +133,32 @@ const languageTemplates: Record<string, string> = {
   java: 'public class Main {\n  public static void main(String[] args) {\n    // 在此编写代码\n  }\n}',
 };
 
-if (!code.value) {
-  code.value = languageTemplates[language.value] || '';
-}
+const { saveCode, loadCode } = useProblemCode();
+const problemId = computed(() => Number(route.params.id));
 
-const updateLanguage = (lang: string) => {
+(async () => {
+  if (!code.value) {
+    code.value = languageTemplates[language.value] || '';
+  }
+  const saved = await loadCode(problemId.value, language.value);
+  if (saved) {
+    code.value = saved;
+  }
+})();
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+watch(code, (val) => {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveCode(problemId.value, language.value, val);
+  }, 500);
+});
+
+const updateLanguage = async (lang: string) => {
+  await saveCode(problemId.value, language.value, code.value);
   language.value = lang;
-  code.value = languageTemplates[lang] || '';
+  const saved = await loadCode(problemId.value, lang);
+  code.value = saved || languageTemplates[lang] || '';
   submitResult.value = null;
   if (pollTimer.value) {
     clearInterval(pollTimer.value);
@@ -334,6 +354,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  saveCode(problemId.value, language.value, code.value);
   window.removeEventListener('keydown', handleKeyboard);
   if (pollTimer.value) {
     clearInterval(pollTimer.value);
