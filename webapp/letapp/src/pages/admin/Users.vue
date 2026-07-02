@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, markRaw, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+
+const roleDisplayNames = markRaw({ admin: '管理员', user: '普通用户', guest: '访客' } as const);
+const statusInfoMap = markRaw({
+  active: { name: '活跃', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
+  inactive: { name: '未激活', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+  suspended: { name: '已封禁', color: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
+} as const);
 
 interface User {
   id: number;
@@ -82,23 +89,9 @@ const handleEditUser = (userId: number) => {
   window.alert(`编辑用户 ${userId} 的功能正在开发中。`);
 };
 
-const getRoleDisplayName = (role: User['role']) => {
-  const roleMap = {
-    admin: '管理员',
-    user: '普通用户',
-    guest: '访客',
-  };
-  return roleMap[role];
-};
+const getRoleDisplayName = (role: User['role']): string => roleDisplayNames[role];
 
-const getStatusInfo = (status: User['status']) => {
-  const statusMap = {
-    active: { name: '活跃', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' },
-    inactive: { name: '未激活', color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
-    suspended: { name: '已封禁', color: 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' },
-  };
-  return statusMap[status];
-};
+const getStatusInfo = (status: User['status']): { name: string; color: string } => statusInfoMap[status];
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleString('zh-CN', {
   year: 'numeric',
@@ -111,7 +104,7 @@ const formatDate = (dateString: string) => new Date(dateString).toLocaleString('
 
 <template>
   <div class="space-y-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div v-once class="flex flex-wrap items-center justify-between gap-4">
       <div>
         <h1 class="text-3xl font-black tracking-tight">用户管理</h1>
         <p class="mt-2 text-slate-600 dark:text-slate-300">管理平台用户，包括筛选、状态调整和删除。</p>
@@ -167,7 +160,7 @@ const formatDate = (dateString: string) => new Date(dateString).toLocaleString('
     <section class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
       <div class="overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-          <thead class="bg-slate-50 dark:bg-slate-950">
+          <thead v-once class="bg-slate-50 dark:bg-slate-950">
             <tr>
               <th class="table-head">ID</th>
               <th class="table-head">用户名</th>

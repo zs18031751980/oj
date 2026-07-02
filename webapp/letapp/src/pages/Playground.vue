@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, markRaw, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiRequest } from '../services/api';
@@ -29,7 +29,7 @@ const themeStore = useThemeStore();
 
 const languageMenuRef = ref<HTMLElement | null>(null);
 
-const languagePresets: Record<string, string> = {
+const languagePresets: Record<string, string> = markRaw({
   javascript: `function greet(name) {
   return \`Hello, \${name}!\`;
 }
@@ -67,10 +67,11 @@ func main() {
 print("Hello, Let Coding!")`,
   kotlin: `fun main() {
     println("Hello, Let Coding!")
-}`,
-};
+  `,
+});
 
-const languages: LanguageOption[] = [
+
+const languages: LanguageOption[] = markRaw([
   { name: 'JavaScript', value: 'javascript', prism: 'javascript', icon: 'vscode-icons:file-type-js-official', color: '#f7df1e' },
   { name: 'Python', value: 'python', prism: 'python', icon: 'vscode-icons:file-type-python', color: '#3776ab' },
   { name: 'Java', value: 'java', prism: 'java', icon: 'vscode-icons:file-type-java', color: '#ed8b00' },
@@ -79,10 +80,10 @@ const languages: LanguageOption[] = [
   { name: 'Rust', value: 'rust', prism: 'rust', icon: 'vscode-icons:file-type-rust', color: '#dea584' },
   { name: 'Swift', value: 'swift', prism: 'swift', icon: 'vscode-icons:file-type-swift', color: '#fa7343' },
   { name: 'Kotlin', value: 'kotlin', prism: 'kotlin', icon: 'vscode-icons:file-type-kotlin', color: '#7f52ff' },
-];
+]);
 
 const defaultLanguage = languages.find((lang) => lang.value === 'cpp')!;
-const fallbackFileNames: Record<string, string> = {
+const fallbackFileNames: Record<string, string> = markRaw({
   javascript: 'script',
   python: 'script',
   java: 'Main',
@@ -91,9 +92,9 @@ const fallbackFileNames: Record<string, string> = {
   rust: 'main',
   swift: 'main',
   kotlin: 'Main',
-};
+});
 
-const extensionMap: Record<string, string> = {
+const extensionMap: Record<string, string> = markRaw({
   javascript: 'js',
   python: 'py',
   java: 'java',
@@ -102,7 +103,7 @@ const extensionMap: Record<string, string> = {
   rust: 'rs',
   swift: 'swift',
   kotlin: 'kt',
-};
+});
 
 const getLanguagePreset = (language: string) => languagePresets[language] ?? '';
 

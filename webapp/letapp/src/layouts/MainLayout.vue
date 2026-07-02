@@ -122,16 +122,17 @@ import { useRouter } from 'vue-router';
 import { NLayout, NLayoutContent, NLayoutHeader } from 'naive-ui';
 import { Icon } from '@iconify/vue';
 import { storeToRefs } from 'pinia';
+import { markRaw } from 'vue';
 import { useThemeStore } from '../stores/theme';
 import { useAuthStore } from '../stores/auth';
 
-const navItems = [
+const navItems = markRaw([
   { label: '首页', to: '/', icon: 'material-symbols:home-rounded' },
   { label: '在线编辑器', to: '/playground', icon: 'material-symbols:code-rounded' },
   { label: '学习资源', to: '/learn', icon: 'material-symbols:school-rounded' },
   { label: '题库', to: '/problems', icon: 'material-symbols:library-books-rounded' },
   { label: '公告', to: '/announcements', icon: 'material-symbols:campaign-rounded' },
-];
+]);
 
 const DESKTOP_EXPANDED_WIDTH = 288;
 const DESKTOP_COLLAPSED_WIDTH = 96;

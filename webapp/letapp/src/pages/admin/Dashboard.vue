@@ -1,31 +1,32 @@
 <script setup lang="ts">
+import { markRaw } from 'vue';
 import { Icon } from '@iconify/vue';
 
-const stats = [
+const stats = markRaw([
   { title: '总用户数', value: 1250, icon: 'material-symbols:people', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300', trend: '+15%' },
   { title: '活跃用户', value: 890, icon: 'material-symbols:person', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300', trend: '+8%' },
   { title: '代码执行次数', value: 5680, icon: 'material-symbols:code', color: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300', trend: '+22%' },
   { title: '学习资源数', value: 120, icon: 'material-symbols:school', color: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', trend: '+5%' },
-];
+]);
 
-const recentUsers = [
+const recentUsers = markRaw([
   { id: 1, name: 'admin', email: 'admin@example.com', role: '管理员', status: 'active', joined: '2026-06-01' },
   { id: 2, name: 'user1', email: 'user1@example.com', role: '普通用户', status: 'active', joined: '2026-06-03' },
   { id: 3, name: 'user2', email: 'user2@example.com', role: '普通用户', status: 'inactive', joined: '2026-06-05' },
   { id: 4, name: 'guest1', email: 'guest1@example.com', role: '访客', status: 'active', joined: '2026-06-08' },
-];
+]);
 
-const recentExecutions = [
+const recentExecutions = markRaw([
   { id: 1, user: 'user1', language: 'JavaScript', status: 'success', executedAt: '2026-06-12 14:30' },
   { id: 2, user: 'user2', language: 'Python', status: 'error', executedAt: '2026-06-12 14:25' },
   { id: 3, user: 'admin', language: 'Java', status: 'success', executedAt: '2026-06-12 14:20' },
   { id: 4, user: 'guest1', language: 'C++', status: 'success', executedAt: '2026-06-12 14:15' },
-];
+]);
 </script>
 
 <template>
   <div class="space-y-6">
-    <div>
+    <div v-once>
       <h1 class="text-3xl font-black tracking-tight">仪表盘</h1>
       <p class="mt-2 text-slate-600 dark:text-slate-300">欢迎来到 Let Coding 管理后台。</p>
     </div>

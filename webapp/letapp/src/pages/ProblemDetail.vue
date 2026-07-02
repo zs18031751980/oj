@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed, watch } from 'vue';
+import { markRaw, onMounted, onUnmounted, ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { NButton, useMessage, useDialog } from 'naive-ui';
@@ -64,7 +64,7 @@ const selfTestStatus = ref('');
 const isSelfTesting = ref(false);
 const selfTestVerdict = ref<'pass' | 'fail' | null>(null);
 
-const problems: Record<number, Problem> = {
+const problems: Record<number, Problem> = markRaw({
   1001: {
     id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'],
     description: '给定一个整数数组 nums 和一个整数目标值 target，请你在该数组中找出和为目标值 target 的那两个整数，并返回它们的数组下标。\n\n你可以假设每种输入只会对应一个答案，并且你不能使用两次相同的元素。',
@@ -123,17 +123,30 @@ const problems: Record<number, Problem> = {
     ],
     timeLimit: 1000, memoryLimit: 256,
   },
-};
+});
 
 const problem = computed(() => {
   const id = Number(route.params.id);
   return problems[id] || null;
 });
 
-const languageTemplates: Record<string, string> = {
+const languageTemplates: Record<string, string> = markRaw({
   cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n  // 在此编写代码\n  return 0;\n}',
   python: '# 在此编写代码\n',
   java: 'public class Main {\n  public static void main(String[] args) {\n    // 在此编写代码\n  }\n}',
+});
+
+const langButtons = markRaw([
+  { v: 'cpp', l: 'C++' },
+  { v: 'python', l: 'Python' },
+  { v: 'java', l: 'Java' },
+]);
+
+const passedCount = computed(() => testResults.value.filter(t => t.passed).length);
+
+const resultClassMap: Record<string, string> = {
+  AC: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
+  CE: 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
 };
 
 const { saveCode, loadCode } = useProblemCode();
@@ -455,7 +468,7 @@ onUnmounted(() => {
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
               </button>
               <div class="flex gap-2">
-                <button v-for="lang in [{v:'cpp',l:'C++'},{v:'python',l:'Python'},{v:'java',l:'Java'}]" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
+                <button v-for="lang in langButtons" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
               </div>
             </div>
             <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
@@ -482,7 +495,7 @@ onUnmounted(() => {
           <div v-if="submitResult" class="h-full border-l border-slate-200 dark:border-slate-800 bg-white/85 backdrop-blur-2xl dark:bg-slate-900/85 flex flex-col">
           <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
-            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="submitResult === 'AC' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : submitResult === 'CE' ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
+            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="resultClassMap[submitResult] || 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
           </div>
 
           <div v-if="submitResult === 'CE'" class="flex flex-col flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -494,7 +507,7 @@ onUnmounted(() => {
           </div>
           <div v-else class="flex flex-col flex-1 min-h-0">
             <div class="flex items-center justify-between border-b border-slate-200 px-5 py-3 dark:border-slate-800">
-              <span class="text-sm font-bold" :class="submitResult === 'AC' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">已通过 {{ testResults.filter(t => t.passed).length }} / {{ testResults.length }} 个测试用例</span>
+              <span class="text-sm font-bold" :class="submitResult === 'AC' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">已通过 {{ passedCount }} / {{ testResults.length }} 个测试用例</span>
               <span v-if="submitResult === 'AC'" class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">全部通过 ✓</span>
             </div>
             <div class="px-5 py-4 overflow-y-auto space-y-1.5">

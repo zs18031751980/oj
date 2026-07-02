@@ -1,10 +1,11 @@
 ﻿<script setup lang="ts">
+import { markRaw } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
 
-const languages = [
+const languages = markRaw([
   { name: 'JavaScript', value: 'javascript', icon: 'vscode-icons:file-type-js-official', color: '#f7df1e' },
   { name: 'Python', value: 'python', icon: 'vscode-icons:file-type-python', color: '#3776ab' },
   { name: 'Java', value: 'java', icon: 'vscode-icons:file-type-java', color: '#ed8b00' },
@@ -13,9 +14,9 @@ const languages = [
   { name: 'Rust', value: 'rust', icon: 'vscode-icons:file-type-rust', color: '#dea584' },
   { name: 'Swift', value: 'swift', icon: 'vscode-icons:file-type-swift', color: '#fa7343' },
   { name: 'Kotlin', value: 'kotlin', icon: 'vscode-icons:file-type-kotlin', color: '#7f52ff' },
-];
+]);
 
-const features = [
+const features = markRaw([
   {
     icon: 'material-symbols:flash-on',
     title: '打开即写',
@@ -36,13 +37,13 @@ const features = [
     title: '统一认证接入',
     description: '使用iOSClub社团账号进行登录，方便快捷',
   },
-];
+]);
 
 </script>
 
 <template>
   <main class="overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <section class="relative isolate">
+    <section v-once class="relative isolate">
       <div class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)]"></div>
       <div class="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl items-center gap-12 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-0">
         <div class="flex min-h-[28rem] flex-col justify-center self-center lg:min-h-[36rem]">
@@ -132,7 +133,7 @@ const features = [
       </div>
     </section>
 
-    <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+    <section v-once class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
       <div class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         <article v-for="feature in features" :key="feature.title" class="feature-card">
           <div class="feature-icon">
@@ -146,7 +147,7 @@ const features = [
       </div>
     </section>
 
-    <section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
+    <section v-once class="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
       <div class="rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20 lg:p-10">
         <div class="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
           <div class="max-w-2xl">

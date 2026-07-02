@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, markRaw, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useAuthStore } from '../stores/auth';
@@ -9,11 +9,11 @@ const route = useRoute();
 const authStore = useAuthStore();
 const sidebarExpanded = ref(true);
 
-const navMenu = [
+const navMenu = markRaw([
   { title: '仪表盘', icon: 'material-symbols:dashboard', route: '/admin/dashboard' },
   { title: '用户管理', icon: 'material-symbols:people', route: '/admin/users' },
   { title: '返回首页', icon: 'material-symbols:home', route: '/' },
-];
+]);
 
 const activePath = computed(() => route.path);
 
