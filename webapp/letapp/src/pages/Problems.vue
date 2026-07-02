@@ -119,23 +119,19 @@ const difficultyColor = (d: string) => {
                 >{{ tag }}</span>
               </div>
             </div>
-            <div class="hidden shrink-0 text-right sm:block">
-              <div class="text-xs text-slate-400 dark:text-slate-500 mb-1">
-                <span
-                  class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
-                  :class="getStats(problem.id).accepted > 0
-                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
-                    : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
-                >
-                  <Icon
-                    :icon="getStats(problem.id).accepted > 0 ? 'material-symbols:check-circle' : 'material-symbols:radio-button-unchecked'"
-                    class="h-3.5 w-3.5"
-                  />
-                  {{ getStats(problem.id).accepted > 0 ? '已通过' : '未通过' }}
-                </span>
-              </div>
-              <div class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ getStats(problem.id).accepted }} / {{ getStats(problem.id).submissions }}</div>
-              <div class="text-xs text-slate-400 dark:text-slate-500">通过次数 / 提交总数</div>
+            <div class="hidden shrink-0 sm:block">
+              <span
+                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
+                :class="getStats(problem.id).accepted > 0
+                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
+                  : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
+              >
+                <Icon
+                  :icon="getStats(problem.id).accepted > 0 ? 'material-symbols:check-circle' : 'material-symbols:radio-button-unchecked'"
+                  class="h-3.5 w-3.5"
+                />
+                {{ getStats(problem.id).accepted > 0 ? '已通过' : '未通过' }}
+              </span>
             </div>
             <Icon icon="material-symbols:chevron-right" class="shrink-0 h-5 w-5 text-slate-300 dark:text-slate-600" />
           </div>
