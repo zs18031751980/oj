@@ -107,6 +107,7 @@ const difficultyColor = (d: string) => {
           >
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-3">
+                <span class="w-12 shrink-0 text-sm font-mono text-slate-400 dark:text-slate-500">{{ problem.id }}</span>
                 <span class="text-base font-bold text-slate-900 dark:text-white truncate">{{ problem.title }}</span>
                 <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="difficultyColor(problem.difficulty)">{{ problem.difficulty }}</span>
               </div>
