@@ -209,10 +209,13 @@ const submitCode = async () => {
     incrementSubmissions(p.id);
 
     if (created.status === 'Pending' || created.status === 'Running') {
+      let judged = false;
       pollTimer.value = setInterval(async () => {
         try {
           const res = await apiRequest<SubmissionResponse>(`/submissions/${created.id}`);
+          if (judged) return;
           if (res.status !== 'Pending' && res.status !== 'Running') {
+            judged = true;
             if (pollTimer.value) {
               clearInterval(pollTimer.value);
               pollTimer.value = null;
@@ -220,6 +223,8 @@ const submitCode = async () => {
             _handleJudgeResult(res, p);
           }
         } catch {
+          if (judged) return;
+          judged = true;
           if (pollTimer.value) {
             clearInterval(pollTimer.value);
             pollTimer.value = null;
