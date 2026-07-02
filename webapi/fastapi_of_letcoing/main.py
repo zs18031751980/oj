@@ -59,7 +59,12 @@ if BACKEND_DOTENV_PATH.exists():
 if ROOT_DOTENV_PATH.exists():
     load_dotenv(ROOT_DOTENV_PATH, override=False)
 
-# 最后加载系统环境变量（优先级最高）
+# 加载 .env.local（本地开发覆盖，不会被 Git 追踪）
+BACKEND_DOTENV_LOCAL_PATH = CURRENT_FILE_PATH.with_name('.env.local')
+if BACKEND_DOTENV_LOCAL_PATH.exists():
+    load_dotenv(BACKEND_DOTENV_LOCAL_PATH, override=True)
+
+# 最后加载系统环境变量（部署时优先级最高）
 load_dotenv()
 
 
