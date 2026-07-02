@@ -215,7 +215,7 @@ watch(
 <template>
   <div class="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
     <template v-if="!isDetailMode">
-      <section class="border-b border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
+      <section class="border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/80">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
@@ -232,7 +232,7 @@ watch(
       </section>
 
       <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div class="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 lg:p-10">
+        <div class="rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20 lg:p-10">
           <div class="mb-8">
             <h2 class="text-2xl font-black tracking-tight">学习路径建议</h2>
             <p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
@@ -320,7 +320,7 @@ watch(
           </button>
         </div>
 
-        <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+        <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
           <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
             正在加载资料内容...
           </div>

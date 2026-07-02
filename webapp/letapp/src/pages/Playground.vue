@@ -508,7 +508,7 @@ watch(isFullscreen, (active) => {
 
 <template>
   <div class="min-h-screen bg-[linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_32%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
-    <div class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/75">
+    <div class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/75">
       <div class="playground-container mx-auto flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div class="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div class="flex min-w-0 items-start gap-4">
@@ -860,7 +860,7 @@ watch(isFullscreen, (active) => {
 @reference 'tailwindcss';
 
 .glass-icon-button {
-  @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm transition hover:bg-slate-100;
+  @apply grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white/90 text-slate-700 shadow-sm backdrop-blur-2xl transition hover:bg-slate-100;
 }
 
 .playground-container {
@@ -876,7 +876,7 @@ watch(isFullscreen, (active) => {
 }
 
 .toolbar-button {
-  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100;
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm backdrop-blur-2xl transition hover:-translate-y-0.5 hover:bg-slate-100;
 }
 
 .run-button {
@@ -884,11 +884,11 @@ watch(isFullscreen, (active) => {
 }
 
 .editor-panel {
-  @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60;
+  @apply overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl;
 }
 
 .surface-panel {
-  @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-lg shadow-slate-200/50;
+  @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/50 backdrop-blur-2xl;
 }
 
 .fixed-panels-shell {

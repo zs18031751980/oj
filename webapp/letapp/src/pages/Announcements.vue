@@ -114,7 +114,7 @@ watch(currentFile, async (file) => {
 <template>
   <div class="flex min-h-[calc(100vh-5rem)] flex-col bg-slate-50 text-slate-950 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-50">
     <template v-if="!isDetailMode">
-      <div class="border-b border-slate-200/80 bg-white/80 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80">
+      <div class="border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/80">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
@@ -174,7 +174,7 @@ watch(currentFile, async (file) => {
             </button>
           </div>
 
-          <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+          <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
             <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
               正在加载公告内容...
             </div>
@@ -192,7 +192,7 @@ watch(currentFile, async (file) => {
 @reference 'tailwindcss';
 
 .announcement-card {
-  @apply relative flex min-h-[7.5rem] items-start justify-between rounded-[1.75rem] border border-slate-200 bg-white p-6 text-left shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20;
+  @apply relative flex min-h-[7.5rem] items-start justify-between rounded-[1.75rem] border border-slate-200 bg-white/85 p-6 text-left shadow-lg shadow-slate-200/60 backdrop-blur-2xl transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20;
 }
 
 .card-content {

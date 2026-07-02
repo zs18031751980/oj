@@ -58,7 +58,7 @@ onMounted(async () => {
 
 <template>
   <div class="flex min-h-screen items-center justify-center bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <div class="flex max-w-lg flex-col items-center gap-4 rounded-[2rem] border border-slate-200 bg-white px-6 py-6 text-center shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+    <div class="flex max-w-lg flex-col items-center gap-4 rounded-[2rem] border border-slate-200 bg-white/80 px-6 py-6 text-center shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-black/20">
       <Icon
         :icon="loginFailed ? 'material-symbols:error-outline-rounded' : 'material-symbols:progress-activity'"
         class="h-8 w-8"

@@ -1,14 +1,8 @@
 ﻿<script setup lang="ts">
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
 
 const router = useRouter();
-const authStore = useAuthStore();
-
-const goToOauthLogin = () => {
-  authStore.startOAuthLogin('iOSClub', '/learn', true);
-};
 
 const languages = [
   { name: 'JavaScript', value: 'javascript', icon: 'vscode-icons:file-type-js-official', color: '#f7df1e' },
@@ -153,7 +147,7 @@ const features = [
     </section>
 
     <section class="mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
-      <div class="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20 lg:p-10">
+      <div class="rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20 lg:p-10">
         <div class="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
           <div class="max-w-2xl">
             <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Ready To Start</p>
@@ -169,8 +163,8 @@ const features = [
             <button class="hero-primary" @click="router.push('/playground')">
               现在开始写代码
             </button>
-            <button class="hero-secondary" @click="authStore.isAuthenticated ? router.push('/learn') : goToOauthLogin()">
-              {{ authStore.isAuthenticated ? '查看学习资源' : '去登录' }}
+            <button class="hero-secondary" @click="router.push('/learn')">
+              查看学习资源
             </button>
           </div>
         </div>
@@ -191,7 +185,7 @@ const features = [
 }
 
 .feature-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
+  @apply rounded-[1.75rem] border border-slate-200 bg-white/85 p-6 shadow-lg shadow-slate-200/60 backdrop-blur-2xl transition hover:-translate-y-1 hover:shadow-xl;
 }
 
 .feature-icon {

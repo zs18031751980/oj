@@ -61,7 +61,7 @@ const handleLogout = async () => {
 
 <template>
   <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_30%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_100%)] px-4 py-12 text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.12),_transparent_26%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50 sm:px-6 lg:px-8">
-    <div class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/80 bg-white/80 shadow-2xl shadow-slate-200/70 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-black/30 lg:grid lg:grid-cols-[0.95fr_1.05fr]">
+    <div class="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-[2rem] border border-white/80 bg-white/80 shadow-2xl shadow-slate-200/70 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/80 dark:shadow-black/30 lg:grid lg:grid-cols-[0.95fr_1.05fr]">
       <div class="relative overflow-hidden bg-slate-950 px-8 py-10 text-white dark:bg-slate-900 lg:px-10 lg:py-12">
         <div class="absolute -left-10 top-12 h-32 w-32 rounded-full bg-cyan-400/20 blur-3xl"></div>
         <div class="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-amber-300/10 blur-3xl"></div>
