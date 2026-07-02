@@ -65,6 +65,36 @@ export const getAuthStorage = (mode: AuthStorageMode = getAuthStorageMode()) => 
 );
 
 const getStoredAccessToken = () => getAuthStorage().getItem('access_token');
+const getStoredRefreshToken = () => getAuthStorage().getItem('refresh_token');
+
+let isRefreshing = false;
+
+const tryRefreshToken = async (): Promise<boolean> => {
+  if (isRefreshing) return false;
+  isRefreshing = true;
+  try {
+    const refreshToken = getStoredRefreshToken();
+    if (!refreshToken) return false;
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const storage = getAuthStorage();
+    storage.setItem('access_token', data.access_token);
+    storage.setItem('refresh_token', data.refresh_token);
+    if (data.user_info) {
+      storage.setItem('user_info', JSON.stringify(data.user_info));
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    isRefreshing = false;
+  }
+};
 
 const parseResponse = async (response: Response) => {
   const contentType = response.headers.get('content-type') || '';
@@ -92,11 +122,27 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  let response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     body,
     headers: requestHeaders,
   });
+
+  // 401 且非 skipAuth 时，尝试刷新令牌后重试一次
+  if (response.status === 401 && !skipAuth && !path.startsWith('/auth/refresh')) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      const newToken = getStoredAccessToken();
+      if (newToken) {
+        requestHeaders.set('Authorization', `Bearer ${newToken}`);
+      }
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...init,
+        body,
+        headers: requestHeaders,
+      });
+    }
+  }
 
   const payload = await parseResponse(response);
 

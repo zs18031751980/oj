@@ -79,9 +79,14 @@ class JWTService(Injectable, IJWTService):
         }
         access_token = jwt.encode(access_payload, self._secret_key, algorithm=self._algorithm)
 
-        # 生成刷新令牌（Refresh Token）—— 仅包含用户 ID 和过期时间
+        # 生成刷新令牌（Refresh Token）—— 包含用户 ID 和部分用户信息
+        # 用户信息嵌入令牌中，确保即使 Redis 不可用也能完成刷新
         refresh_payload = {
             'user_id': user_info['id'],
+            'username': user_info.get('username', ''),
+            'email': user_info.get('email', ''),
+            'provider': user_info.get('provider', ''),
+            'role': user_info.get('role', 'member'),
             'exp': refresh_expire,     # 过期时间
             'iat': now,                # 签发时间
             'type': 'refresh'          # 令牌类型：刷新令牌
@@ -158,8 +163,8 @@ class JWTService(Injectable, IJWTService):
 
         流程：
         1. 验证刷新令牌的签名和类型
-        2. 检查刷新令牌是否与 Redis 中缓存的一致
-        3. 获取缓存的用户信息
+        2. 检查刷新令牌是否与 Redis 中缓存的一致（如果 Redis 可用）
+        3. 获取用户信息（优先从 Redis 缓存，回退到令牌载荷）
         4. 生成新的令牌对
 
         Args:
@@ -178,16 +183,25 @@ class JWTService(Injectable, IJWTService):
 
             user_id = payload['user_id']
 
-            # 检查刷新令牌是否与 Redis 中缓存的匹配
-            if not self._is_valid_refresh_token(user_id, refresh_token):
-                self._logger_service.warning("无效的刷新令牌")
-                return None
+            # 检查刷新令牌是否与 Redis 中缓存的匹配（Redis 不可用时跳过）
+            if self._redis_service.is_connected():
+                if not self._is_valid_refresh_token(user_id, refresh_token):
+                    self._logger_service.warning("无效的刷新令牌")
+                    return None
+            else:
+                self._logger_service.warning("Redis 不可用，跳过刷新令牌验证")
 
-            # 获取缓存的用户信息
+            # 优先从 Redis 获取用户信息，回退到令牌载荷中的数据
             user_info = self._get_cached_user_info(user_id)
             if not user_info:
-                self._logger_service.warning("用户信息不存在")
-                return None
+                self._logger_service.info("Redis 用户信息不可用，从刷新令牌载荷重建")
+                user_info = {
+                    'id': payload['user_id'],
+                    'username': payload.get('username', ''),
+                    'email': payload.get('email', ''),
+                    'provider': payload.get('provider', ''),
+                    'role': payload.get('role', 'member'),
+                }
 
             # 生成新的令牌对（旧的刷新令牌仍然有效，因为尚未实现令牌轮换）
             return self.generate_tokens(user_info)
