@@ -42,9 +42,8 @@ const formatTime = (dateStr: string) => {
   });
 };
 
-const openAnnouncement = (item: ManifestItem) => {
-  const href = router.resolve({ path: '/announcements', query: { doc: item.file } }).href;
-  window.open(href, '_blank', 'noopener,noreferrer');
+const openAnnouncement = async (item: ManifestItem) => {
+  await router.push({ path: '/announcements', query: { doc: item.file } });
 };
 
 const goBackToList = async () => {
