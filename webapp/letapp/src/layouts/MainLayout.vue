@@ -265,19 +265,19 @@ onUnmounted(() => {
 }
 
 .primary-pill {
-  @apply inline-flex h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition hover:-translate-y-0.5 hover:bg-cyan-400 sm:px-5;
+  @apply inline-flex h-11 items-center rounded-full bg-cyan-500 px-4 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition hover:-translate-y-0.5 hover:bg-slate-200 sm:px-5;
 }
 
 .secondary-pill {
-  @apply inline-flex h-11 max-w-[16rem] items-center rounded-full bg-slate-100 px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-800 hover:text-white dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-100 dark:hover:text-slate-950 sm:px-5;
+  @apply inline-flex h-11 max-w-[16rem] items-center rounded-full bg-slate-100 px-4 text-sm font-bold text-slate-800 transition hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-cyan-500 dark:hover:text-slate-950 sm:px-5;
 }
 
 .icon-button {
-  @apply grid h-11 w-11 shrink-0 place-items-center rounded-full text-slate-700 transition hover:bg-slate-800 hover:text-white dark:text-slate-200 dark:hover:bg-slate-100 dark:hover:text-slate-950;
+  @apply grid h-11 w-11 shrink-0 place-items-center rounded-full text-slate-700 transition hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-cyan-500 dark:hover:text-slate-950;
 }
 
 .menu-link {
-  @apply flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-800 hover:text-white dark:text-slate-200 dark:hover:bg-slate-100 dark:hover:text-slate-950;
+  @apply flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-200 dark:text-slate-200 dark:hover:bg-cyan-500 dark:hover:text-slate-950;
 }
 
 .fade-scale-enter-active,
