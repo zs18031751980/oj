@@ -126,9 +126,8 @@ const testVerdict = ref<'pass' | 'failed' | null>(null);
 const outputKind = ref<'info' | 'error'>('info');
 const isExecuting = ref(false);
 const exportFileName = ref<string>(fallbackFileNames[defaultLanguage.value] ?? 'code');
-const bottomPanelsCollapsed = ref(false);
-const outputPosition = ref<'bottom' | 'side'>('bottom');
-const viewportWidth = ref(typeof window === 'undefined' ? 1440 : window.innerWidth);
+
+
 const isFullscreen = ref(false);
 const isFullscreenMenuOpen = ref(false);
 const editorPanelRef = ref<HTMLElement | null>(null);
@@ -224,44 +223,11 @@ const currentLanguageInfo = computed<LanguageOption>(() => (
 
 const exportExtension = computed(() => extensionMap[selectedLanguage.value] ?? 'txt');
 
-const bottomPanelSpacer = computed(() => {
-  if (bottomPanelsCollapsed.value) {
-    return '5.5rem';
-  }
-
-  if (viewportWidth.value < 768) {
-    return '39rem';
-  }
-
-  if (viewportWidth.value < 900) {
-    return '38rem';
-  }
-
-  return '23rem';
-});
-
-const floatingButtonBottom = computed(() => {
-  if (bottomPanelsCollapsed.value) {
-    return '1.25rem';
-  }
-
-  if (viewportWidth.value < 768) {
-    return '28rem';
-  }
-
-  if (viewportWidth.value < 900) {
-    return '26rem';
-  }
-
-  return '11rem';
-});
-
 const runCode = async () => {
   const source = code.value;
   if (!source.trim()) {
     outputKind.value = 'error';
     output.value = '代码不能为空。';
-    bottomPanelsCollapsed.value = false;
     return;
   }
 
@@ -270,7 +236,6 @@ const runCode = async () => {
   executionStatus.value = '';
   outputKind.value = 'info';
   testVerdict.value = null;
-  bottomPanelsCollapsed.value = false;
 
   try {
     const endpoint = authStore.isAuthenticated ? '/code/run' : '/code/run/public';
@@ -359,10 +324,6 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
     event.preventDefault();
     void runCode();
   }
-};
-
-const updateViewportWidth = () => {
-  viewportWidth.value = window.innerWidth;
 };
 
 const closeLanguageMenuOnOutsideClick = (event: MouseEvent) => {
@@ -473,10 +434,8 @@ onMounted(() => {
   }
 
   updateExportFileName(selectedLanguage.value);
-  updateViewportWidth();
 
   window.addEventListener('keydown', handleGlobalShortcut);
-  window.addEventListener('resize', updateViewportWidth);
   window.addEventListener('click', closeLanguageMenuOnOutsideClick);
   document.addEventListener('fullscreenchange', handleFullscreenChange);
   document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
@@ -485,7 +444,6 @@ onMounted(() => {
 onUnmounted(() => {
   syncPageScrollLock(false);
   window.removeEventListener('keydown', handleGlobalShortcut);
-  window.removeEventListener('resize', updateViewportWidth);
   window.removeEventListener('click', closeLanguageMenuOnOutsideClick);
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
   document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
@@ -559,24 +517,19 @@ watch(isFullscreen, (active) => {
               <Icon icon="material-symbols:refresh" class="h-4 w-4" />
               重置
             </button>
-            <button class="toolbar-button flex-1 sm:flex-none" :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'" @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'">
-              <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:vertical-split' : 'material-symbols:horizontal-split'" class="h-4 w-4" />
-              {{ outputPosition === 'bottom' ? '右边' : '底部' }}
-            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" :style="{ paddingBottom: outputPosition === 'bottom' ? bottomPanelSpacer : '5.5rem' }">
-      <div class="playground-stack" :class="{ 'playground-side-mode': outputPosition === 'side' }">
+    <div class="playground-container mx-auto px-4 py-6 sm:px-6 lg:px-8" style="padding-bottom: 5.5rem">
+      <div class="playground-stack playground-side-mode">
         <section
           ref="editorPanelRef"
           class="editor-panel"
           :class="{
             'fullscreen-mode': isFullscreen,
-            'fullscreen-side-mode': isFullscreen && outputPosition === 'side',
-            'fullscreen-bottom-mode': isFullscreen && outputPosition === 'bottom',
+            'fullscreen-side-mode': isFullscreen,
           }"
         >
           <div class="panel-header">
@@ -585,14 +538,6 @@ watch(isFullscreen, (active) => {
               <span>代码编辑区</span>
             </div>
             <div class="flex items-center gap-2">
-              <button
-                v-if="isFullscreen"
-                class="fullscreen-icon-btn"
-                :title="outputPosition === 'bottom' ? '切换为右边显示' : '切换为底部显示'"
-                @click="outputPosition = outputPosition === 'bottom' ? 'side' : 'bottom'"
-              >
-                <Icon :icon="outputPosition === 'bottom' ? 'material-symbols:vertical-split' : 'material-symbols:horizontal-split'" class="h-5 w-5" />
-              </button>
               <button v-if="isFullscreen" class="fullscreen-icon-btn" title="菜单" @click="isFullscreenMenuOpen = !isFullscreenMenuOpen">
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
               </button>
@@ -653,7 +598,6 @@ watch(isFullscreen, (active) => {
             </div>
 
             <aside
-              v-if="outputPosition === 'side'"
               class="side-io-panel"
               :class="{ 'fullscreen-side-io-panel': isFullscreen }"
             >
@@ -674,12 +618,12 @@ watch(isFullscreen, (active) => {
                     class="plain-textarea panel-textarea"
                     placeholder="如果程序需要输入，可以在这里填写测试数据。"
                     @keydown="handleStdinKeydown"
-                  ></textarea>
+                    ></textarea>
+                  <div class="border-t border-slate-300 dark:border-slate-600"></div>
                   <textarea
                     v-model="expectedOutput"
                     class="plain-textarea panel-textarea"
                     placeholder="预期结果（选填）：填写后自动对比实际输出"
-                    style="margin-top: 8px;"
                   ></textarea>
                 </div>
               </section>
@@ -708,77 +652,8 @@ watch(isFullscreen, (active) => {
             </aside>
           </div>
 
-          <template v-if="isFullscreen && outputPosition === 'bottom'">
-            <div v-if="!bottomPanelsCollapsed" class="fullscreen-panels">
-              <section class="surface-panel fullscreen-panel-item">
-                <div class="collapse-header">
-                  <div class="flex items-center gap-2">
-                    <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                    <span>输入数据</span>
-                  </div>
-                  <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
-                    <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                    {{ isExecuting ? '运行中...' : '运行代码' }}
-                  </button>
-                </div>
-                <div class="collapse-body">
-                  <textarea
-                    v-model="stdin"
-                    class="plain-textarea panel-textarea"
-                    placeholder="如果程序需要输入，可以在这里填写测试数据。"
-                    @keydown="handleStdinKeydown"
-                  ></textarea>
-                  <textarea
-                    v-model="expectedOutput"
-                    class="plain-textarea panel-textarea"
-                    placeholder="预期结果（选填）：填写后自动对比实际输出"
-                    style="margin-top: 8px;"
-                  ></textarea>
-                </div>
-              </section>
-              <section class="surface-panel fullscreen-panel-item">
-                <div class="collapse-header">
-                  <div class="flex items-center gap-2">
-                    <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                    <span>输出</span>
-                  </div>
-                </div>
-                <div class="collapse-body output-body">
-                  <div class="output-box" :class="{ 'has-output': output, 'is-error': outputKind === 'error' }">
-                    <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-300' : 'text-emerald-300'">{{ output }}</pre>
-                    <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
-                  </div>
-                  <div v-if="executionStatus" class="output-status">
-                    <div class="status-divider"></div>
-                    <div class="status-content">
-                      <span class="status-text" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ executionStatus }}</span>
-                      <span v-if="testVerdict" class="test-badge" :class="testVerdict">{{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-            <div class="fullscreen-bottom-bar">
-              <button class="toolbar-button flex-1 sm:flex-none" @click="outputPosition = 'side'">
-                <Icon icon="material-symbols:vertical-split" class="h-4 w-4" />
-                侧边
-              </button>
-              <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
-                <Icon icon="material-symbols:refresh" class="h-4 w-4" />
-                重置
-              </button>
-              <button class="floating-collapse-button" @click="bottomPanelsCollapsed = !bottomPanelsCollapsed">
-                <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
-                {{ bottomPanelsCollapsed ? '展开' : '收起' }}
-              </button>
-            </div>
-          </template>
-          <template v-else-if="isFullscreen">
+          <template v-if="isFullscreen">
             <div class="fullscreen-bottom-bar fullscreen-side-bottom-bar">
-              <button class="toolbar-button flex-1 sm:flex-none" @click="outputPosition = 'bottom'">
-                <Icon icon="material-symbols:horizontal-split" class="h-4 w-4" />
-                底部
-              </button>
               <button class="toolbar-button flex-1 sm:flex-none" @click="resetCode">
                 <Icon icon="material-symbols:refresh" class="h-4 w-4" />
                 重置
@@ -787,72 +662,6 @@ watch(isFullscreen, (active) => {
           </template>
         </section>
       </div>
-    </div>
-
-    <div v-if="!isFullscreen && outputPosition === 'bottom'" v-show="!bottomPanelsCollapsed" class="fixed-panels-shell">
-      <div class="playground-container fixed-panels-inner">
-        <div class="bottom-panels">
-          <section class="surface-panel">
-            <div class="collapse-header">
-              <div class="flex items-center gap-2">
-                <Icon icon="material-symbols:input" class="h-5 w-5 text-amber-500" />
-                <span>输入数据</span>
-              </div>
-              <button class="run-button editor-run-button" :disabled="isExecuting" @click="runCode">
-                <Icon :icon="isExecuting ? 'material-symbols:hourglass-top' : 'material-symbols:play-arrow'" class="h-4 w-4" :class="{ 'animate-spin': isExecuting }" />
-                {{ isExecuting ? '运行中...' : '运行代码' }}
-              </button>
-            </div>
-            <div class="collapse-body">
-              <textarea
-                v-model="stdin"
-                class="plain-textarea panel-textarea"
-                placeholder="如果程序需要输入，可以在这里填写测试数据。"
-                @keydown="handleStdinKeydown"
-              ></textarea>
-              <textarea
-                v-model="expectedOutput"
-                class="plain-textarea panel-textarea"
-                placeholder="预期结果（选填）：填写后自动对比实际输出"
-                style="margin-top: 8px;"
-              ></textarea>
-            </div>
-          </section>
-
-          <section class="surface-panel">
-            <div class="collapse-header">
-              <div class="flex items-center gap-2">
-                <Icon :icon="outputKind === 'error' ? 'material-symbols:error' : 'material-symbols:output'" class="h-5 w-5" :class="outputKind === 'error' ? 'text-rose-500' : 'text-emerald-500'" />
-                <span>输出</span>
-              </div>
-            </div>
-            <div class="collapse-body output-body">
-              <div class="output-box" :class="{ 'has-output': output, 'is-error': outputKind === 'error' }">
-                <pre v-if="output" :class="outputKind === 'error' ? 'text-rose-300' : 'text-emerald-300'">{{ output }}</pre>
-                <div v-else class="placeholder-copy">运行结果和报错都会显示在这里。</div>
-              </div>
-              <div v-if="executionStatus" class="output-status">
-                <div class="status-divider"></div>
-                <div class="status-content">
-                  <span class="status-text" :class="outputKind === 'error' ? 'text-rose-400' : 'text-emerald-400'">{{ executionStatus }}</span>
-                  <span v-if="testVerdict" class="test-badge" :class="testVerdict">{{ testVerdict === 'pass' ? '✓ PASS' : '✗ FAILED' }}</span>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="!isFullscreen && outputPosition === 'bottom'" class="floating-button-group" :style="{ bottom: floatingButtonBottom }">
-      <button
-        class="floating-collapse-button"
-        type="button"
-        @click="bottomPanelsCollapsed = !bottomPanelsCollapsed"
-      >
-        <Icon :icon="bottomPanelsCollapsed ? 'material-symbols:unfold-less-rounded' : 'material-symbols:unfold-more-rounded'" class="h-5 w-5" />
-        <span>{{ bottomPanelsCollapsed ? '展开' : '收起' }}</span>
-      </button>
     </div>
   </div>
 </template>
@@ -890,20 +699,6 @@ watch(isFullscreen, (active) => {
 
 .surface-panel {
   @apply overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/50 backdrop-blur-2xl;
-}
-
-.fixed-panels-shell {
-  @apply pointer-events-none fixed right-0 bottom-0 z-40;
-  left: var(--app-content-left, 0px);
-}
-
-.fixed-panels-inner {
-  @apply mx-auto w-full px-4 pb-4 sm:px-6 lg:px-8;
-  pointer-events: auto;
-}
-
-.bottom-panels {
-  @apply grid gap-4;
 }
 
 .panel-header {
@@ -1055,14 +850,6 @@ watch(isFullscreen, (active) => {
   @apply text-sm italic text-slate-500;
 }
 
-.floating-button-group {
-  position: fixed;
-  right: 5rem;
-  z-index: 9999;
-  display: flex;
-  gap: 0.5rem;
-}
-
 @media (max-width: 767px) {
   .playground-container {
     max-width: 100%;
@@ -1106,14 +893,6 @@ watch(isFullscreen, (active) => {
   }
   .output-body .output-box {
     min-height: 80px;
-  }
-
-  .fixed-panels-inner {
-    @apply px-4 pb-4;
-  }
-
-  .floating-button-group {
-    right: 4rem;
   }
 
   .floating-collapse-button {
@@ -1263,90 +1042,6 @@ watch(isFullscreen, (active) => {
     align-items: end;
   }
 
-  .bottom-panels {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .bottom-panels .surface-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .bottom-panels .collapse-body {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .bottom-panels .panel-textarea {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-    height: auto;
-  }
-  .bottom-panels .output-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    gap: 0;
-  }
-  .bottom-panels .output-body .output-box {
-    flex: 1;
-    min-height: 0;
-  }
-  .bottom-panels .output-body .output-status {
-    flex-shrink: 0;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1024px) {
-  .bottom-panels {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    height: 50vh;
-    min-height: 0;
-  }
-
-  .bottom-panels .surface-panel {
-    display: flex;
-    flex-direction: column;
-    max-height: 50vh;
-    min-height: 0;
-  }
-
-  .bottom-panels .collapse-body {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .bottom-panels .panel-textarea {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-    height: auto;
-  }
-  .bottom-panels .output-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .bottom-panels .output-body .output-box {
-    flex: 1;
-    min-height: 0;
-  }
-  .bottom-panels .output-body .output-status {
-    flex-shrink: 0;
-  }
-
-  .floating-button-group {
-    right: 1.5rem;
-  }
-
   .floating-collapse-button {
     padding: 0.75rem 1rem;
     font-size: 0.8rem;
@@ -1447,56 +1142,6 @@ watch(isFullscreen, (active) => {
   margin: 0.5rem 0.75rem;
 }
 
-.fullscreen-panels {
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  height: 33.33vh;
-  min-height: 0;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
-.fullscreen-panels .surface-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.fullscreen-panels .collapse-body {
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.fullscreen-panels .panel-textarea {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  height: auto;
-}
-.fullscreen-panels .output-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.fullscreen-panels .output-body .output-box {
-  flex: 1;
-  min-height: 0;
-}
-.fullscreen-panels .output-body .output-status {
-  flex-shrink: 0;
-}
-
-.fullscreen-panel-item {
-  border-radius: 1.25rem !important;
-}
-
 .fullscreen-bottom-bar {
   flex-shrink: 0;
   display: flex;
@@ -1534,11 +1179,6 @@ html.dark .fullscreen-menu-item:hover {
 
 html.dark .fullscreen-menu-divider {
   background: #1e293b;
-}
-
-html.dark .fullscreen-panels {
-  border-color: #1e293b;
-  background: #0f172a;
 }
 
 html.dark .fullscreen-side-mode .editor-body {

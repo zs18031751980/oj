@@ -161,9 +161,15 @@ const headerPaddingStyle = computed(() => (
 ));
 
 const headerGradient = computed(() => {
-  const c = isDark.value ? '2, 6, 23' : '255, 255, 255';
+  if (isDark.value) {
+    return {
+      backgroundImage: 'linear-gradient(to bottom, rgba(2, 6, 23, 0.92), rgba(2, 6, 23, 0.4))',
+      backdropFilter: 'blur(24px)',
+      WebkitBackdropFilter: 'blur(24px)',
+    };
+  }
   return {
-    backgroundImage: `linear-gradient(to bottom, rgba(${c}, 0.8), rgba(${c}, 0))`,
+    backgroundImage: 'linear-gradient(to bottom, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0))',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
   };
