@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-slate-50 text-slate-950 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-50">
     <n-layout has-sider class="min-h-screen bg-transparent">
       <aside
-        class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-white/70 bg-white/88 shadow-2xl shadow-slate-200/60 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/88 dark:shadow-black/30 md:flex"
+        class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-white/40 bg-transparent backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/30 md:flex"
         :class="sidebarExpanded ? 'w-72' : 'w-24'"
       >
         <div class="flex h-20 items-center justify-between gap-3 px-5">
@@ -45,8 +45,8 @@
       </aside>
 
       <n-layout>
-        <n-layout-header
-          class="fixed left-0 right-0 top-0 z-40 border-b border-white/40 bg-white/30 shadow-sm shadow-slate-200/20 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/30 dark:bg-slate-950/30 dark:shadow-black/10"
+        <header
+          class="fixed left-0 right-0 top-0 z-40 border-b border-white/30 bg-transparent backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/20"
           :class="{ 'header-compact': isScrolled }"
         >
           <div
@@ -104,7 +104,7 @@
               </div>
             </div>
           </div>
-        </n-layout-header>
+        </header>
 
         <n-layout-content class="transition-all duration-300" :style="contentPaddingStyle">
           <div class="pt-20">
@@ -119,7 +119,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { NLayout, NLayoutContent, NLayoutHeader } from 'naive-ui';
+import { NLayout, NLayoutContent } from 'naive-ui';
 import { Icon } from '@iconify/vue';
 import { storeToRefs } from 'pinia';
 import { markRaw } from 'vue';
@@ -227,7 +227,7 @@ onUnmounted(() => {
 @reference 'tailwindcss';
 
 .header-compact {
-  @apply shadow-lg shadow-slate-200/60 dark:shadow-black/30;
+  @apply shadow-lg shadow-slate-200/30 dark:shadow-black/20;
 }
 
 .sidebar-toggle {
