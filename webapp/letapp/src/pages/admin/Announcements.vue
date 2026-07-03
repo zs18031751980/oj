@@ -3,7 +3,7 @@
     <div class="mb-6 flex items-center justify-between">
       <h1 class="text-2xl font-black tracking-tight text-slate-950 dark:text-white">公告管理</h1>
       <button
-        v-if="!editingId"
+        v-if="isManager && !editingId"
         class="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/25 transition hover:bg-cyan-400"
         @click="startCreate"
       >
