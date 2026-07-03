@@ -44,9 +44,10 @@
         </div>
       </aside>
 
-      <n-layout>
+      <n-layout class="bg-transparent">
         <header
           class="fixed left-0 right-0 top-0 z-40 border-b border-white/30 transition-all duration-300 dark:border-slate-800/20"
+          :class="headerCollapsed ? '-translate-y-full' : 'translate-y-0'"
           :style="headerGradient"
         >
           <div
@@ -62,6 +63,9 @@
               </a>
 
               <div class="ml-auto flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+                <button class="icon-button shrink-0 max-md:hidden" aria-label="收起导航栏" @click="headerCollapsed = !headerCollapsed">
+                  <Icon icon="material-symbols:expand-less" class="h-5 w-5" />
+                </button>
                 <div class="relative shrink-0">
                   <button class="icon-button" aria-label="打开导航菜单" @click.stop="menuVisible = !menuVisible">
                     <Icon :icon="menuVisible ? 'material-symbols:close-rounded' : 'material-symbols:menu-rounded'" class="h-6 w-6" />
@@ -106,10 +110,23 @@
           </div>
         </header>
 
-        <n-layout-content class="transition-all duration-300" :style="contentPaddingStyle">
-          <div class="pt-20">
-            <router-view />
-          </div>
+        <button
+          v-if="headerCollapsed"
+          class="fixed left-1/2 top-0 z-50 -translate-x-1/2 rounded-b-2xl border-x border-b border-slate-200 bg-white/90 px-5 py-2 shadow-lg backdrop-blur-2xl transition hover:bg-white dark:border-slate-700 dark:bg-slate-900/90 dark:hover:bg-slate-900"
+          aria-label="展开导航栏"
+          @click="headerCollapsed = false"
+        >
+          <Icon icon="material-symbols:expand-more" class="h-5 w-5 text-slate-600 dark:text-slate-300" />
+        </button>
+
+        <div
+          v-if="headerCollapsed"
+          class="fixed left-0 top-0 z-30 h-6 w-full cursor-pointer"
+          @click="headerCollapsed = false"
+        ></div>
+
+        <n-layout-content class="bg-transparent transition-all duration-300" :style="[contentPaddingStyle, { paddingTop: headerCollapsed ? '0px' : '5rem', '--header-h': headerCollapsed ? '0px' : '5rem' }]">
+          <router-view />
         </n-layout-content>
       </n-layout>
     </n-layout>
@@ -146,6 +163,7 @@ const { toggleTheme } = themeStore;
 const sidebarExpanded = ref(true);
 const menuVisible = ref(false);
 const isDesktop = ref(false);
+const headerCollapsed = ref(false);
 
 const desktopSidebarWidth = computed(() => (
   sidebarExpanded.value ? DESKTOP_EXPANDED_WIDTH : DESKTOP_COLLAPSED_WIDTH
@@ -339,5 +357,14 @@ html:not(.dark) .menu-link * {
 html.dark .menu-link,
 html.dark .menu-link * {
   color: #f8fafc !important;
+}
+
+.sidebar-link .iconify,
+.menu-link .iconify,
+.icon-button .iconify {
+  display: inline-block !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  flex-shrink: 0 !important;
 }
 </style>

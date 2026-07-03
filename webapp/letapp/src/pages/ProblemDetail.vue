@@ -397,14 +397,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="!problem" class="flex min-h-[calc(100vh-5rem)] items-center justify-center">
+  <div v-if="!problem" class="flex min-h-[calc(100vh-var(--header-h,5rem))] items-center justify-center">
     <div class="text-center">
       <Icon icon="material-symbols:error-outline" class="mx-auto mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
       <p class="text-lg font-bold text-slate-500 dark:text-slate-400">题目不存在</p>
       <NButton class="mt-4" @click="router.push('/problems')">返回题库</NButton>
     </div>
   </div>
-  <div v-else class="flex min-h-[calc(100vh-5rem)] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+  <div v-else class="flex min-h-[calc(100vh-var(--header-h,5rem))] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <div class="flex flex-1 flex-col lg:flex-row relative">
       <div class="relative flex flex-col border-r border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
         <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">

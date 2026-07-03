@@ -54,6 +54,7 @@ class UserService(DatabaseService, Injectable):
             'password_hash': user.password_hash,
             'is_active': user.is_active,
             'role': user.role,
+            'theme_preference': user.theme_preference,
             'provider': user.provider,
             'provider_id': user.provider_id,
             'avatar_url': user.avatar_url,
@@ -149,7 +150,7 @@ class UserService(DatabaseService, Injectable):
         Returns:
             是否更新成功
         """
-        allowed_fields = {'username', 'email', 'is_active'}
+        allowed_fields = {'username', 'email', 'is_active', 'theme_preference'}
         update_data = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
         if not update_data:

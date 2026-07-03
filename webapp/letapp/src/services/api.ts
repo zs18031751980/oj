@@ -17,6 +17,7 @@ export interface UserInfo {
   avatar_url?: string;
   provider?: string;
   role?: string;
+  theme_preference?: string;
   created_at?: string;
 }
 
@@ -156,3 +157,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
   return payload as T;
 }
+
+export const updateUserTheme = (themePreference: 'light' | 'dark' | 'system') =>
+  apiRequest<{ success: boolean }>('/auth/theme', {
+    method: 'PATCH',
+    body: JSON.stringify({ theme_preference: themePreference }),
+  });

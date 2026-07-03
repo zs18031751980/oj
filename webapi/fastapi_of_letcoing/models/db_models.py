@@ -1,4 +1,4 @@
-"""
+﻿"""
 数据库 ORM 模型模块
 
 使用 Peewee ORM 定义数据库表结构与操作方法。
@@ -133,6 +133,7 @@ class User(BaseModel):
     provider = CharField(max_length=50, null=True, verbose_name="登录提供商")
     provider_id = CharField(max_length=255, null=True, verbose_name="提供商用户ID")
     avatar_url = CharField(max_length=500, null=True, verbose_name="头像URL")
+    theme_preference = CharField(max_length=10, null=True, default="system", verbose_name="主题偏好")
 
     class Meta:
         table_name = "users"  # 数据库表名

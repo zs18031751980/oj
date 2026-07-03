@@ -127,14 +127,8 @@ const currentMarkdownFile = computed(() => currentResource.value?.markdownFile |
 
 const findResourceById = (id: string) => allResources.find((item) => item.id === id || item.title === id);
 
-const getResourceLink = (resource: LearnResource) => {
-  const resolved = router.resolve({ path: '/learn', query: { doc: resource.id } });
-  return resolved.href;
-};
-
-const openResource = (resource: LearnResource) => {
-  const url = getResourceLink(resource);
-  window.open(url, '_blank', 'noopener,noreferrer');
+const openResource = async (resource: LearnResource) => {
+  await router.push({ path: '/learn', query: { doc: resource.id } });
 };
 
 const goBackToList = async () => {
@@ -232,7 +226,7 @@ watch(
       </section>
 
       <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div class="rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20 lg:p-10">
+        <div class="rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-800/85 dark:shadow-black/20 lg:p-10">
           <div class="mb-8">
             <h2 class="text-2xl font-black tracking-tight">学习路径建议</h2>
             <p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
@@ -320,7 +314,7 @@ watch(
           </button>
         </div>
 
-        <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
+        <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-800/85 dark:shadow-black/20">
           <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
             正在加载资料内容...
           </div>

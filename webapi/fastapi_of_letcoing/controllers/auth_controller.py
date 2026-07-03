@@ -179,6 +179,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
         avatar_url=user_info_data.get('avatar_url', '') or '',
         provider=user_info_data.get('provider', provider),
         role=role,
+        theme_preference=user_info_data.get('theme_preference', 'system'),
     )
 
 
@@ -613,6 +614,7 @@ class AuthPasswordLoginController(Resource):
             'avatar_url': user_data.get('avatar_url', '') or '',
             'provider': 'password',
             'role': user_data.get('role', 'member'),
+            'theme_preference': user_data.get('theme_preference', 'system'),
         })
         jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
         token_response = TokenResponse(
@@ -916,6 +918,47 @@ class AuthVerifyController(Resource):
         if user_info:
             return {'valid': True, 'user_info': user_info}, 200
         return {'valid': False, 'error': 'token is invalid or expired'}, 401
+
+
+@api.route('/theme')
+class AuthThemeController(Resource):
+    """
+    主题偏好更新接口
+    允许已登录用户保存他们的主题偏好（light / dark / system）到数据库
+    """
+
+    @api.doc('update_theme')
+    @api.response(200, 'Success')
+    @api.response(401, 'Unauthorized')
+    @api.response(400, 'Bad Request')
+    def patch(self):
+        """更新当前用户的主题偏好"""
+        jwt_service = inject(IJWTService)
+        auth_header = request.headers.get('Authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return {'error': 'unauthorized'}, 401
+
+        token = auth_header[7:]
+        user_info = jwt_service.verify_access_token(token)
+        if not user_info:
+            return {'error': 'unauthorized'}, 401
+
+        data = request.get_json(silent=True) or {}
+        theme_preference = data.get('theme_preference', '')
+        if theme_preference not in ('light', 'dark', 'system'):
+            return {'error': 'invalid theme_preference, must be light, dark, or system'}, 400
+
+        from models.db_models import User
+
+        try:
+            user_id = int(user_info.get('id', 0))
+            user = User.get_by_id(user_id)
+            user.theme_preference = theme_preference
+            user.save()
+            return {'success': True}, 200
+        except Exception:
+            return {'error': 'user not found'}, 404
+
 
 
 @api.route('/providers')

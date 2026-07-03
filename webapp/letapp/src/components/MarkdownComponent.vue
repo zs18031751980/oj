@@ -19,7 +19,10 @@ import 'prismjs/components/prism-cpp';
 import 'prismjs/components/prism-css';
 import 'prismjs/components/prism-go';
 import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-markup';
+import 'prismjs/components/prism-markup-templating';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-rust';
 import 'prismjs/components/prism-typescript';
@@ -61,10 +64,26 @@ const normalizeLanguage = (language: string) => {
     sh: 'bash',
     shell: 'bash',
     cplusplus: 'cpp',
+    html: 'markup',
+    xml: 'markup',
+    svg: 'markup',
+    vue: 'markup',
+    svelte: 'markup',
+    template: 'markup',
+    jsx: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    script: 'javascript',
   };
 
   const key = language.trim().toLowerCase();
   return aliases[key] || key;
+};
+
+const highlightSafe = (code: string, language: string, fallback: string = 'javascript'): string => {
+  const grammar = Prism.languages[language] || Prism.languages[fallback];
+  if (!grammar) return escapeHtml(code);
+  return Prism.highlight(code, grammar, language);
 };
 
 const escapeHtml = (value: string) => value
@@ -79,15 +98,18 @@ const md = new MarkdownIt({
   linkify: true,
   typographer: false,
   highlight: (code: string, language: string): string => {
-    const normalizedLanguage = normalizeLanguage(language || '');
-    const grammar = Prism.languages[normalizedLanguage];
-
-    if (!grammar) {
-      return `<pre class="language-text"><code>${escapeHtml(code)}</code></pre>`;
+    const lang = (language || '').trim().toLowerCase();
+    let targetLang = normalizeLanguage(lang);
+    if (!targetLang) {
+      if (code.includes('<script') || code.includes('<template') || code.includes('<style')) {
+        targetLang = 'markup';
+      } else {
+        targetLang = 'javascript';
+      }
     }
 
-    const highlighted = Prism.highlight(code, grammar, normalizedLanguage);
-    return `<pre class="language-${normalizedLanguage}"><code class="language-${normalizedLanguage}">${highlighted}</code></pre>`;
+    const highlighted = highlightSafe(code, targetLang);
+    return `<pre class="language-${targetLang}"><code class="language-${targetLang}">${highlighted}</code></pre>`;
   },
 });
 
@@ -350,7 +372,7 @@ onUnmounted(() => {
 }
 
 .markdown-content :deep(pre) {
-  @apply rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100;
+  @apply rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100;
 }
 
 .markdown-content :deep(pre[class*='language-']),
@@ -366,41 +388,13 @@ onUnmounted(() => {
   color: #0f172a !important;
 }
 
-:global(html:not(.dark)) .markdown-content :deep(.token.comment),
-:global(html:not(.dark)) .markdown-content :deep(.token.prolog),
-:global(html:not(.dark)) .markdown-content :deep(.token.doctype),
-:global(html:not(.dark)) .markdown-content :deep(.token.cdata) {
-  color: #64748b !important;
+:global(html.dark) .markdown-content :deep(pre[class*='language-']),
+:global(html.dark) .markdown-content :deep(code[class*='language-']) {
+  background: #1e293b !important;
+  border-color: #334155;
 }
 
-:global(html:not(.dark)) .markdown-content :deep(.token.punctuation),
-:global(html:not(.dark)) .markdown-content :deep(.token.operator) {
-  color: #334155 !important;
-}
 
-:global(html:not(.dark)) .markdown-content :deep(.token.keyword),
-:global(html:not(.dark)) .markdown-content :deep(.token.selector),
-:global(html:not(.dark)) .markdown-content :deep(.token.atrule) {
-  color: #7c3aed !important;
-}
-
-:global(html:not(.dark)) .markdown-content :deep(.token.string),
-:global(html:not(.dark)) .markdown-content :deep(.token.attr-value),
-:global(html:not(.dark)) .markdown-content :deep(.token.char),
-:global(html:not(.dark)) .markdown-content :deep(.token.inserted) {
-  color: #059669 !important;
-}
-
-:global(html:not(.dark)) .markdown-content :deep(.token.function),
-:global(html:not(.dark)) .markdown-content :deep(.token.class-name) {
-  color: #2563eb !important;
-}
-
-:global(html:not(.dark)) .markdown-content :deep(.token.number),
-:global(html:not(.dark)) .markdown-content :deep(.token.boolean),
-:global(html:not(.dark)) .markdown-content :deep(.token.constant) {
-  color: #ea580c !important;
-}
 
 .markdown-content :deep(table) {
   @apply my-4 min-w-full border-collapse;
@@ -484,5 +478,111 @@ html:not(.dark) .markdown-article .markdown-content :is(code):not(pre code) {
 
 html.dark .markdown-article .markdown-content :is(code):not(pre code) {
   color: #f8fafc;
+}
+
+html:not(.dark) .token.comment,
+html:not(.dark) .token.prolog,
+html:not(.dark) .token.doctype,
+html:not(.dark) .token.cdata {
+  color: #64748b !important;
+}
+
+html:not(.dark) .token.punctuation {
+  color: #64748b !important;
+}
+
+html:not(.dark) .token.property,
+html:not(.dark) .token.tag,
+html:not(.dark) .token.boolean,
+html:not(.dark) .token.number,
+html:not(.dark) .token.constant,
+html:not(.dark) .token.symbol,
+html:not(.dark) .token.deleted {
+  color: #ea580c !important;
+}
+
+html:not(.dark) .token.selector,
+html:not(.dark) .token.attr-name,
+html:not(.dark) .token.string,
+html:not(.dark) .token.char,
+html:not(.dark) .token.builtin,
+html:not(.dark) .token.inserted {
+  color: #059669 !important;
+}
+
+html:not(.dark) .token.operator,
+html:not(.dark) .token.entity,
+html:not(.dark) .token.url {
+  color: #334155 !important;
+}
+
+html:not(.dark) .token.atrule,
+html:not(.dark) .token.attr-value,
+html:not(.dark) .token.keyword {
+  color: #7c3aed !important;
+}
+
+html:not(.dark) .token.function,
+html:not(.dark) .token.class-name {
+  color: #2563eb !important;
+}
+
+html:not(.dark) .token.regex,
+html:not(.dark) .token.important,
+html:not(.dark) .token.variable {
+  color: #d97706 !important;
+}
+
+html.dark .token.comment,
+html.dark .token.prolog,
+html.dark .token.doctype,
+html.dark .token.cdata {
+  color: #6b7280 !important;
+}
+
+html.dark .token.punctuation {
+  color: #9ca3af !important;
+}
+
+html.dark .token.property,
+html.dark .token.tag,
+html.dark .token.boolean,
+html.dark .token.number,
+html.dark .token.constant,
+html.dark .token.symbol,
+html.dark .token.deleted {
+  color: #f59e0b !important;
+}
+
+html.dark .token.selector,
+html.dark .token.attr-name,
+html.dark .token.string,
+html.dark .token.char,
+html.dark .token.builtin,
+html.dark .token.inserted {
+  color: #34d399 !important;
+}
+
+html.dark .token.operator,
+html.dark .token.entity,
+html.dark .token.url {
+  color: #d1d5db !important;
+}
+
+html.dark .token.atrule,
+html.dark .token.attr-value,
+html.dark .token.keyword {
+  color: #a78bfa !important;
+}
+
+html.dark .token.function,
+html.dark .token.class-name {
+  color: #60a5fa !important;
+}
+
+html.dark .token.regex,
+html.dark .token.important,
+html.dark .token.variable {
+  color: #fbbf24 !important;
 }
 </style>

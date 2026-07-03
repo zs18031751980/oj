@@ -50,7 +50,7 @@ const difficultyColorMap = markRaw({
 </script>
 
 <template>
-  <div class="flex min-h-[calc(100vh-5rem)] flex-col bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+  <div class="flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <div v-once class="border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
       <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

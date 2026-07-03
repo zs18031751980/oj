@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
   API_BASE_URL,
@@ -12,6 +12,7 @@ import {
   type TokenResponse,
   type UserInfo,
 } from '../services/api';
+import { useThemeStore } from './theme';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -154,6 +155,13 @@ export const useAuthStore = defineStore('auth', () => {
   const supportedProviders = ref<string[]>([]);
   const isVerifying = ref(false);
   const isLoadingProviders = ref(false);
+
+  watch(userInfo, (info) => {
+    if (info?.theme_preference) {
+      const themeStore = useThemeStore();
+      themeStore.applyUserTheme(info.theme_preference);
+    }
+  }, { immediate: true });
 
   const isAuthenticated = computed(() => Boolean(accessToken.value));
   const displayName = computed(() => (
