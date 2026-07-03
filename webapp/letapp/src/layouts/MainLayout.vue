@@ -46,7 +46,7 @@
 
       <n-layout>
         <n-layout-header
-          class="fixed left-0 right-0 top-0 z-40 border-b border-white/60 bg-white/60 shadow-sm shadow-slate-200/40 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/50 dark:bg-slate-950/50 dark:shadow-black/20"
+          class="fixed left-0 right-0 top-0 z-40 border-b border-white/40 bg-white/30 shadow-sm shadow-slate-200/20 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/30 dark:bg-slate-950/30 dark:shadow-black/10"
           :class="{ 'header-compact': isScrolled }"
         >
           <div

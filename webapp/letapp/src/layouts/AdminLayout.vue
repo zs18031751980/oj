@@ -33,7 +33,7 @@ const logout = async () => {
 
 <template>
   <div class="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <header class="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/85">
+    <header class="sticky top-0 z-50 border-b border-slate-200/40 bg-white/30 backdrop-blur-2xl dark:border-slate-800/30 dark:bg-slate-950/30">
       <div class="flex h-16 items-center justify-between px-4">
         <div class="flex items-center gap-3">
           <button class="admin-icon-button" :aria-label="sidebarExpanded ? '收起侧边栏' : '展开侧边栏'" @click="toggleSidebar">
@@ -55,7 +55,7 @@ const logout = async () => {
 
     <div class="flex">
       <aside
-        class="fixed bottom-0 top-16 z-40 overflow-y-auto border-r border-slate-200 bg-white/85 shadow-lg shadow-slate-200/50 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20"
+        class="fixed bottom-0 top-16 z-40 overflow-y-auto border-r border-slate-200/40 bg-white/30 shadow-lg shadow-slate-200/20 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/30 dark:bg-slate-950/30 dark:shadow-black/10"
         :class="sidebarExpanded ? 'w-64' : 'w-20'"
       >
         <nav class="p-4">
