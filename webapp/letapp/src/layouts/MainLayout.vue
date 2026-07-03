@@ -46,8 +46,8 @@
 
       <n-layout>
         <header
-          class="fixed left-0 right-0 top-0 z-40 border-b border-white/30 bg-transparent backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/20"
-          :class="{ 'header-compact': isScrolled }"
+          class="fixed left-0 right-0 top-0 z-40 border-b border-white/30 transition-all duration-300 dark:border-slate-800/20"
+          :style="headerGradient"
         >
           <div
             class="h-auto min-h-20 w-full px-3 py-3 sm:px-4 lg:px-6"
@@ -145,7 +145,6 @@ const { toggleTheme } = themeStore;
 
 const sidebarExpanded = ref(true);
 const menuVisible = ref(false);
-const isScrolled = ref(false);
 const isDesktop = ref(false);
 
 const desktopSidebarWidth = computed(() => (
@@ -160,6 +159,15 @@ const headerPaddingStyle = computed(() => (
       }
     : undefined
 ));
+
+const headerGradient = computed(() => {
+  const c = isDark.value ? '2, 6, 23' : '255, 255, 255';
+  return {
+    backgroundImage: `linear-gradient(to bottom, rgba(${c}, 0.8), rgba(${c}, 0))`,
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+  };
+});
 
 const contentPaddingStyle = computed(() => ({
   ...(isDesktop.value ? { paddingLeft: `${desktopSidebarWidth.value}px` } : {}),
@@ -198,10 +206,6 @@ const navigateFromMenu = async (to: string) => {
   await router.push(to);
 };
 
-const handleScroll = () => {
-  isScrolled.value = window.scrollY > 10;
-};
-
 const handleWindowClick = (event: MouseEvent) => {
   const target = event.target as HTMLElement | null;
   if (!target?.closest('.icon-button') && !target?.closest('.menu-link')) {
@@ -211,13 +215,11 @@ const handleWindowClick = (event: MouseEvent) => {
 
 onMounted(() => {
   updateViewportFlags();
-  window.addEventListener('scroll', handleScroll);
   window.addEventListener('click', handleWindowClick);
   window.addEventListener('resize', updateViewportFlags);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll);
   window.removeEventListener('click', handleWindowClick);
   window.removeEventListener('resize', updateViewportFlags);
 });
@@ -225,10 +227,6 @@ onUnmounted(() => {
 
 <style scoped>
 @reference 'tailwindcss';
-
-.header-compact {
-  @apply shadow-lg shadow-slate-200/30 dark:shadow-black/20;
-}
 
 .sidebar-toggle {
   @apply flex items-center rounded-2xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white;

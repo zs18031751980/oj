@@ -251,7 +251,7 @@ watch(
                 {{ cardInfoMap[path.id]?.description || '' }}
               </p>
               <button
-class="mt-5 inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                 @click="openResource(path)"
               >
                 <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
