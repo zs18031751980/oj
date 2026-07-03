@@ -163,3 +163,35 @@ export const updateUserTheme = (themePreference: 'light' | 'dark' | 'system') =>
     method: 'PATCH',
     body: JSON.stringify({ theme_preference: themePreference }),
   });
+
+export interface AnnouncementData {
+  id?: number;
+  title: string;
+  content: string;
+  permission?: string;
+  is_published?: boolean;
+  published_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const listAnnouncements = () =>
+  apiRequest<AnnouncementData[]>('/announcement/', { skipAuth: true });
+
+export const getAnnouncement = (id: number) =>
+  apiRequest<AnnouncementData>(`/announcement/${id}`, { skipAuth: true });
+
+export const createAnnouncement = (data: { title: string; content: string; permission?: string; is_published?: boolean }) =>
+  apiRequest<AnnouncementData>('/announcement/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updateAnnouncement = (id: number, data: { title?: string; content?: string; permission?: string; is_published?: boolean }) =>
+  apiRequest<AnnouncementData>(`/announcement/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const deleteAnnouncement = (id: number) =>
+  apiRequest<{ success: boolean }>(`/announcement/${id}`, { method: 'DELETE' });

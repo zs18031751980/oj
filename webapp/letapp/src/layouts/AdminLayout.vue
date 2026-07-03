@@ -12,6 +12,7 @@ const sidebarExpanded = ref(true);
 const navMenu = markRaw([
   { title: '仪表盘', icon: 'material-symbols:dashboard', route: '/admin/dashboard' },
   { title: '用户管理', icon: 'material-symbols:people', route: '/admin/users' },
+  { title: '公告管理', icon: 'material-symbols:campaign-rounded', route: '/admin/announcements' },
   { title: '返回首页', icon: 'material-symbols:home', route: '/' },
 ]);
 

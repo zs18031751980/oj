@@ -1,4 +1,4 @@
-﻿"""
+"""
 数据库 ORM 模型模块
 
 使用 Peewee ORM 定义数据库表结构与操作方法。
@@ -245,12 +245,37 @@ class Submission(BaseModel):
         return data
 
 
+
+class Announcement(BaseModel):
+    """公告 ORM 模型
+    存储公告的标题、内容、权限等信息，支持发布和管理
+    """
+    id = AutoField(primary_key=True, verbose_name="公告ID")
+    title = CharField(max_length=200, verbose_name="公告标题")
+    content = TextField(verbose_name="Markdown 内容")
+    permission = CharField(max_length=20, default="member", verbose_name="访问权限")
+    created_by = CharField(max_length=50, null=True, verbose_name="创建者ID")
+    is_published = BooleanField(default=True, verbose_name="是否发布")
+    published_at = DateTimeField(null=True, verbose_name="发布时间")
+
+    class Meta:
+        table_name = "announcements"
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        related_fields = {'created_by'}
+        for fk in related_fields:
+            val = data.get(fk)
+            if val is not None and not isinstance(val, (int, str)):
+                data[fk] = getattr(val, 'id', None)
+        return data
+
 # ============================================================
 # 4. 表管理与数据库维护方法
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User, Problem, Testcase, Submission, UserCode]
+MODELS = [User, Problem, Testcase, Submission, UserCode, Announcement]
 
 
 def create_tables():

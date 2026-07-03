@@ -79,6 +79,12 @@ const routes = [
         meta: { title: '用户管理 - Let Coding 管理后台' },
         component: () => import('./pages/admin/Users.vue'),
       },
+      {
+        path: 'announcements',
+        name: 'AdminAnnouncements',
+        meta: { title: '公告管理 - Let Coding 管理后台' },
+        component: () => import('./pages/admin/Announcements.vue'),
+      },
     ],
   },
   {
