@@ -51,7 +51,7 @@ const difficultyColorMap = markRaw({
 
 <template>
   <div class="flex min-h-[calc(100vh-5rem)] flex-col bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <div v-once class="border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/80">
+    <div v-once class="border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
       <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="max-w-3xl">
@@ -138,5 +138,11 @@ const difficultyColorMap = markRaw({
         </div>
       </div>
     </div>
+
+    <footer class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
+      <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+        Let Coding — Problems
+      </div>
+    </footer>
   </div>
 </template>
