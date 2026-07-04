@@ -42,7 +42,7 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
         config_service = get_container().resolve(IConfigService)
         db_config = config_service.get_database_config()
 
-        return PooledPostgresqlExtDatabase(
+        db = PooledPostgresqlExtDatabase(
             db_config["database"],
             user=db_config["username"],
             password=db_config["password"],
@@ -51,9 +51,11 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
             max_connections=db_config["max_connections"],
             stale_timeout=db_config["stale_timeout"]
         )
+        print(f"[DB] 数据库连接已创建: {db_config['host']}:{db_config['port']}/{db_config['database']}")
+        return db
     except Exception:
         config = DatabaseConfig()
-        return PooledPostgresqlExtDatabase(
+        db = PooledPostgresqlExtDatabase(
             config.database,
             user=config.username,
             password=config.password,
@@ -62,6 +64,8 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
             max_connections=config.max_connections,
             stale_timeout=config.stale_timeout
         )
+        print(f"[DB] 数据库连接已创建(fallback): {config.host}:{config.port}/{config.database}")
+        return db
 
 
 def init_database():
