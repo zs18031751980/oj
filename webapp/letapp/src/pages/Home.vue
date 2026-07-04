@@ -76,9 +76,9 @@ const features = markRaw([
     description: '从学习路径、推荐课程到编辑器练习，一条链路直接贯通。',
   },
   {
-    icon: 'material-symbols:verified-user',
-    title: '统一认证接入',
-    description: '使用iOSClub社团账号进行登录，方便快捷',
+    icon: 'material-symbols:quiz',
+    title: '海量题库',
+    description: '涵盖多种算法与数据结构题目，在线提交即时评测，持续挑战提升。',
   },
 ]);
 
