@@ -350,7 +350,8 @@ def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
             )
         except Exception as e:
             logger_service = inject(ILoggerService)
-            logger_service.warning(f'用户同步失败 (provider={provider}, id={provider_id}): {e}')
+            import traceback as _tb
+            logger_service.error(f'用户同步失败 (provider={provider}, id={provider_id}): {e}\n{_tb.format_exc()}')
 
     user_info = _build_user_info(provider, user_info_data)
     jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
@@ -759,7 +760,8 @@ class AuthCallbackController(Resource):
                 )
             except Exception as e:
                 logger_service = inject(ILoggerService)
-                logger_service.warning(f'用户同步失败 (provider={resolved_provider}, id={provider_id}): {e}')
+                import traceback as _tb
+                logger_service.error(f'用户同步失败 (provider={resolved_provider}, id={provider_id}): {e}\n{_tb.format_exc()}')
 
         # 签发本地 JWT 令牌
         user_info = _build_user_info(resolved_provider, user_info_data)
