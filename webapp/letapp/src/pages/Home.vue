@@ -77,8 +77,8 @@ const features = markRaw([
   },
   {
     icon: 'material-symbols:quiz',
-    title: '海量题库',
-    description: '涵盖多种算法与数据结构题目，在线提交即时评测，持续挑战提升。',
+    title: '题库实战',
+    description: '联系算法与数据结构题目，在线提交即时评测，持续挑战提升。',
   },
 ]);
 
