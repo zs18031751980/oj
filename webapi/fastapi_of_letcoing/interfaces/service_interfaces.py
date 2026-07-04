@@ -479,6 +479,20 @@ class IJWTService(ABC):
         """
         pass
 
+    @abstractmethod
+    def refresh_cached_user(self, user_id: str, user_info: Dict[str, Any]) -> None:
+        """
+        更新 Redis 中缓存的用户信息
+
+        当用户修改个人设置（如主题偏好）后，调用此方法更新缓存，
+        避免下次令牌验证时返回过期数据。
+
+        Args:
+            user_id: 用户 ID
+            user_info: 更新后的用户信息字典
+        """
+        pass
+
 
 class IUserService(ABC):
     """

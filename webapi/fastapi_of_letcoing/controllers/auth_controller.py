@@ -906,6 +906,10 @@ class AuthThemeController(Resource):
             user = User.get_by_id(user_id)
             user.theme_preference = theme_preference
             user.save()
+
+            user_info['theme_preference'] = theme_preference
+            jwt_service.refresh_cached_user(str(user_id), user_info)
+
             return {'success': True}, 200
         except Exception:
             return {'error': 'user not found'}, 404

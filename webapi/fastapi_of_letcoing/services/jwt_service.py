@@ -248,6 +248,10 @@ class JWTService(Injectable, IJWTService):
             self._logger_service.error("撤销令牌时发生异常", ex)
             return False
 
+    def refresh_cached_user(self, user_id: str, user_info: Dict[str, Any]) -> None:
+        """更新 Redis 中缓存的用户信息（用于主题偏好等设置的实时同步）"""
+        self._cache_user_info(user_id, user_info)
+
     # ============================================================
     # Redis 缓存操作（私有方法）
     # ============================================================
