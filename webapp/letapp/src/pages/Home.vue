@@ -91,12 +91,17 @@ const features = markRaw([
             </div>
 
             <div class="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <div class="preview-code h-[14rem] rounded-[1.5rem] border border-slate-200/60 p-5 text-sm shadow-inner dark:border-slate-800">
+              <div class="preview-code rounded-[1.5rem] border border-slate-200/60 p-5 text-sm shadow-inner dark:border-slate-800">
                 <div class="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.22em]">
                   <Icon icon="material-symbols:code" class="h-4 w-4" />
                   Sample Code
                 </div>
-                <pre class="h-[calc(100%-2rem)] overflow-auto font-mono leading-7"><code v-html="currentCode"></code></pre>
+                <pre class="overflow-auto font-mono leading-7"><code><span class="text-cyan-600 dark:text-cyan-300">#include</span> &lt;iostream&gt;
+
+<span class="text-sky-600 dark:text-sky-300">int</span> main() {
+  <span class="text-violet-600 dark:text-violet-300">std::cout</span> &lt;&lt; <span class="text-amber-600 dark:text-amber-300">"Hello, Let Coding!"</span> &lt;&lt; <span class="text-amber-600 dark:text-amber-300">'\\n'</span>;
+  <span class="text-pink-600 dark:text-pink-300">return</span> 0;
+}</code></pre>
               </div>
 
               <div class="space-y-4">
