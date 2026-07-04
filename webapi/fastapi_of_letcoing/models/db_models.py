@@ -306,19 +306,24 @@ def close_database():
 
 def migrate_add_role_column():
     """
-    迁移：为已有 users 表添加缺失的列（如果尚不存在）
+    迁移：为已有 users 表添加缺失的列并修复约束（如果尚不存在）
 
     兼容已有数据库：如果 users 表在相关列加入之前已创建，
-    此函数通过执行 PostgreSQL 的 ALTER TABLE ... ADD COLUMN IF NOT EXISTS
-    来安全地添加缺失的列。
+    此函数通过执行 PostgreSQL 的 ALTER TABLE 来安全地添加缺失的列并修复约束。
     """
     db = get_database()
     migrations = [
+        # 添加缺失的列
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'member';",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider VARCHAR(50);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id VARCHAR(255);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(10) DEFAULT 'system';",
+        # 修复旧表的列约束（兼容 OAuth 用户无需密码的场景）
+        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;",
+        "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true;",
+        "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();",
+        "ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();",
     ]
     for sql in migrations:
         try:
