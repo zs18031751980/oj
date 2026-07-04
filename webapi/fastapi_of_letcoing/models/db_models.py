@@ -15,7 +15,7 @@ from typing import Optional
 
 from peewee import (
     Model, CharField, TextField, DateTimeField, BooleanField,
-    IntegerField, ForeignKeyField, AutoField, Database
+    IntegerField, ForeignKeyField, AutoField, Database, DatabaseProxy
 )
 from playhouse.pool import PooledPostgresqlExtDatabase
 
@@ -26,50 +26,67 @@ from core.db_config import DatabaseConfig
 # 1. 数据库连接管理
 # ============================================================
 
-# 全局数据库连接实例（惰性初始化）
-database: Optional[PooledPostgresqlExtDatabase] = None
+# DatabaseProxy 用作模型的占位符，不依赖实际的数据库连接
+# 这样在模块导入时不会创建连接，避免 DI 容器未就绪时 fallback 到 localhost
+database_proxy = DatabaseProxy()
+
+# 实际的数据库连接实例（惰性初始化）
+_actual_db: Optional[PooledPostgresqlExtDatabase] = None
+
+
+def _create_actual_db() -> PooledPostgresqlExtDatabase:
+    try:
+        from core.di_container import get_container
+        from interfaces.service_interfaces import IConfigService
+
+        config_service = get_container().resolve(IConfigService)
+        db_config = config_service.get_database_config()
+
+        return PooledPostgresqlExtDatabase(
+            db_config["database"],
+            user=db_config["username"],
+            password=db_config["password"],
+            host=db_config["host"],
+            port=db_config["port"],
+            max_connections=db_config["max_connections"],
+            stale_timeout=db_config["stale_timeout"]
+        )
+    except Exception:
+        config = DatabaseConfig()
+        return PooledPostgresqlExtDatabase(
+            config.database,
+            user=config.username,
+            password=config.password,
+            host=config.host,
+            port=config.port,
+            max_connections=config.max_connections,
+            stale_timeout=config.stale_timeout
+        )
+
+
+def init_database():
+    """
+    初始化数据库连接并将实际连接绑定到 DatabaseProxy
+
+    应在 DI 容器配置完成后（setup_services 之后）调用，
+    确保能通过 ConfigService 获取正确的数据库配置。
+    """
+    global _actual_db
+    _actual_db = _create_actual_db()
+    database_proxy.initialize(_actual_db)
 
 
 def get_database() -> PooledPostgresqlExtDatabase:
     """
-    获取 PostgreSQL 数据库连接池实例
+    获取实际 PostgreSQL 数据库连接池实例
 
-    使用单例模式，首次调用时创建连接池，
-    后续调用直接返回已创建的实例。
-    优先从 ConfigService 读取配置，失败时回退到 DatabaseConfig 默认值。
+    用于 create_tables()、migrate_add_role_column() 等需要
+    直接操作数据库连接的管理函数。
     """
-    global database
-    if database is None:
-        try:
-            # 优先尝试从 ConfigService 获取数据库配置
-            from core.di_container import get_container
-            from interfaces.service_interfaces import IConfigService
-
-            config_service = get_container().resolve(IConfigService)
-            db_config = config_service.get_database_config()
-
-            database = PooledPostgresqlExtDatabase(
-                db_config["database"],
-                user=db_config["username"],
-                password=db_config["password"],
-                host=db_config["host"],
-                port=db_config["port"],
-                max_connections=db_config["max_connections"],
-                stale_timeout=db_config["stale_timeout"]
-            )
-        except Exception:
-            # 如果依赖注入不可用，使用 DatabaseConfig 默认值
-            config = DatabaseConfig()
-            database = PooledPostgresqlExtDatabase(
-                config.database,
-                user=config.username,
-                password=config.password,
-                host=config.host,
-                port=config.port,
-                max_connections=config.max_connections,
-                stale_timeout=config.stale_timeout
-            )
-    return database
+    global _actual_db
+    if _actual_db is None:
+        init_database()
+    return _actual_db
 
 
 # ============================================================
@@ -90,7 +107,7 @@ class BaseModel(Model):
     updated_at = DateTimeField(default=datetime.now, verbose_name="更新时间")
 
     class Meta:
-        database = get_database()
+        database = database_proxy
 
     def save(self, force_insert=False, only=None):
         """重写 save 方法，在保存时自动更新 updated_at 字段"""

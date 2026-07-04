@@ -304,7 +304,7 @@ def _register_default_services(container: DIContainer) -> None:
     setup_services() 中注册，因为那时 app.config 才可用。
     """
     from core.db_config import DatabaseConfig
-    container.register_singleton(DatabaseConfig)
+    container.register_singleton(DatabaseConfig, implementation_type=DatabaseConfig)
 
 
 def configure_services(configurator: Callable[[DIContainer], None]) -> None:
