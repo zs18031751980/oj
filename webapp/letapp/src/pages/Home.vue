@@ -221,11 +221,56 @@ const features = markRaw([
 @reference 'tailwindcss';
 
 .hero-primary {
-  @apply inline-flex items-center gap-2 rounded-full bg-slate-950 px-6 py-3.5 text-sm font-black text-white shadow-xl shadow-slate-900/15 transition hover:-translate-y-0.5 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background-color: #06b6d4;
+  padding: 0.875rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 900;
+  color: #082f49;
+  box-shadow: 0 10px 15px -3px rgba(6, 182, 212, 0.3);
+  transition: all 0.15s ease;
+}
+.hero-primary:hover {
+  translate: 0 -0.125rem;
+  background-color: #22d3ee;
+}
+.dark .hero-primary {
+  background-color: #22d3ee;
+  color: #082f49;
+}
+.dark .hero-primary:hover {
+  background-color: #67e8f9;
 }
 
 .hero-secondary {
-  @apply inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-6 py-3.5 text-sm font-black text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  padding: 0.875rem 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 900;
+  color: #64748b;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+.hero-secondary:hover {
+  translate: 0 -0.125rem;
+  border-color: #cbd5e1;
+  background-color: #f8fafc;
+}
+.dark .hero-secondary {
+  border-color: #334155;
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+.dark .hero-secondary:hover {
+  background-color: #1e293b;
 }
 
 .feature-card {
