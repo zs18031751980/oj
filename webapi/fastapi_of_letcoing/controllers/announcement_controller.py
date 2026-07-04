@@ -27,7 +27,7 @@ announcement_input = api.model('AnnouncementInput', {
 
 
 def _require_manager() -> (dict | tuple):
-    """验证请求携带的 JWT 令牌，确保用户角色为 manager（部长/社长/管理员等）"""
+    """验证请求携带的 JWT 令牌，确保用户角色为 manager（副部长/部长/社长/管理员等）"""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return {'error': '请先登录'}, 401
@@ -38,7 +38,7 @@ def _require_manager() -> (dict | tuple):
         return {'error': '令牌无效或已过期'}, 401
 
     if user_info.get('role', 'member') != 'manager':
-        return {'error': '权限不足，仅部长/社长/管理员可执行此操作'}, 403
+        return {'error': '权限不足，仅副部长/部长/社长/管理员可执行此操作'}, 403
 
     return user_info
 

@@ -15,7 +15,7 @@
     <div v-if="!isManager" class="flex flex-col items-center justify-center py-20 text-slate-400">
       <Icon icon="material-symbols:lock-rounded" class="mb-4 h-16 w-16" />
       <p class="text-lg font-bold">权限不足</p>
-      <p class="mt-1 text-sm">仅部长、社长、管理员可管理公告</p>
+      <p class="mt-1 text-sm">仅副部长、部长、社长、管理员可管理公告</p>
     </div>
 
     <div v-else-if="loading" class="flex items-center justify-center py-20 text-slate-400">

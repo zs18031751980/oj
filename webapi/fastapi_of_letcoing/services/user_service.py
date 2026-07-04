@@ -20,6 +20,7 @@ from peewee import DoesNotExist, IntegrityError, fn   # Peewee ORM 工具
 from services.database_service import DatabaseService  # 数据库服务基类
 from models.db_models import User                       # 用户 ORM 模型
 from core.di_container import Injectable
+from utils.role_utils import normalize_role
 
 
 class UserService(DatabaseService, Injectable):
@@ -326,48 +327,8 @@ class UserService(DatabaseService, Injectable):
             user_info: 来自提供商的用户信息（包含 username、email、avatar_url 等）
 
         Returns:
-            标准化的用户信息字典（不含 password_hash）
+             标准化的用户信息字典（不含 password_hash）
         """
-        def _normalize_role(raw_role) -> str:
-            if isinstance(raw_role, list):
-                raw_role = raw_role[0] if raw_role else ''
-
-            role_map = {
-                'member': 'member',
-                'staff': 'staff',
-                'manager': 'manager',
-                'admin': 'manager',
-                'department': 'staff',
-                'minister': 'manager',
-                'president': 'manager',
-                'founder': 'manager',
-                'user': 'member',
-                # 中文角色名
-                '部长': 'manager',
-                '部员': 'staff',
-                '社员': 'member',
-                '社长': 'manager',
-                '副社长': 'manager',
-                '副部长': 'manager',
-                '干事': 'staff',
-                '部门主管': 'manager',
-                # 常见英文变体
-                'role_admin': 'manager',
-                'role_manager': 'manager',
-                'role_staff': 'staff',
-                'role_member': 'member',
-                'role_user': 'member',
-                'administrator': 'manager',
-                'superuser': 'manager',
-                '普通用户': 'member',
-                '管理员': 'manager',
-            }
-            cleaned = (str(raw_role or '')).strip().lower()
-            result = role_map.get(cleaned, 'member')
-            if cleaned and cleaned not in role_map:
-                print(f'Unrecognized role value "{raw_role}" normalized to "{result}"')
-            return result
-
         try:
             # ----- 查找已有用户 -----
             try:
@@ -384,7 +345,7 @@ class UserService(DatabaseService, Injectable):
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
                 if user_info.get('role') and user.role != user_info['role']:
-                    user.role = _normalize_role(user_info['role'])
+                    user.role = normalize_role(user_info['role'])
 
                 user.last_login = datetime.now()
                 user.save()
@@ -416,7 +377,7 @@ class UserService(DatabaseService, Injectable):
                     username=username,
                     email=email,
                     password_hash=None,
-                    role=_normalize_role(user_info.get('role', 'member')),
+                    role=normalize_role(user_info.get('role', 'member')),
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),

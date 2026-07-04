@@ -24,6 +24,7 @@ import requests
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
+from utils.role_utils import pick_highest_role
 
 
 def _safe_client_id(client_id: Any) -> str:
@@ -646,32 +647,28 @@ class OIDCService(Injectable, IOIDCService):
         )
         name = user_data.get('name') or user_data.get('nickname') or username
 
-        # 尝试多个字段提取角色，优先级：role > roles[0] > groups[0] > group > user_type
-        role = user_data.get('role')
-        if isinstance(role, list):
-            role = role[0] if role else None
-        if not role:
-            for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
-                val = user_data.get(field)
-                if val:
-                    if isinstance(val, list) and len(val) > 0:
-                        role = val[0]
-                    elif isinstance(val, str):
-                        role = val
-                    break
-        if not role:
-            realm_access = user_data.get('realm_access')
-            if isinstance(realm_access, dict):
-                roles = realm_access.get('roles', [])
-                if roles:
-                    # Keycloak 风格：排除技术角色，取最高权限角色
-                    tech_roles = {'offline_access', 'uma_authorization'}
-                    filtered = [r for r in roles if r.lower() not in tech_roles]
-                    if filtered:
-                        role = filtered[0]
-                    else:
-                        role = roles[0]
-        role = role or 'member'
+        # 从多个字段收集所有角色，选取权限最高的
+        all_roles = []
+        raw_role = user_data.get('role')
+        if raw_role:
+            if isinstance(raw_role, list):
+                all_roles.extend(raw_role)
+            elif isinstance(raw_role, str):
+                all_roles.append(raw_role)
+        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
+            val = user_data.get(field)
+            if val:
+                if isinstance(val, list):
+                    all_roles.extend(val)
+                elif isinstance(val, str):
+                    all_roles.append(val)
+        realm_access = user_data.get('realm_access')
+        if isinstance(realm_access, dict):
+            roles = realm_access.get('roles', [])
+            if isinstance(roles, list):
+                tech_roles = {'offline_access', 'uma_authorization'}
+                all_roles.extend(r for r in roles if str(r).lower() not in tech_roles)
+        role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
         return {
             'id': str(subject),
             'username': username,

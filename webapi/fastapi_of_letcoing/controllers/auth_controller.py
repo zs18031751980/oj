@@ -26,6 +26,7 @@ from werkzeug.security import check_password_hash   # Werkzeug 安全工具，�
 from core.di_container import inject  # 依赖注入辅助函数
 from interfaces.service_interfaces import IConfigService, IJWTService, ILoggerService, IOIDCService, IUserService
 from models.auth_models import TokenResponse, UserInfo
+from utils.role_utils import normalize_role, pick_highest_role
 
 
 # ============================================================
@@ -170,7 +171,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
     """
     username = user_info_data.get('username', '') or ''
     email = user_info_data.get('email', '') or ''
-    role = _normalize_role(user_info_data.get('role', 'member'))
+    role = normalize_role(user_info_data.get('role', 'member'))
     return UserInfo(
         id=str(user_info_data.get('id') or ''),
         username=username,
@@ -254,58 +255,6 @@ def _decode_unverified_jwt(token: str) -> dict:
         return {}
 
 
-def _normalize_role(raw_role, logger_service=None) -> str:
-    """
-    将提供商返回的角色值标准化为内部格式
-
-    iOSClub 等提供商可能返回 Member/Department/Minister 或
-    中文 部长/部员/社员 等值，需要映射为 member/staff/manager 内部标准格式。
-    也处理 role 为列表类型的情况（如 ['Minister']）。
-    """
-    if isinstance(raw_role, list):
-        raw_role = raw_role[0] if raw_role else ''
-
-    role_map = {
-        'member': 'member',
-        'staff': 'staff',
-        'manager': 'manager',
-        'admin': 'manager',
-        'department': 'staff',
-        'minister': 'manager',
-        'president': 'manager',
-        'founder': 'manager',
-        'user': 'member',
-        # 中文角色名
-        '部长': 'manager',
-        '部员': 'staff',
-        '社员': 'member',
-        '社长': 'manager',
-        '副社长': 'manager',
-        '副部长': 'manager',
-        '干事': 'staff',
-        '部门主管': 'manager',
-        # 常见英文变体
-        'role_admin': 'manager',
-        'role_manager': 'manager',
-        'role_staff': 'staff',
-        'role_member': 'member',
-        'role_user': 'member',
-        'administrator': 'manager',
-        'superuser': 'manager',
-        '普通用户': 'member',
-        '管理员': 'manager',
-    }
-    cleaned = (str(raw_role or '')).strip().lower()
-    result = role_map.get(cleaned, 'member')
-    if cleaned and cleaned not in role_map:
-        msg = f'Unrecognized role value "{raw_role}" normalized to "{result}"'
-        if logger_service:
-            logger_service.warning(msg)
-        else:
-            print(msg)
-    return result
-
-
 def _user_info_from_provider_token(provider: str, identifier: str, token: str) -> dict:
     """
     从外部提供商签发的 JWT 令牌中提取用户信息
@@ -341,20 +290,22 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     email = claims.get('email') or ''
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
 
-    # 从 JWT claims 中提取角色，尝试多个字段
-    raw_role = claims.get('role') or ''
-    if isinstance(raw_role, list):
-        raw_role = raw_role[0] if raw_role else ''
-    if not raw_role:
-        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
-            val = claims.get(field)
-            if val:
-                if isinstance(val, list) and len(val) > 0:
-                    raw_role = val[0]
-                elif isinstance(val, str):
-                    raw_role = val
-                break
-    role = _normalize_role(raw_role)
+    # 从 JWT claims 中收集所有角色，选取权限最高的
+    all_roles = []
+    raw_role = claims.get('role')
+    if raw_role:
+        if isinstance(raw_role, list):
+            all_roles.extend(raw_role)
+        elif isinstance(raw_role, str) and raw_role:
+            all_roles.append(raw_role)
+    for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
+        val = claims.get(field)
+        if val:
+            if isinstance(val, list):
+                all_roles.extend(val)
+            elif isinstance(val, str):
+                all_roles.append(val)
+    role = pick_highest_role(all_roles) if all_roles else 'member'
     return {
         'id': str(subject),
         'username': str(username or ''),
