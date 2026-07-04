@@ -80,34 +80,29 @@ const features = markRaw([
           <div class="absolute -left-4 top-12 hidden h-24 w-24 rounded-full bg-amber-300/40 blur-3xl lg:block dark:bg-amber-500/10"></div>
           <div class="absolute -right-6 bottom-10 hidden h-28 w-28 rounded-full bg-cyan-400/30 blur-3xl lg:block dark:bg-cyan-400/10"></div>
 
-          <div class="w-full max-w-xl rounded-[2rem] border border-white/80 bg-white/85 p-4 shadow-2xl shadow-slate-300/60 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-black/30">
+          <div class="w-full max-w-xl rounded-[2rem] border border-slate-200/80 bg-white/85 p-4 shadow-2xl shadow-slate-300/60 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 dark:shadow-black/30">
             <div class="preview-toolbar flex items-center justify-between rounded-[1.5rem] px-4 py-3">
               <div class="flex items-center gap-2">
                 <span class="h-3 w-3 rounded-full bg-rose-400"></span>
                 <span class="h-3 w-3 rounded-full bg-amber-300"></span>
                 <span class="h-3 w-3 rounded-full bg-emerald-400"></span>
               </div>
-              <div class="rounded-full bg-white/10 px-3 py-1 text-xs font-medium">playground/main.cpp</div>
+              <div class="rounded-full bg-slate-300/40 px-3 py-1 text-xs font-medium text-slate-500 dark:bg-white/20">playground/main.{{ currentFileExt }}</div>
             </div>
 
             <div class="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-              <div class="preview-code rounded-[1.5rem] p-5 text-sm shadow-inner">
+              <div class="preview-code h-[14rem] rounded-[1.5rem] border border-slate-200/60 p-5 text-sm shadow-inner dark:border-slate-800">
                 <div class="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.22em]">
                   <Icon icon="material-symbols:code" class="h-4 w-4" />
                   Sample Code
                 </div>
-                <pre class="overflow-auto font-mono leading-7"><code><span class="text-cyan-300">#include</span> &lt;iostream&gt;
-
-<span class="text-sky-300">int</span> main() {
-  <span class="text-violet-300">std::cout</span> &lt;&lt; <span class="text-amber-300">"Hello, Let Coding!"</span> &lt;&lt; <span class="text-amber-300">'\\n'</span>;
-  <span class="text-pink-300">return</span> 0;
-}</code></pre>
+                <pre class="h-[calc(100%-2rem)] overflow-auto font-mono leading-7"><code v-html="currentCode"></code></pre>
               </div>
 
               <div class="space-y-4">
-                <div class="preview-result rounded-[1.5rem] px-5 py-5 shadow-lg">
+                <div class="preview-result rounded-[1.5rem] border border-slate-200/60 px-5 py-5 shadow-lg dark:border-slate-800">
                   <div class="text-xs font-black uppercase tracking-[0.22em]">运行结果</div>
-                  <div class="preview-output mt-3 rounded-2xl px-4 py-4 font-mono text-sm">
+                  <div class="preview-output mt-3 rounded-2xl border border-slate-200/60 px-4 py-4 font-mono text-sm dark:border-slate-800">
                     Hello, Let Coding!
                   </div>
                 </div>
@@ -196,8 +191,8 @@ const features = markRaw([
 
 <style>
 html:not(.dark) .preview-toolbar {
-  background-color: #0f172a !important;
-  color: #e2e8f0 !important;
+  background-color: #e2e8f0 !important;
+  color: #475569 !important;
 }
 
 html.dark .preview-toolbar {
@@ -206,8 +201,8 @@ html.dark .preview-toolbar {
 }
 
 html:not(.dark) .preview-code {
-  background-color: #1e293b !important;
-  color: #f8fafc !important;
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
 }
 
 html.dark .preview-code {
@@ -216,7 +211,7 @@ html.dark .preview-code {
 }
 
 html:not(.dark) .preview-code > div {
-  color: #cbd5e1 !important;
+  color: #64748b !important;
 }
 
 html.dark .preview-code > div {
@@ -224,8 +219,8 @@ html.dark .preview-code > div {
 }
 
 html:not(.dark) .preview-result {
-  background-color: #0ea5e9 !important;
-  color: #ffffff !important;
+  background-color: #e2e8f0 !important;
+  color: #334155 !important;
 }
 
 html.dark .preview-result {
@@ -234,8 +229,9 @@ html.dark .preview-result {
 }
 
 html:not(.dark) .preview-output {
-  background-color: #0f172a !important;
-  color: #67e8f9 !important;
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border: 1px solid #e2e8f0;
 }
 
 html.dark .preview-output {

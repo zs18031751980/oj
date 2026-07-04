@@ -253,7 +253,22 @@ onUnmounted(() => {
 @reference 'tailwindcss';
 
 .sidebar-toggle {
-  @apply flex items-center rounded-2xl text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white;
+  display: flex;
+  align-items: center;
+  border-radius: 1rem;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+.sidebar-toggle:hover {
+  background-color: #e2e8f0;
+  color: #475569;
+}
+.dark .sidebar-toggle {
+  color: #cbd5e1;
+}
+.dark .sidebar-toggle:hover {
+  background-color: #1e293b;
+  color: #ffffff;
 }
 
 .sidebar-link {
