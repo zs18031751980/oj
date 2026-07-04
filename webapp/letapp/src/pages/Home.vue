@@ -225,7 +225,7 @@ const features = markRaw([
   align-items: center;
   gap: 0.5rem;
   border-radius: 9999px;
-  background-color: #06b6d4;
+  background-color: #22d3ee;
   padding: 0.875rem 1.5rem;
   font-size: 0.875rem;
   font-weight: 900;
@@ -235,7 +235,7 @@ const features = markRaw([
 }
 .hero-primary:hover {
   translate: 0 -0.125rem;
-  background-color: #22d3ee;
+  background-color: #67e8f9;
 }
 .dark .hero-primary {
   background-color: #22d3ee;
