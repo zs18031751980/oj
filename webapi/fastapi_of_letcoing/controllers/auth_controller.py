@@ -348,9 +348,9 @@ def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
             user_info_data = asyncio.run(
                 user_service.find_or_create_user(provider, provider_id, user_info_data)
             )
-        except Exception:
-            # 即使本地用户同步失败，提供商登录仍然可以正常工作
-            pass
+        except Exception as e:
+            logger_service = inject(ILoggerService)
+            logger_service.warning(f'用户同步失败 (provider={provider}, id={provider_id}): {e}')
 
     user_info = _build_user_info(provider, user_info_data)
     jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
@@ -757,9 +757,9 @@ class AuthCallbackController(Resource):
                 user_info_data = asyncio.run(
                     user_service.find_or_create_user(resolved_provider, provider_id, user_info_data)
                 )
-            except Exception:
-                # 即使本地用户数据库不可用，OAuth 登录也不受影响
-                pass
+            except Exception as e:
+                logger_service = inject(ILoggerService)
+                logger_service.warning(f'用户同步失败 (provider={resolved_provider}, id={provider_id}): {e}')
 
         # 签发本地 JWT 令牌
         user_info = _build_user_info(resolved_provider, user_info_data)
