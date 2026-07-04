@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { markRaw } from 'vue';
+import { markRaw, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRouter } from 'vue-router';
 
@@ -15,6 +15,49 @@ const languages = markRaw([
   { name: 'Swift', value: 'swift', icon: 'vscode-icons:file-type-swift', color: '#fa7343' },
   { name: 'Kotlin', value: 'kotlin', icon: 'vscode-icons:file-type-kotlin', color: '#7f52ff' },
 ]);
+
+const codeSamples: Record<string, string> = {
+  cpp: `<span class="text-cyan-600 dark:text-cyan-300">#include</span> <span class="text-slate-500 dark:text-slate-400">&lt;iostream&gt;</span>
+
+<span class="text-sky-600 dark:text-sky-300">int</span> <span class="text-amber-600 dark:text-amber-300">main</span>() {
+  <span class="text-violet-600 dark:text-violet-300">std::cout</span> <span class="text-slate-500 dark:text-slate-400">&lt;&lt;</span> <span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span> <span class="text-slate-500 dark:text-slate-400">&lt;&lt;</span> <span class="text-emerald-600 dark:text-emerald-300">'\\n'</span>;
+  <span class="text-pink-600 dark:text-pink-300">return</span> <span class="text-amber-600 dark:text-amber-300">0</span>;
+}`,
+  python: `<span class="text-pink-600 dark:text-pink-300">print</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>)`,
+  javascript: `<span class="text-violet-600 dark:text-violet-300">console</span>.<span class="text-amber-600 dark:text-amber-300">log</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>);`,
+  java: `<span class="text-pink-600 dark:text-pink-300">public</span> <span class="text-sky-600 dark:text-sky-300">class</span> <span class="text-amber-600 dark:text-amber-300">Main</span> {
+  <span class="text-pink-600 dark:text-pink-300">public</span> <span class="text-sky-600 dark:text-sky-300">static</span> <span class="text-sky-600 dark:text-sky-300">void</span> <span class="text-amber-600 dark:text-amber-300">main</span>(<span class="text-violet-600 dark:text-violet-300">String</span>[] args) {
+    <span class="text-violet-600 dark:text-violet-300">System</span>.<span class="text-violet-600 dark:text-violet-300">out</span>.<span class="text-amber-600 dark:text-amber-300">println</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>);
+  }
+}`,
+  go: `<span class="text-pink-600 dark:text-pink-300">package</span> <span class="text-amber-600 dark:text-amber-300">main</span>
+<span class="text-pink-600 dark:text-pink-300">import</span> <span class="text-emerald-600 dark:text-emerald-300">"fmt"</span>
+
+<span class="text-sky-600 dark:text-sky-300">func</span> <span class="text-amber-600 dark:text-amber-300">main</span>() {
+  <span class="text-violet-600 dark:text-violet-300">fmt</span>.<span class="text-amber-600 dark:text-amber-300">Println</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>)
+}`,
+  rust: `<span class="text-sky-600 dark:text-sky-300">fn</span> <span class="text-amber-600 dark:text-amber-300">main</span>() {
+  <span class="text-violet-600 dark:text-violet-300">println!</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>);
+}`,
+  swift: `<span class="text-pink-600 dark:text-pink-300">print</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>)`,
+  kotlin: `<span class="text-sky-600 dark:text-sky-300">fun</span> <span class="text-amber-600 dark:text-amber-300">main</span>() {
+  <span class="text-violet-600 dark:text-violet-300">println</span>(<span class="text-emerald-600 dark:text-emerald-300">"Hello, Let Coding!"</span>)
+}`,
+};
+
+const currentCode = ref(codeSamples.cpp);
+
+const extMap: Record<string, string> = {
+  cpp: 'cpp', python: 'py', javascript: 'js', java: 'java',
+  go: 'go', rust: 'rs', swift: 'swift', kotlin: 'kt',
+};
+
+const currentFileExt = ref(extMap.cpp);
+
+const selectLanguage = (lang: { value: string }) => {
+  currentCode.value = codeSamples[lang.value] || codeSamples.cpp;
+  currentFileExt.value = extMap[lang.value] || extMap.cpp;
+};
 
 const features = markRaw([
   {
@@ -43,7 +86,7 @@ const features = markRaw([
 
 <template>
   <main class="overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <section v-once class="relative isolate">
+    <section class="relative isolate">
       <div class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)]"></div>
       <div class="mx-auto grid min-h-[calc(100vh-var(--header-h,5rem))] max-w-7xl items-center gap-12 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8 lg:py-0">
         <div class="flex min-h-[28rem] flex-col justify-center self-center lg:min-h-[36rem]">
@@ -120,7 +163,7 @@ const features = markRaw([
                       :key="language.value"
                       type="button"
                       class="grid h-14 min-w-0 place-items-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
-                      @click="router.push(`/playground?language=${language.value}`)"
+                      @click="selectLanguage(language)"
                     >
                       <Icon :icon="language.icon" class="h-7 w-7 max-w-full" :style="{ color: language.color }" />
                     </button>

@@ -2,7 +2,7 @@
   <div class="min-h-screen bg-slate-50 text-slate-950 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-50">
     <n-layout has-sider class="min-h-screen bg-transparent">
       <aside
-        class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-white/40 bg-transparent backdrop-blur-2xl transition-all duration-300 dark:border-slate-700/40 md:flex rounded-r-[1.75rem] dark:bg-slate-950/85"
+        class="fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-slate-200 bg-transparent backdrop-blur-2xl transition-all duration-300 dark:border-slate-700/40 md:flex rounded-r-[1.75rem] dark:bg-slate-950/85"
         :class="sidebarExpanded ? 'w-72' : 'w-24'"
       >
         <div class="flex h-20 items-center justify-between gap-3 px-5">
