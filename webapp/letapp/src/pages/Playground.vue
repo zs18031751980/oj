@@ -466,7 +466,7 @@ watch(isFullscreen, (active) => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_32%,_#f8fafc_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
+  <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
     <div class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-950/75">
       <div class="playground-container mx-auto flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <div class="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
