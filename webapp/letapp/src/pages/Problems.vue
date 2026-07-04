@@ -85,7 +85,7 @@ const difficultyColorMap = markRaw({
             class="rounded-xl border px-4 py-2 text-sm font-bold transition"
             :class="difficultyFilter === d
               ? 'border-cyan-400 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400'"
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-cyan-500 dark:hover:text-slate-950'"
             @click="difficultyFilter = d"
           >
             {{ d || '全部' }}
