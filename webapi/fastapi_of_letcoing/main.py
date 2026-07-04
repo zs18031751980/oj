@@ -374,6 +374,16 @@ def add_cors_headers(response):
 # 初始化并注册所有依赖注入服务（配置服务、日志服务、JWT 服务等）
 setup_services(app.config)
 
+# 重新初始化 db_models 的数据库连接
+# 由于 BaseModel.Meta.database 在模块导入时就被求值，
+# 而那时 DI 容器尚未配置，导致 fallback 到 localhost 默认值。
+# 此处在 setup_services() 完成后强制重建连接并重新绑定所有模型，
+# 确保 ORM 操作使用正确的远程数据库。
+import models.db_models as _db_models
+_db_models.database = None
+new_db = _db_models.get_database()
+new_db.bind(_db_models.MODELS)
+
 # 创建数据库表（如不存在），失败时只打印警告，避免阻塞启动
 try:
     create_tables()
