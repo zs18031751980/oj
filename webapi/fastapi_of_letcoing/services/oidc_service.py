@@ -733,9 +733,30 @@ class OIDCService(Injectable, IOIDCService):
                 }
 
             # ----- 标准 OIDC 提供商处理 -----
-            # 优先从 ID Token 的 userinfo 字段获取
+            # 优先从 token 中提取 id_token claims（跳过签名验证以兼容各种提供商）
+            id_token_claims = None
+            if isinstance(token, dict) and token.get('id_token'):
+                try:
+                    import jwt as _jwt
+                    id_token_claims = _jwt.decode(
+                        token['id_token'],
+                        options={'verify_signature': False, 'verify_exp': False},
+                    )
+                    if not isinstance(id_token_claims, dict):
+                        id_token_claims = None
+                    else:
+                        self._logger_service.info(
+                            f'ID Token claims extracted for {provider}: '
+                            f'keys={",".join(sorted(id_token_claims.keys()))}'
+                        )
+                except Exception as ex:
+                    self._logger_service.warning(f'Failed to decode id_token for {provider}: {str(ex)}')
+
+            # 尝试从 ID Token 的 userinfo 字段获取
             token_user_data = self._normalize_user_data(token.get('userinfo')) if isinstance(token, dict) else None
             if token_user_data:
+                if id_token_claims:
+                    token_user_data.update(id_token_claims)
                 self._logger_service.info(
                     'Using OIDC user info from token payload: '
                     f'provider={provider}, keys={",".join(sorted(token_user_data.keys()))}'
@@ -759,6 +780,14 @@ class OIDCService(Injectable, IOIDCService):
             if not normalized_user_data:
                 self._logger_service.error(f'Unsupported userinfo response type: {type(user_data).__name__}')
                 return None
+
+            # 合并 id_token claims 到 userinfo 数据中
+            if id_token_claims:
+                for key in ('preferred_username', 'nickname', 'name', 'email', 'picture',
+                           'avatar', 'avatar_url', 'role', 'roles', 'groups', 'group',
+                           'user_type', 'authorities', 'memberOf', 'realm_access'):
+                    if key in id_token_claims:
+                        normalized_user_data.setdefault(key, id_token_claims[key])
 
             self._logger_service.info(
                 'OIDC user info received: '
