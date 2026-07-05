@@ -12,7 +12,7 @@
 6. 最后登录时间跟踪
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any
 
 from peewee import DoesNotExist, IntegrityError, fn   # Peewee ORM 工具
@@ -21,6 +21,8 @@ from services.database_service import DatabaseService  # 数据库服务基类
 from models.db_models import User                       # 用户 ORM 模型
 from core.di_container import Injectable
 from utils.role_utils import normalize_role
+
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 
 class UserService(DatabaseService, Injectable):
@@ -136,7 +138,7 @@ class UserService(DatabaseService, Injectable):
 
     async def update_user_last_login(self, user_id: int) -> bool:
         """更新用户的最后登录时间为当前时间"""
-        return await self.update(User, user_id, last_login=datetime.now())
+        return await self.update(User, user_id, last_login=datetime.now(BEIJING_TZ))
 
     async def update_user_info(self, user_id: int, **kwargs) -> bool:
         """
@@ -348,7 +350,7 @@ class UserService(DatabaseService, Injectable):
                 if user_info.get('role') and user.role != user_info['role']:
                     user.role = normalize_role(user_info['role'])
 
-                user.last_login = datetime.now()
+                user.last_login = datetime.now(BEIJING_TZ)
                 user.save()
 
                 print(f"用户登录成功: {user.id} ({provider})")
@@ -383,7 +385,7 @@ class UserService(DatabaseService, Injectable):
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),
                     is_active=True,
-                    last_login=datetime.now()
+                    last_login=datetime.now(BEIJING_TZ)
                 )
 
                 print(f"新用户注册成功: {user.id} ({provider})")
