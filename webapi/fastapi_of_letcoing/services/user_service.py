@@ -357,7 +357,7 @@ class UserService(DatabaseService, Injectable):
             except DoesNotExist:
                 # ----- 创建新用户 -----
                 username = user_info.get('username') or f"{provider}_{provider_id}"
-                email = user_info.get('email')
+                email = user_info.get('email') or None
 
                 # 处理用户名冲突：在用户名后追加 provider_id
                 try:

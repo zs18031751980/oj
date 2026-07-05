@@ -170,7 +170,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
         标准化后的 UserInfo 对象
     """
     username = user_info_data.get('username', '') or ''
-    email = user_info_data.get('email', '') or ''
+    email = user_info_data.get('email') or None
     role = normalize_role(user_info_data.get('role', 'member'))
     return UserInfo(
         id=str(user_info_data.get('id') or ''),
@@ -287,7 +287,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
         or claims.get('userId')
         or identifier
     )
-    email = claims.get('email') or ''
+    email = claims.get('email') or None
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
 
     # 从 JWT claims 中收集所有角色，选取权限最高的

@@ -727,7 +727,7 @@ class OIDCService(Injectable, IOIDCService):
                     'id': str(user_data['id']),
                     'username': user_data.get('login', ''),
                     'name': user_data.get('name') or user_data.get('login', ''),
-                    'email': user_data.get('email') or '',
+            'email': user_data.get('email') or None,
                     'avatar_url': user_data.get('avatar_url') or '',
                     'provider': provider,
                 }
