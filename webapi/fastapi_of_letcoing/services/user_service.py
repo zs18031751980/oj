@@ -347,7 +347,7 @@ class UserService(DatabaseService, Injectable):
                     user.email = user_info['email']
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
-                if user_info.get('role') and user.role != user_info['role']:
+                if user_info.get('role') and user_info['role'] != 'member' and user.role != user_info['role']:
                     user.role = normalize_role(user_info['role'])
 
                 user.last_login = datetime.now(BEIJING_TZ)
