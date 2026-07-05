@@ -638,10 +638,10 @@ class OIDCService(Injectable, IOIDCService):
             return None
 
         username = (
-            user_data.get('preferred_username')
+            user_data.get('name')
+            or user_data.get('preferred_username')
             or user_data.get('nickname')
             or user_data.get('username')
-            or user_data.get('name')
             or user_data.get('email')
             or str(subject)
         )
@@ -655,7 +655,8 @@ class OIDCService(Injectable, IOIDCService):
                 all_roles.extend(raw_role)
             elif isinstance(raw_role, str):
                 all_roles.append(raw_role)
-        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
+        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf',
+                      'position', 'department', 'identity', 'type'):
             val = user_data.get(field)
             if val:
                 if isinstance(val, list):

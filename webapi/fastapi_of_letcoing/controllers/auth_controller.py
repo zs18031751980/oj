@@ -271,6 +271,12 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
         包含用户信息的字典
     """
     claims = _decode_unverified_jwt(token)
+
+    # 打印 JWT claims 便于调试身份字段
+    import json as _json
+    logger_service = inject(ILoggerService)
+    logger_service.info(f'JWT claims for {provider}: {_json.dumps({k: claims.get(k) for k in claims if not k.startswith("_")}, ensure_ascii=False, default=str)}')
+
     subject = (
         claims.get('sub')
         or claims.get('id')
@@ -280,10 +286,10 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
         or identifier
     )
     username = (
-        claims.get('preferred_username')
+        claims.get('name')
+        or claims.get('preferred_username')
         or claims.get('nickname')
         or claims.get('username')
-        or claims.get('name')
         or claims.get('userId')
         or identifier
     )
@@ -298,7 +304,8 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
             all_roles.extend(raw_role)
         elif isinstance(raw_role, str) and raw_role:
             all_roles.append(raw_role)
-    for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf'):
+    for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf',
+                  'position', 'department', 'identity', 'type'):
         val = claims.get(field)
         if val:
             if isinstance(val, list):
