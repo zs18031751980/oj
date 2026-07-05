@@ -663,12 +663,20 @@ class OIDCService(Injectable, IOIDCService):
                     all_roles.extend(val)
                 elif isinstance(val, str):
                     all_roles.append(val)
-        realm_access = user_data.get('realm_access')
+        reign_access = user_data.get('realm_access')
         if isinstance(realm_access, dict):
             roles = realm_access.get('roles', [])
             if isinstance(roles, list):
                 tech_roles = {'offline_access', 'uma_authorization'}
                 all_roles.extend(r for r in roles if str(r).lower() not in tech_roles)
+
+        # 兜底：遍历所有 user_data 值，找到标准角色关键词
+        known_roles = ('member', 'staff', 'manager', 'admin', 'minister', 'president', 'founder',
+                       '部长', '部员', '社员', '社长', '副社长', '副部长', '干事', '管理员', '普通用户')
+        if not all_roles:
+            for key, val in user_data.items():
+                if isinstance(val, str) and val.strip().lower() in [r.lower() for r in known_roles]:
+                    all_roles.append(val)
         role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
         return {
             'id': str(subject),

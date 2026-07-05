@@ -312,6 +312,14 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
                 all_roles.extend(val)
             elif isinstance(val, str):
                 all_roles.append(val)
+
+    # 兜底：遍历所有 claims 值，找到标准角色关键词
+    known_roles = ('member', 'staff', 'manager', 'admin', 'minister', 'president', 'founder',
+                   '部长', '部员', '社员', '社长', '副社长', '副部长', '干事', '管理员', '普通用户')
+    if not all_roles:
+        for key, val in claims.items():
+            if isinstance(val, str) and val.strip().lower() in [r.lower() for r in known_roles]:
+                all_roles.append(val)
     role = pick_highest_role(all_roles) if all_roles else 'member'
     return {
         'id': str(subject),
