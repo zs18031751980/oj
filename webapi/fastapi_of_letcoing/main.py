@@ -331,22 +331,22 @@ def healthcheck():
 @app.get('/healthz/db')
 def db_healthcheck():
     """数据库连接诊断端点"""
-    from models.db_models import get_database, User
+    from models.db_models import get_database
     db = get_database()
-    info = {
-        'db_host': db.connect_kwargs.get('host', 'unknown'),
-        'db_port': db.connect_kwargs.get('port', 'unknown'),
-        'db_name': db.database,
-    }
     try:
         if not db.is_connection_usable():
             db.connect()
         db.execute_sql('SELECT 1')
-        info['connection'] = 'ok'
-        info['user_count'] = User.select().count()
+        return {
+            'connection': 'ok',
+            'db_name': str(db.database),
+        }
     except Exception as e:
-        info['connection'] = f'error: {e}'
-    return info
+        return {
+            'connection': 'error',
+            'error': str(e),
+            'db_name': str(db.database),
+        }
 
 
 # ============================================================
