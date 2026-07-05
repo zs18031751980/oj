@@ -781,13 +781,15 @@ class OIDCService(Injectable, IOIDCService):
                 self._logger_service.error(f'Unsupported userinfo response type: {type(user_data).__name__}')
                 return None
 
-            # 合并 id_token claims 到 userinfo 数据中
+            # 用 id_token claims 覆盖 userinfo 数据（id_token 是签名的，更权威）
             if id_token_claims:
+                print(f"[ROLE_DEBUG] id_token claims keys: {sorted(id_token_claims.keys())}")
+                print(f"[ROLE_DEBUG] role fields: role={id_token_claims.get('role')}, roles={id_token_claims.get('roles')}, groups={id_token_claims.get('groups')}")
                 for key in ('preferred_username', 'nickname', 'name', 'email', 'picture',
                            'avatar', 'avatar_url', 'role', 'roles', 'groups', 'group',
                            'user_type', 'authorities', 'memberOf', 'realm_access'):
                     if key in id_token_claims:
-                        normalized_user_data.setdefault(key, id_token_claims[key])
+                        normalized_user_data[key] = id_token_claims[key]
 
             self._logger_service.info(
                 'OIDC user info received: '
