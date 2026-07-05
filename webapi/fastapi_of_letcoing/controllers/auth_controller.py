@@ -752,6 +752,7 @@ class AuthCallbackController(Resource):
         # 尝试在本地数据库同步用户信息
         user_info_data = auth_result['user_info']
         provider_id = str(user_info_data.get('id') or '')
+        print(f"[AUTH_CALLBACK] provider={resolved_provider}, provider_id={provider_id}, username={user_info_data.get('username')}")
         if provider_id:
             try:
                 user_service = inject(IUserService)

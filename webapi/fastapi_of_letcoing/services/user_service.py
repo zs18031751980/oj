@@ -329,6 +329,7 @@ class UserService(DatabaseService, Injectable):
         Returns:
              标准化的用户信息字典（不含 password_hash）
         """
+        print(f"[USER_SYNC] find_or_create_user 被调用: provider={provider}, provider_id={provider_id}")
         try:
             # ----- 查找已有用户 -----
             try:
