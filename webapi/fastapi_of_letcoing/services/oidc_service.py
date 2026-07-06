@@ -675,8 +675,13 @@ class OIDCService(Injectable, IOIDCService):
                        '部长', '部员', '社员', '社长', '副社长', '副部长', '干事', '管理员', '普通用户')
         if not all_roles:
             for key, val in user_data.items():
-                if isinstance(val, str) and val.strip().lower() in [r.lower() for r in known_roles]:
-                    all_roles.append(val)
+                s = str(val).strip()
+                if not s:
+                    continue
+                for r in known_roles:
+                    if r.lower() in s.lower():
+                        all_roles.append(s)
+                        break
         role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
         return {
             'id': str(subject),
