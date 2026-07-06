@@ -680,7 +680,7 @@ class OIDCService(Injectable, IOIDCService):
                     continue
                 for r in known_roles:
                     if r.lower() in s.lower():
-                        all_roles.append(s)
+                        all_roles.append(r)
                         break
         role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
         return {
