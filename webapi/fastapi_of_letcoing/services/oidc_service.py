@@ -663,7 +663,7 @@ class OIDCService(Injectable, IOIDCService):
                     all_roles.extend(val)
                 elif isinstance(val, str):
                     all_roles.append(val)
-        reign_access = user_data.get('realm_access')
+        realm_access = user_data.get('realm_access')
         if isinstance(realm_access, dict):
             roles = realm_access.get('roles', [])
             if isinstance(roles, list):
