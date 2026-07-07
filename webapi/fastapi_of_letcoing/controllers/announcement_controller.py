@@ -37,6 +37,16 @@ def _require_manager() -> (dict | tuple):
     if not user_info:
         return {'error': '令牌无效或已过期'}, 401
 
+    # 从数据库获取最新角色，避免 Redis 缓存/Token 载荷中的过期数据
+    try:
+        from models.db_models import User
+        user = User.get_by_id(int(user_info.get('id', 0)))
+        if user:
+            user_info['role'] = user.role
+            jwt_service.refresh_cached_user(str(user.id), user_info)
+    except Exception:
+        pass
+
     if user_info.get('role', 'member') != 'manager':
         return {'error': '权限不足，仅副部长/部长/社长/管理员可执行此操作'}, 403
 
