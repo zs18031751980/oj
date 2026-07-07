@@ -670,6 +670,10 @@ class AuthProviderPasswordLoginController(Resource):
             logger_service.error(f'Provider password login request failed: {resolved_provider}', ex)
             return {'success': False, 'error': 'provider login request failed'}, 502
 
+        # 打印完整 iOSClub 响应，找到角色信息
+        import json as _json
+        logger_service.info(f'iOSClub login response: {_json.dumps({k: v for k, v in response_data.items() if k != "data"}, ensure_ascii=False, default=str)}')
+
         # 检查上游响应是否成功
         if (
             not response.ok
@@ -690,6 +694,23 @@ class AuthProviderPasswordLoginController(Resource):
         # 从提供商返回的 JWT 令牌中提取用户信息，然后签发本地 JWT 令牌
         provider_token = str(response_data.get('data') or '')
         user_info_data = _user_info_from_provider_token(resolved_provider, identifier, provider_token)
+
+        # 同时检查 iOSClub 响应体中是否有独立 role 字段
+        for src in ('role', 'roles', 'userType', 'user_type', 'userRole'):
+            val = response_data.get(src)
+            if val and isinstance(val, str):
+                user_info_data['role'] = normalize_role(val)
+                logger_service.info(f'iOSClub response role found: {src}={val} -> {user_info_data["role"]}')
+                break
+        user_obj = response_data.get('user')
+        if isinstance(user_obj, dict):
+            for field in ('role', 'roles', 'type', 'userType', 'level'):
+                val = user_obj.get(field)
+                if val and isinstance(val, str):
+                    user_info_data['role'] = normalize_role(val)
+                    logger_service.info(f'iOSClub response user.{field}={val} -> {user_info_data["role"]}')
+                    break
+
         user_info, token_response = _issue_tokens_for_provider_user(resolved_provider, user_info_data)
 
         return {
