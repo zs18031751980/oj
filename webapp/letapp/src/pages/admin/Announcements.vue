@@ -114,6 +114,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useMessage } from 'naive-ui';
 import MarkdownIt from 'markdown-it';
 import { useAuthStore } from '../../stores/auth';
 import {
@@ -121,10 +122,12 @@ import {
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
+  ApiError,
   type AnnouncementData,
 } from '../../services/api';
 
 const authStore = useAuthStore();
+const message = useMessage();
 const isManager = computed(() => authStore.userRole === 'manager');
 
 const md = new MarkdownIt({ html: true, linkify: true });
@@ -193,7 +196,11 @@ const save = async () => {
     editingId.value = null;
     await loadList();
   } catch (e) {
-    console.error('保存失败', e);
+    if (e instanceof ApiError && e.status === 403) {
+      message.error('权限不足，仅副部长/部长/社长/管理员可执行此操作');
+    } else {
+      message.error(e instanceof Error ? e.message : '保存失败');
+    }
   }
 };
 
@@ -204,7 +211,11 @@ const remove = async (item: AnnouncementData) => {
     await deleteAnnouncement(item.id);
     await loadList();
   } catch (e) {
-    console.error('删除失败', e);
+    if (e instanceof ApiError && e.status === 403) {
+      message.error('权限不足，仅副部长/部长/社长/管理员可执行此操作');
+    } else {
+      message.error(e instanceof Error ? e.message : '删除失败');
+    }
   }
 };
 
