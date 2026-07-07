@@ -854,6 +854,20 @@ class AuthRefreshController(Resource):
 
         # 从新的访问令牌中解析用户信息
         user_info = jwt_service.verify_access_token(new_tokens.access_token)
+        if user_info:
+            # 从数据库获取最新角色，避免刷新后仍持有过期角色
+            try:
+                from models.db_models import User
+                user = User.get_by_id(int(user_info.get('id', 0)))
+                if user and user.role != user_info.get('role'):
+                    user_info['role'] = user.role
+                    # 更新 Redis 缓存并重新签发包含正确角色的令牌
+                    jwt_service.refresh_cached_user(str(user.id), user_info)
+                    new_tokens = jwt_service.generate_tokens(user_info)
+                    user_info = jwt_service.verify_access_token(new_tokens.access_token)
+            except Exception:
+                pass
+
         user_obj = UserInfo(**user_info) if user_info else None
         token_response = TokenResponse(
             access_token=new_tokens.access_token,
@@ -911,6 +925,15 @@ class AuthVerifyController(Resource):
         token = auth_header[7:]
         user_info = jwt_service.verify_access_token(token)
         if user_info:
+            # 从数据库获取最新角色，避免 Redis 缓存/Token 载荷中的过期角色
+            try:
+                from models.db_models import User
+                user = User.get_by_id(int(user_info.get('id', 0)))
+                if user and user.role != user_info.get('role'):
+                    user_info['role'] = user.role
+                    jwt_service.refresh_cached_user(str(user.id), user_info)
+            except Exception:
+                pass
             return {'valid': True, 'user_info': user_info}, 200
         return {'valid': False, 'error': 'token is invalid or expired'}, 401
 
