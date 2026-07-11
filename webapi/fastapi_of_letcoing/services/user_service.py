@@ -20,7 +20,7 @@ from peewee import DoesNotExist, IntegrityError, fn   # Peewee ORM 工具
 from services.database_service import DatabaseService  # 数据库服务基类
 from models.db_models import User                       # 用户 ORM 模型
 from core.di_container import Injectable
-from utils.role_utils import normalize_role
+from utils.role_utils import normalize_role, pick_highest_role
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 
@@ -347,8 +347,12 @@ class UserService(DatabaseService, Injectable):
                     user.email = user_info['email']
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
-                if user_info.get('role') and user.role != normalize_role(user_info['role']):
-                    user.role = normalize_role(user_info['role'])
+                if user_info.get('role'):
+                    # 收集 DB 当前角色和 Provider 传回的角色，取最高优先级（manager > staff > member）
+                    roles_to_compare = [user.role, user_info['role']]
+                    highest = pick_highest_role(roles_to_compare)
+                    if user.role != highest:
+                        user.role = highest
 
                 user.last_login = datetime.now(BEIJING_TZ)
                 user.save()

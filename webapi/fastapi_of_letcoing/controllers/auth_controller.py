@@ -695,21 +695,23 @@ class AuthProviderPasswordLoginController(Resource):
         provider_token = str(response_data.get('data') or '')
         user_info_data = _user_info_from_provider_token(resolved_provider, identifier, provider_token)
 
-        # 同时检查 iOSClub 响应体中是否有独立 role 字段
+        # 同时检查 iOSClub 响应体中是否有独立 role 字段，与 JWT 角色合并取最高
+        all_roles = [user_info_data.get('role', 'member')]
         for src in ('role', 'roles', 'userType', 'user_type', 'userRole'):
             val = response_data.get(src)
             if val and isinstance(val, str):
-                user_info_data['role'] = normalize_role(val)
-                logger_service.info(f'iOSClub response role found: {src}={val} -> {user_info_data["role"]}')
+                all_roles.append(val)
                 break
         user_obj = response_data.get('user')
         if isinstance(user_obj, dict):
             for field in ('role', 'roles', 'type', 'userType', 'level'):
                 val = user_obj.get(field)
                 if val and isinstance(val, str):
-                    user_info_data['role'] = normalize_role(val)
-                    logger_service.info(f'iOSClub response user.{field}={val} -> {user_info_data["role"]}')
+                    all_roles.append(val)
                     break
+        if len(all_roles) > 1:
+            user_info_data['role'] = pick_highest_role(all_roles)
+            logger_service.info(f'iOSClub 合并多来源角色: {all_roles} -> {user_info_data["role"]}')
 
         user_info, token_response = _issue_tokens_for_provider_user(resolved_provider, user_info_data)
 
