@@ -5,9 +5,109 @@ import { useRouter } from "vue-router";
 
 const router = useRouter();
 const terminalRef = ref<HTMLElement | null>(null);
+const particleCanvasRef = ref<HTMLCanvasElement | null>(null);
 const terminalStyle = ref<Record<string, string>>({});
 const currentLanguage = ref("cpp");
 let perspectiveFrame = 0;
+let particleFrame = 0;
+let particleResizeObserver: ResizeObserver | null = null;
+let lastParticleAt = 0;
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  size: number;
+  color: string;
+}
+
+const particles: Particle[] = [];
+const particleColors = ["#67e8f9", "#22d3ee", "#f0c75e"];
+
+const isMotionLimited = () =>
+  window.innerWidth < 1024 ||
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+  window.matchMedia("(hover: none), (pointer: coarse)").matches ||
+  (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4);
+
+const resizeParticleCanvas = () => {
+  const canvas = particleCanvasRef.value;
+  const element = terminalRef.value;
+  if (!canvas || !element) return;
+  const bounds = element.getBoundingClientRect();
+  const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+  canvas.width = Math.max(1, Math.round(bounds.width * ratio));
+  canvas.height = Math.max(1, Math.round(bounds.height * ratio));
+  canvas.style.width = `${bounds.width}px`;
+  canvas.style.height = `${bounds.height}px`;
+};
+
+const renderParticles = () => {
+  const canvas = particleCanvasRef.value;
+  const context = canvas?.getContext("2d");
+  if (!canvas || !context) {
+    particleFrame = 0;
+    return;
+  }
+
+  const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+
+  for (let index = particles.length - 1; index >= 0; index -= 1) {
+    const particle = particles[index];
+    if (!particle) continue;
+    particle.x += particle.vx;
+    particle.y += particle.vy;
+    particle.vy += 0.012;
+    particle.life -= 0.045;
+
+    if (particle.life <= 0) {
+      particles.splice(index, 1);
+      continue;
+    }
+
+    context.globalAlpha = Math.max(0, particle.life * 0.75);
+    context.fillStyle = particle.color;
+    context.fillRect(particle.x, particle.y, particle.size, particle.size);
+  }
+  context.globalAlpha = 1;
+
+  if (particles.length) {
+    particleFrame = requestAnimationFrame(renderParticles);
+  } else {
+    particleFrame = 0;
+    context.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+  }
+};
+
+const emitParticles = (event: PointerEvent) => {
+  if (isMotionLimited() || event.timeStamp - lastParticleAt < 22) return;
+  const element = terminalRef.value;
+  if (!element) return;
+  const bounds = element.getBoundingClientRect();
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top;
+  lastParticleAt = event.timeStamp;
+
+  for (let index = 0; index < 2; index += 1) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 8,
+      y: y + (Math.random() - 0.5) * 8,
+      vx: (Math.random() - 0.5) * 0.9,
+      vy: -0.25 - Math.random() * 0.55,
+      life: 0.7 + Math.random() * 0.3,
+      size: 1.2 + Math.random() * 1.8,
+      color:
+        particleColors[Math.floor(Math.random() * particleColors.length)] ??
+        "#67e8f9",
+    });
+  }
+  if (particles.length > 48) particles.splice(0, particles.length - 48);
+  if (!particleFrame) particleFrame = requestAnimationFrame(renderParticles);
+};
 
 const languages = markRaw([
   {
@@ -117,13 +217,8 @@ const features = markRaw([
 ]);
 
 const handlePointerMove = (event: PointerEvent) => {
-  if (
-    window.innerWidth < 1024 ||
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-    window.matchMedia("(hover: none), (pointer: coarse)").matches ||
-    (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)
-  )
-    return;
+  emitParticles(event);
+  if (isMotionLimited()) return;
   const element = terminalRef.value;
   if (!element) return;
   if (perspectiveFrame) cancelAnimationFrame(perspectiveFrame);
@@ -143,13 +238,32 @@ const resetPerspective = () => {
   terminalStyle.value = {};
 };
 
+const handleTerminalClick = (event: MouseEvent) => {
+  if ((event.target as HTMLElement).closest("button")) return;
+  void router.push("/playground");
+};
+
+const handleTerminalKeydown = (event: KeyboardEvent) => {
+  if (event.target !== event.currentTarget) return;
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    void router.push("/playground");
+  }
+};
+
 onMounted(() => {
+  resizeParticleCanvas();
+  particleResizeObserver = new ResizeObserver(resizeParticleCanvas);
+  if (terminalRef.value) particleResizeObserver.observe(terminalRef.value);
   terminalRef.value?.addEventListener("pointermove", handlePointerMove);
   terminalRef.value?.addEventListener("pointerleave", resetPerspective);
 });
 
 onUnmounted(() => {
   if (perspectiveFrame) cancelAnimationFrame(perspectiveFrame);
+  if (particleFrame) cancelAnimationFrame(particleFrame);
+  particleResizeObserver?.disconnect();
+  particles.length = 0;
   terminalRef.value?.removeEventListener("pointermove", handlePointerMove);
   terminalRef.value?.removeEventListener("pointerleave", resetPerspective);
 });
@@ -197,7 +311,17 @@ onUnmounted(() => {
           ref="terminalRef"
           class="terminal-stage intro intro-terminal"
           :style="terminalStyle"
+          role="link"
+          tabindex="0"
+          aria-label="进入在线编辑器"
+          @click="handleTerminalClick"
+          @keydown="handleTerminalKeydown"
         >
+          <canvas
+            ref="particleCanvasRef"
+            class="particle-canvas"
+            aria-hidden="true"
+          ></canvas>
           <div class="terminal-frame">
             <div class="terminal-toolbar">
               <div class="window-controls" aria-hidden="true">
@@ -261,7 +385,7 @@ onUnmounted(() => {
                         '--language-delay': `${2.35 + index * 0.08}s`,
                       }"
                       :aria-label="language.name"
-                      @click="selectLanguage(language)"
+                      @click.stop="selectLanguage(language)"
                     >
                       <Icon :icon="language.icon" />
                     </button>
@@ -456,6 +580,21 @@ onUnmounted(() => {
   min-width: 0;
   perspective: 1200px;
   transform-style: preserve-3d;
+  cursor: pointer;
+  outline: none;
+}
+.terminal-stage:focus-visible .terminal-frame {
+  border-color: #22d3ee;
+  box-shadow:
+    0 0 0 2px rgba(34, 211, 238, 0.2),
+    12px 14px 0 rgba(15, 23, 42, 0.07);
+}
+.particle-canvas {
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  display: block;
+  pointer-events: none;
 }
 .terminal-frame {
   position: relative;
@@ -938,6 +1077,9 @@ onUnmounted(() => {
     clip-path: inset(0 100% 0 0);
   }
   .typing-mask {
+    display: none;
+  }
+  .particle-canvas {
     display: none;
   }
   .terminal-frame,

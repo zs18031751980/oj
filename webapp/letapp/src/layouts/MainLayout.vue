@@ -420,7 +420,8 @@ watch(menuVisible, toggleMenuLock);
 .sidebar-toggle {
   display: flex;
   align-items: center;
-  border-radius: 1rem;
+  min-height: 2.75rem;
+  border-radius: 0.875rem;
   color: #475569;
   transition: all 0.15s ease;
 }
@@ -439,6 +440,16 @@ watch(menuVisible, toggleMenuLock);
 .sidebar-link {
   @apply relative flex h-13 items-center gap-3 overflow-hidden border border-transparent text-sm font-bold text-slate-700 transition dark:text-slate-300;
   background: transparent;
+  border-radius: 0.875rem;
+}
+
+.app-sidebar {
+  border-radius: 0 1.5rem 1.5rem 0;
+  box-shadow: 8px 0 28px rgba(15, 23, 42, 0.06);
+}
+
+.dark .app-sidebar {
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.18);
 }
 
 .sidebar-link::after {
