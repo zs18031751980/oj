@@ -600,6 +600,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   border: 1px solid #8393a1;
+  border-radius: 1.5rem;
   background: #111820;
   box-shadow: 12px 14px 0 rgba(15, 23, 42, 0.07);
   transform: rotateX(var(--rotate-x, 0)) rotateY(var(--rotate-y, 0));
@@ -611,6 +612,7 @@ onUnmounted(() => {
   z-index: 4;
   inset: 0;
   border: 1px solid rgba(103, 232, 249, 0.2);
+  border-radius: inherit;
   pointer-events: none;
 }
 .terminal-toolbar {
