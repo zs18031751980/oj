@@ -5,9 +5,12 @@
     <n-layout has-sider class="min-h-screen bg-transparent">
       <aside
         class="app-sidebar fixed left-0 top-0 z-50 hidden h-screen flex-col border-r border-slate-200 bg-slate-100/95 backdrop-blur-xl transition-all duration-300 dark:border-slate-700/50 dark:bg-slate-950/95 md:flex"
-        :class="sidebarExpanded ? 'w-72' : 'w-24'"
+        :style="{ width: `${desktopSidebarWidth}px` }"
       >
-        <div class="flex h-20 items-center justify-between gap-3 px-5">
+        <div
+          class="flex h-20 items-center justify-between gap-3"
+          :class="sidebarExpanded ? 'px-5' : 'px-3.5'"
+        >
           <a
             href="https://www.xauat.site/"
             target="_blank"
@@ -295,6 +298,7 @@ const navItems = markRaw([
 
 const DESKTOP_EXPANDED_WIDTH = 288;
 const DESKTOP_COLLAPSED_WIDTH = 96;
+const PLAYGROUND_COLLAPSED_WIDTH = 72;
 
 const router = useRouter();
 const themeStore = useThemeStore();
@@ -306,9 +310,16 @@ const sidebarExpanded = ref(true);
 const menuVisible = ref(false);
 const isDesktop = ref(false);
 const headerCollapsed = ref(false);
+const isPlaygroundRoute = computed(
+  () => router.currentRoute.value.path === "/playground",
+);
 
 const desktopSidebarWidth = computed(() =>
-  sidebarExpanded.value ? DESKTOP_EXPANDED_WIDTH : DESKTOP_COLLAPSED_WIDTH,
+  sidebarExpanded.value
+    ? DESKTOP_EXPANDED_WIDTH
+    : isPlaygroundRoute.value
+      ? PLAYGROUND_COLLAPSED_WIDTH
+      : DESKTOP_COLLAPSED_WIDTH,
 );
 
 const headerPaddingStyle = computed(() =>
@@ -345,7 +356,11 @@ const contentPaddingStyle = computed(() => ({
 }));
 
 const updateViewportFlags = () => {
+  const wasDesktop = isDesktop.value;
   isDesktop.value = window.innerWidth >= 768;
+  if (!wasDesktop && isDesktop.value && isPlaygroundRoute.value) {
+    sidebarExpanded.value = false;
+  }
   if (isDesktop.value) closeMenu();
 };
 
@@ -412,6 +427,18 @@ onUnmounted(() => {
 });
 
 watch(menuVisible, toggleMenuLock);
+watch(
+  () => router.currentRoute.value.path,
+  (path, previousPath) => {
+    if (
+      path === "/playground" &&
+      previousPath !== "/playground" &&
+      isDesktop.value
+    ) {
+      sidebarExpanded.value = false;
+    }
+  },
+);
 </script>
 
 <style scoped>

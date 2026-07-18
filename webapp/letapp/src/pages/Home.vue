@@ -340,6 +340,7 @@ onUnmounted(() => {
                   <span><Icon icon="material-symbols:code" />Sample Code</span>
                 </div>
                 <div class="editor-body">
+                  <div class="active-line" aria-hidden="true"></div>
                   <div class="line-numbers" aria-hidden="true">
                     <span v-for="line in 7" :key="line">{{ line }}</span>
                   </div>
@@ -368,31 +369,31 @@ onUnmounted(() => {
                   </div>
                   <div class="preview-output">Hello, Let Coding!</div>
                 </section>
-
-                <section class="language-panel">
-                  <div class="panel-heading">
-                    <span>支持语言</span>
-                  </div>
-                  <div class="language-grid">
-                    <button
-                      v-for="(language, index) in languages"
-                      :key="language.value"
-                      type="button"
-                      class="language-button"
-                      :class="{ active: currentLanguage === language.value }"
-                      :style="{
-                        '--language-color': language.color,
-                        '--language-delay': `${2.35 + index * 0.08}s`,
-                      }"
-                      :aria-label="language.name"
-                      @click.stop="selectLanguage(language)"
-                    >
-                      <Icon :icon="language.icon" />
-                    </button>
-                  </div>
-                </section>
               </aside>
             </div>
+
+            <section class="language-panel">
+              <div class="panel-heading">
+                <span>支持语言</span>
+              </div>
+              <div class="language-grid">
+                <button
+                  v-for="(language, index) in languages"
+                  :key="language.value"
+                  type="button"
+                  class="language-button"
+                  :class="{ active: currentLanguage === language.value }"
+                  :style="{
+                    '--language-color': language.color,
+                    '--language-delay': `${0.78 + index * 0.04}s`,
+                  }"
+                  :aria-label="language.name"
+                  @click.stop="selectLanguage(language)"
+                >
+                  <Icon :icon="language.icon" />
+                </button>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -568,6 +569,7 @@ onUnmounted(() => {
 }
 .hero-primary {
   border-color: #0891b2;
+  border-radius: 0.875rem;
   background: #0e7490;
   color: white;
 }
@@ -577,17 +579,28 @@ onUnmounted(() => {
 }
 .terminal-stage {
   position: relative;
+  isolation: isolate;
   min-width: 0;
   perspective: 1200px;
   transform-style: preserve-3d;
   cursor: pointer;
   outline: none;
 }
+.terminal-stage::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border: 1px solid #52616d;
+  border-radius: 1.5rem;
+  transform: translate(10px, 10px);
+  pointer-events: none;
+}
 .terminal-stage:focus-visible .terminal-frame {
   border-color: #22d3ee;
   box-shadow:
     0 0 0 2px rgba(34, 211, 238, 0.2),
-    12px 14px 0 rgba(15, 23, 42, 0.07);
+    0 24px 48px rgba(2, 8, 12, 0.28);
 }
 .particle-canvas {
   position: absolute;
@@ -602,7 +615,7 @@ onUnmounted(() => {
   border: 1px solid #8393a1;
   border-radius: 1.5rem;
   background: #111820;
-  box-shadow: 12px 14px 0 rgba(15, 23, 42, 0.07);
+  box-shadow: 0 24px 48px rgba(2, 8, 12, 0.24);
   transform: rotateX(var(--rotate-x, 0)) rotateY(var(--rotate-y, 0));
   transition: transform 0.18s ease-out;
 }
@@ -611,8 +624,19 @@ onUnmounted(() => {
   position: absolute;
   z-index: 4;
   inset: 0;
-  border: 1px solid rgba(103, 232, 249, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: inherit;
+  pointer-events: none;
+}
+.terminal-frame::after {
+  content: "";
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 14%;
+  width: 26%;
+  height: 2px;
+  background: #22d3ee;
   pointer-events: none;
 }
 .terminal-toolbar {
@@ -652,8 +676,8 @@ onUnmounted(() => {
 }
 .terminal-workspace {
   display: grid;
-  min-height: 28.5rem;
-  grid-template-columns: minmax(0, 1.45fr) minmax(12.5rem, 0.75fr);
+  min-height: 24.5rem;
+  grid-template-columns: minmax(0, 68fr) minmax(11.5rem, 32fr);
 }
 .code-panel {
   min-width: 0;
@@ -661,8 +685,7 @@ onUnmounted(() => {
   background: #0b1117;
 }
 .terminal-side {
-  display: grid;
-  grid-template-rows: 1fr auto;
+  display: block;
   min-width: 0;
 }
 .panel-heading {
@@ -715,13 +738,32 @@ onUnmounted(() => {
 .editor-body code {
   white-space: pre;
 }
+.active-line {
+  position: absolute;
+  z-index: 0;
+  top: calc(1.2rem + 3 * 1.72rem);
+  right: 0;
+  left: 2.4rem;
+  height: 1.72rem;
+  border-left: 2px solid #22d3ee;
+  background: rgba(34, 211, 238, 0.065);
+  opacity: 0;
+  transform: scaleX(0.92);
+  transform-origin: left;
+  animation: active-line-in 0.22s ease-out 0.95s 1 forwards;
+}
+.line-numbers,
+.editor-body pre {
+  position: relative;
+  z-index: 1;
+}
 .typing-mask {
   position: absolute;
   z-index: 2;
   inset: 0 0 0 2.4rem;
   background: #0b1117;
-  transform-origin: right;
-  animation: reveal-code 1s steps(24, end) 1.05s 1 both;
+  transform-origin: bottom;
+  animation: reveal-code 0.72s steps(7, end) 0.82s 1 both;
 }
 .typing-mask::after {
   content: "";
@@ -731,7 +773,7 @@ onUnmounted(() => {
   width: 1px;
   height: 1.1rem;
   background: #67e8f9;
-  animation: caret-blink 0.45s step-end 1.05s 3;
+  animation: caret-blink 0.24s step-end 0.82s 3;
 }
 :deep(.code-directive),
 :deep(.code-type) {
@@ -754,18 +796,32 @@ onUnmounted(() => {
   color: #f09da8;
 }
 .result-panel {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
   background: #131c24;
 }
 .judge-timeline {
+  position: relative;
+  display: grid;
+  gap: 0.15rem;
   padding: 1rem;
+}
+.judge-timeline::before {
+  content: "";
+  position: absolute;
+  top: 1.55rem;
+  bottom: 1.55rem;
+  left: 1.19rem;
+  width: 1px;
+  background: #3c4b56;
 }
 .judge-status {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   min-height: 2.1rem;
-  border-left: 1px solid #34414c;
-  padding-left: 0.8rem;
+  padding-left: 0;
   color: #687986;
   font: 700 0.7rem/1 monospace;
   opacity: 0;
@@ -775,49 +831,60 @@ onUnmounted(() => {
 .judge-status span {
   width: 0.4rem;
   height: 0.4rem;
-  margin-left: -0.99rem;
   border: 1px solid #526571;
   background: #17222b;
+  position: relative;
+  z-index: 1;
 }
 .status-compiling {
-  animation-delay: 1.8s;
+  animation-delay: 1.55s;
 }
 .status-running {
-  animation-delay: 2.05s;
+  animation-delay: 1.8s;
 }
 .status-accepted {
   color: #8ce8ae;
-  animation-delay: 2.3s;
+  animation-delay: 2.05s;
 }
 .status-accepted svg {
+  position: relative;
+  z-index: 1;
   width: 0.85rem;
   height: 0.85rem;
-  margin-left: -0.22rem;
+  background: #131c24;
 }
 .preview-output {
-  margin: 0 1rem 1rem;
+  margin: auto 1rem 1rem;
   border: 1px solid #2d3b46;
   background: #0b1117;
   padding: 0.8rem;
   color: #8ce8ae;
   font: 0.72rem/1.4 monospace;
   opacity: 0;
-  animation: status-in 0.3s ease 2.42s forwards;
+  animation: status-in 0.22s ease 2.18s forwards;
 }
 .language-panel {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
   border-top: 1px solid #34414c;
   background: #101820;
 }
+.language-panel > .panel-heading {
+  min-height: 3.65rem;
+  border-right: 1px solid #2d3943;
+  border-bottom: 0;
+}
 .language-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 1px;
   background: #2d3943;
 }
 .language-button {
   display: grid;
-  aspect-ratio: 1;
+  position: relative;
   min-width: 0;
+  min-height: 3.65rem;
   place-items: center;
   border: 0;
   background: #151f27;
@@ -826,8 +893,9 @@ onUnmounted(() => {
   transition:
     background 0.2s ease,
     filter 0.2s ease,
-    opacity 0.2s ease;
-  animation: language-on 0.28s ease var(--language-delay) forwards;
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  animation: language-on 0.18s ease var(--language-delay) forwards;
 }
 .language-button:hover,
 .language-button.active {
@@ -836,7 +904,8 @@ onUnmounted(() => {
   opacity: 1;
 }
 .language-button.active {
-  box-shadow: inset 0 -2px var(--language-color);
+  transform: translateY(-2px);
+  box-shadow: inset 0 -2px #22d3ee;
 }
 .language-button svg {
   width: 1.45rem;
@@ -937,6 +1006,101 @@ onUnmounted(() => {
   flex-shrink: 0;
   margin-top: 0;
 }
+html:not(.dark) .terminal-stage::before {
+  border-color: #a7b4be;
+}
+html:not(.dark) .terminal-frame {
+  border-color: #9eacb7;
+  background: #eef3f6;
+  box-shadow: 0 24px 48px rgba(51, 65, 85, 0.16);
+}
+html:not(.dark) .terminal-frame::before {
+  border-color: rgba(71, 85, 105, 0.16);
+}
+html:not(.dark) .terminal-toolbar {
+  border-color: #bac6cf;
+  background: #e3e9ed;
+}
+html:not(.dark) .window-controls span {
+  border-color: #9aa9b4;
+  background: #c5d0d7;
+}
+html:not(.dark) .window-controls span:nth-child(2) {
+  border-color: #b78b2e;
+  background: #d3a63f;
+}
+html:not(.dark) .file-path {
+  color: #425466;
+}
+html:not(.dark) .toolbar-icon,
+html:not(.dark) .panel-heading svg {
+  color: #087c93;
+}
+html:not(.dark) .code-panel {
+  border-color: #bdc8d0;
+  background: #f5f7f9;
+}
+html:not(.dark) .panel-heading {
+  border-color: #c4ced5;
+  color: #526371;
+}
+html:not(.dark) .line-numbers {
+  color: #8b9aa6;
+}
+html:not(.dark) .editor-body pre {
+  color: #1e293b;
+}
+html:not(.dark) .active-line {
+  border-color: #0891b2;
+  background: rgba(8, 145, 178, 0.08);
+}
+html:not(.dark) .typing-mask {
+  background: #f5f7f9;
+}
+html:not(.dark) .typing-mask::after {
+  background: #0891b2;
+}
+html:not(.dark) .result-panel {
+  background: #eaf0f3;
+}
+html:not(.dark) .judge-timeline::before {
+  background: #b6c2ca;
+}
+html:not(.dark) .judge-status {
+  color: #61717d;
+}
+html:not(.dark) .judge-status span {
+  border-color: #93a4af;
+  background: #edf2f5;
+}
+html:not(.dark) .status-accepted {
+  color: #15803d;
+}
+html:not(.dark) .status-accepted svg {
+  background: #eaf0f3;
+}
+html:not(.dark) .preview-output {
+  border-color: #bdc8d0;
+  background: #f8fafc;
+  color: #15803d;
+}
+html:not(.dark) .language-panel {
+  border-color: #b8c4cc;
+  background: #e3e9ed;
+}
+html:not(.dark) .language-panel > .panel-heading {
+  border-color: #bdc8d0;
+}
+html:not(.dark) .language-grid {
+  background: #c3cdd4;
+}
+html:not(.dark) .language-button {
+  background: #f1f5f7;
+}
+html:not(.dark) .language-button:hover,
+html:not(.dark) .language-button.active {
+  background: #e5f5f7;
+}
 .dark .home-shell {
   background: #070c11;
   color: #e6edf2;
@@ -1028,8 +1192,7 @@ onUnmounted(() => {
     border-bottom: 1px solid #34414c;
   }
   .terminal-side {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
+    display: block;
   }
   .editor-body pre {
     font-size: 0.69rem;
@@ -1037,6 +1200,10 @@ onUnmounted(() => {
   }
   .line-numbers {
     line-height: 1.55rem;
+  }
+  .active-line {
+    top: calc(1.2rem + 3 * 1.55rem);
+    height: 1.55rem;
   }
   .result-panel {
     min-height: 13.5rem;
@@ -1046,6 +1213,24 @@ onUnmounted(() => {
   }
   .terminal-frame {
     box-shadow: 8px 10px 0 rgba(15, 23, 42, 0.1);
+  }
+  .terminal-stage::before {
+    transform: translate(6px, 6px);
+  }
+  .language-panel {
+    grid-template-columns: 1fr;
+  }
+  .language-panel > .panel-heading {
+    min-height: 2.35rem;
+    border-right: 0;
+    border-bottom: 1px solid #2d3943;
+  }
+  .language-button {
+    min-height: 2.8rem;
+  }
+  .language-button svg {
+    width: 1.15rem;
+    height: 1.15rem;
   }
   .feature-section,
   .cta-section {
@@ -1070,6 +1255,7 @@ onUnmounted(() => {
   .title-accent::after,
   .typing-mask,
   .typing-mask::after,
+  .active-line,
   .judge-status,
   .preview-output,
   .language-button {
@@ -1117,10 +1303,16 @@ onUnmounted(() => {
 }
 @keyframes reveal-code {
   from {
-    transform: translateX(0);
+    transform: translateY(0);
   }
   to {
-    transform: translateX(100%);
+    transform: translateY(100%);
+  }
+}
+@keyframes active-line-in {
+  to {
+    opacity: 1;
+    transform: scaleX(1);
   }
 }
 @keyframes caret-blink {
@@ -1139,5 +1331,40 @@ onUnmounted(() => {
     filter: grayscale(0);
     opacity: 0.88;
   }
+}
+</style>
+
+<style>
+html:not(.dark) .home-shell .editor-body code {
+  color: #0f172a;
+}
+
+html:not(.dark) .home-shell .code-directive,
+html:not(.dark) .home-shell .code-type {
+  color: #00677f;
+  font-weight: 600;
+}
+
+html:not(.dark) .home-shell .code-muted {
+  color: #475569;
+}
+
+html:not(.dark) .home-shell .code-function,
+html:not(.dark) .home-shell .code-number {
+  color: #854d0e;
+  font-weight: 600;
+}
+
+html:not(.dark) .home-shell .code-object {
+  color: #075985;
+}
+
+html:not(.dark) .home-shell .code-string {
+  color: #166534;
+}
+
+html:not(.dark) .home-shell .code-keyword {
+  color: #9f1239;
+  font-weight: 600;
 }
 </style>
