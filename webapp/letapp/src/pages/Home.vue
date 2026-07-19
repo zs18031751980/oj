@@ -193,29 +193,6 @@ const selectLanguage = (lang: { value: string }) => {
   currentLanguage.value = lang.value;
 };
 
-const features = markRaw([
-  {
-    icon: "material-symbols:flash-on",
-    title: "打开即写",
-    description: "进入页面就能练代码，适合课堂演示、算法练习和快速验证想法。",
-  },
-  {
-    icon: "material-symbols:terminal",
-    title: "输出即时可见",
-    description: "运行结果和报错集中展示，调试时不用反复切换窗口。",
-  },
-  {
-    icon: "material-symbols:school",
-    title: "学习资源联动",
-    description: "从学习路径、推荐课程到编辑器练习，一条链路直接贯通。",
-  },
-  {
-    icon: "material-symbols:quiz",
-    title: "题库实战",
-    description: "联系算法与数据结构题目，在线提交即时评测，持续挑战提升。",
-  },
-]);
-
 const handlePointerMove = (event: PointerEvent) => {
   emitParticles(event);
   if (isMotionLimited()) return;
@@ -284,8 +261,13 @@ onUnmounted(() => {
             <span class="title-line intro intro-title-one">让写代码</span>
             <span
               class="title-line title-accent intro intro-title-two"
-              data-text="更直接、更顺手"
-              >更直接、更顺手</span
+              data-text="更直接"
+              >更直接</span
+            >
+            <span
+              class="title-line title-accent intro intro-title-three"
+              data-text="更顺手"
+              >更顺手</span
             >
           </h1>
 
@@ -399,43 +381,6 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <section v-once class="feature-section">
-      <div class="feature-grid">
-        <article
-          v-for="feature in features"
-          :key="feature.title"
-          class="feature-card"
-        >
-          <div class="feature-icon"><Icon :icon="feature.icon" /></div>
-          <h2>{{ feature.title }}</h2>
-          <p>{{ feature.description }}</p>
-        </article>
-      </div>
-    </section>
-
-    <section v-once class="cta-section">
-      <div class="cta-panel">
-        <div class="cta-copy">
-          <p>Ready To Start</p>
-          <h2>点击右侧按钮，开始代码编写！</h2>
-          <span>学习资源目前正在补充中……</span>
-        </div>
-        <div class="hero-actions">
-          <button
-            class="hero-button hero-primary"
-            @click="router.push('/playground')"
-          >
-            <span>现在开始写代码</span>
-          </button>
-          <button
-            class="hero-button hero-secondary"
-            @click="router.push('/learn')"
-          >
-            <span>查看学习资源</span>
-          </button>
-        </div>
-      </div>
-    </section>
   </main>
 </template>
 
@@ -497,7 +442,7 @@ onUnmounted(() => {
   margin: 1.5rem 0 0;
   font-size: clamp(2.8rem, 7vw, 6.4rem);
   font-weight: 900;
-  line-height: 0.98;
+  line-height: 1.08;
   letter-spacing: 0;
 }
 .title-line {
@@ -506,7 +451,7 @@ onUnmounted(() => {
 .title-accent {
   position: relative;
   width: fit-content;
-  margin-top: 0.25rem;
+  margin-top: 0.4rem;
   color: #0891b2;
 }
 .title-accent::after {
@@ -534,6 +479,7 @@ onUnmounted(() => {
   gap: 0.55rem;
   overflow: hidden;
   border: 1px solid #9aa9b6;
+  border-radius: 1.25rem;
   padding: 0.75rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 800;
@@ -569,7 +515,6 @@ onUnmounted(() => {
 }
 .hero-primary {
   border-color: #0891b2;
-  border-radius: 0.875rem;
   background: #0e7490;
   color: white;
 }
@@ -925,86 +870,14 @@ onUnmounted(() => {
 .intro-title-two {
   animation-delay: 0.46s;
 }
+.intro-title-three {
+  animation-delay: 0.53s;
+}
 .intro-actions {
   animation-delay: 0.6s;
 }
 .intro-terminal {
   animation-delay: 0.7s;
-}
-.feature-section,
-.cta-section {
-  width: min(100% - 2rem, 82rem);
-  margin: auto;
-}
-.feature-section {
-  padding: 4rem 0 2rem;
-}
-.feature-grid {
-  display: grid;
-  gap: 1px;
-  border: 1px solid #c3cdd5;
-  background: #c3cdd5;
-}
-.feature-card {
-  position: relative;
-  min-width: 0;
-  background: #f8fafc;
-  padding: 1.5rem;
-  transition: background 0.25s ease;
-}
-.feature-card:hover {
-  background: #eefbfc;
-}
-.feature-icon {
-  display: grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  border: 1px solid #9fb0bd;
-  color: #0e7490;
-}
-.feature-icon svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-.feature-card h2 {
-  margin: 1.2rem 0 0.55rem;
-  font-size: 1rem;
-}
-.feature-card p {
-  margin: 0;
-  color: #5b6873;
-  font-size: 0.8rem;
-  line-height: 1.75;
-}
-.cta-section {
-  padding: 2rem 0 5rem;
-}
-.cta-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  border-block: 1px solid #b9c5ce;
-  padding: 2rem 0;
-}
-.cta-copy p {
-  margin: 0;
-  color: #0e7490;
-  font: 800 0.68rem/1 monospace;
-  text-transform: uppercase;
-}
-.cta-copy h2 {
-  margin: 0.6rem 0;
-  font-size: clamp(1.45rem, 3vw, 2.25rem);
-}
-.cta-copy span {
-  color: #667580;
-  font-size: 0.85rem;
-}
-.cta-panel .hero-actions {
-  flex-shrink: 0;
-  margin-top: 0;
 }
 html:not(.dark) .terminal-stage::before {
   border-color: #a7b4be;
@@ -1125,33 +998,9 @@ html:not(.dark) .language-button.active {
   background: rgba(15, 23, 31, 0.8);
   color: #d2dce3;
 }
-.dark .feature-grid {
-  border-color: #293741;
-  background: #293741;
-}
-.dark .feature-card {
-  background: #0e161c;
-}
-.dark .feature-card:hover {
-  background: #111f26;
-}
-.dark .feature-card p,
-.dark .cta-copy span {
-  color: #98a8b4;
-}
-.dark .feature-icon {
-  border-color: #3b505c;
-  color: #67e8f9;
-}
-.dark .cta-panel {
-  border-color: #34434e;
-}
 @media (min-width: 1024px) {
   .hero-layout {
     grid-template-columns: minmax(22rem, 0.82fr) minmax(31rem, 1.18fr);
-  }
-  .feature-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 @media (max-width: 1023px) {
@@ -1161,9 +1010,6 @@ html:not(.dark) .language-button.active {
   }
   .terminal-stage {
     width: min(100%, 44rem);
-  }
-  .feature-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 }
 @media (max-width: 640px) {
@@ -1231,20 +1077,6 @@ html:not(.dark) .language-button.active {
   .language-button svg {
     width: 1.15rem;
     height: 1.15rem;
-  }
-  .feature-section,
-  .cta-section {
-    width: min(100% - 1.25rem, 82rem);
-  }
-  .feature-grid {
-    grid-template-columns: 1fr;
-  }
-  .cta-panel {
-    align-items: stretch;
-    flex-direction: column;
-  }
-  .cta-panel .hero-actions {
-    width: 100%;
   }
   .hero-coordinate {
     display: none;
