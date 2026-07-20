@@ -261,13 +261,8 @@ onUnmounted(() => {
             <span class="title-line intro intro-title-one">让写代码</span>
             <span
               class="title-line title-accent intro intro-title-two"
-              data-text="更直接"
-              >更直接</span
-            >
-            <span
-              class="title-line title-accent intro intro-title-three"
-              data-text="更顺手"
-              >更顺手</span
+              data-text="更直接、更顺手"
+              >更直接 更顺手</span
             >
           </h1>
 
@@ -869,9 +864,6 @@ onUnmounted(() => {
 }
 .intro-title-two {
   animation-delay: 0.46s;
-}
-.intro-title-three {
-  animation-delay: 0.53s;
 }
 .intro-actions {
   animation-delay: 0.6s;
