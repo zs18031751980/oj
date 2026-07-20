@@ -44,6 +44,7 @@ const language = ref('cpp');
 const code = ref('');
 const isSubmitting = ref(false);
 const submitResult = ref<string | null>(null);
+const resultPanelOpen = ref(true);
 const activeTab = ref<'desc' | 'testcases'>('desc');
 
 interface TestResult {
@@ -216,6 +217,7 @@ const submitCode = async () => {
     pollTimer.value = null;
   }
   isSubmitting.value = true;
+  resultPanelOpen.value = true;
   submitResult.value = null;
   testResults.value = [];
   failedTestCaseIndex.value = null;
@@ -491,11 +493,33 @@ onUnmounted(() => {
           />
         </div>
 
-        <div v-if="submitResult" class="problem-result-pane w-96 shrink-0">
+        <button
+          v-if="submitResult && !resultPanelOpen"
+          class="result-panel-reopen"
+          type="button"
+          title="展开判题结果"
+          aria-label="展开判题结果"
+          @click="resultPanelOpen = true"
+        >
+          <Icon icon="material-symbols:chevron-left" class="h-5 w-5" />
+        </button>
+
+        <div v-if="submitResult && resultPanelOpen" class="problem-result-pane w-96 shrink-0">
           <div class="problem-result h-full border-l border-slate-200 dark:border-slate-800 bg-white/85 backdrop-blur-2xl dark:bg-slate-900/85 flex flex-col">
           <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
-            <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="resultClassMap[submitResult] || 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
+            <div class="flex items-center gap-2">
+              <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="resultClassMap[submitResult] || 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
+              <button
+                class="result-panel-toggle"
+                type="button"
+                title="收起判题结果"
+                aria-label="收起判题结果"
+                @click="resultPanelOpen = false"
+              >
+                <Icon icon="material-symbols:chevron-right" class="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           <div v-if="submitResult === 'CE'" class="flex flex-col flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -814,6 +838,42 @@ onUnmounted(() => {
   background: #f7f9fa;
 }
 
+.result-panel-toggle,
+.result-panel-reopen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: #64748b;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.result-panel-toggle {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  background: transparent;
+}
+
+.result-panel-toggle:hover {
+  background: #dce4e8;
+  color: #0e7490;
+}
+
+.result-panel-reopen {
+  width: 2.5rem;
+  flex: 0 0 2.5rem;
+  align-self: stretch;
+  border-left: 1px solid #c6cfd5;
+  background: #eef2f4;
+}
+
+.result-panel-reopen:hover {
+  background: #dfe8ec;
+  color: #0e7490;
+}
+
 .problem-result {
   border-color: #aebac2 !important;
   background: #f7f9fa !important;
@@ -901,6 +961,22 @@ html.dark .problem-result .collapse-header {
   background: #20282e;
 }
 
+html.dark .result-panel-toggle,
+html.dark .result-panel-reopen {
+  color: #96a5af;
+}
+
+html.dark .result-panel-toggle:hover,
+html.dark .result-panel-reopen:hover {
+  background: #2b353d;
+  color: #67e8f9;
+}
+
+html.dark .result-panel-reopen {
+  border-color: #39454e;
+  background: #1d252b;
+}
+
 @media (max-width: 1023px) {
   .problem-page {
     padding: 0;
@@ -935,6 +1011,11 @@ html.dark .problem-result .collapse-header {
     width: 100%;
     flex: 0 0 auto;
     min-height: 18rem;
+  }
+
+  .result-panel-reopen {
+    width: 2.25rem;
+    flex-basis: 2.25rem;
   }
 }
 </style>

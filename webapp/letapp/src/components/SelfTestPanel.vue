@@ -356,52 +356,64 @@ const onDragStart = (e: MouseEvent) => {
 
 <style>
 html.dark .self-test-panel {
-  background: #0f172a !important;
-  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3) !important;
+  background: #14191e !important;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.28) !important;
 }
 html.dark .drag-handle {
-  background: #1e293b !important;
-  border-color: #334155 !important;
+  background: #20272d !important;
+  border-color: #364149 !important;
 }
 html.dark .drag-handle:hover,
 html.dark .drag-active {
-  background: #334155 !important;
+  background: #2a343b !important;
+}
+html.dark .drag-icon {
+  color: #84939d !important;
+}
+html.dark .panel-header {
+  background: #171d22 !important;
+  border-bottom: 1px solid #303a42;
 }
 html.dark .run-btn {
-  background: #0d9488 !important;
+  background: #0f8f86 !important;
 }
 html.dark .run-btn:hover:not(:disabled) {
-  background: #14b8a6 !important;
+  background: #11a69a !important;
 }
 html.dark .collapse-btn:hover {
-  background: #1e293b !important;
+  background: #2a343b !important;
 }
 html.dark .plain-textarea {
-  background-color: #1e293b !important;
-  color: #e2e8f0 !important;
+  background-color: #181e23 !important;
+  color: #dce3e7 !important;
+}
+html.dark .plain-textarea::placeholder {
+  color: #8d9aa3 !important;
+  opacity: 1;
 }
 html.dark .surface-panel {
-  border-color: #334155 !important;
+  background: #181e23 !important;
+  border-color: #39444c !important;
 }
 html.dark .collapse-header {
-  color: #f8fafc !important;
-  background: #1e293b !important;
-  border-color: #334155 !important;
+  color: #e7ecef !important;
+  background: #222a31 !important;
+  border-color: #39444c !important;
 }
 html.dark .output-box {
-  background: linear-gradient(to bottom, #020617 95%, #0f172a 95%, #0f172a 100%) !important;
-  color: #6ee7b7 !important;
+  background: #181e23 !important;
+  color: #75d5b0 !important;
 }
 html.dark .output-status {
-  background: #0f172a !important;
+  background: #20272d !important;
 }
 html.dark .status-divider {
-  border-color: #475569 !important;
+  border-color: #46525b !important;
 }
 html.dark .placeholder-copy {
-  color: #64748b !important;
+  color: #8d9aa3 !important;
 }
 html.dark .divider-visible {
-  background: #475569 !important;
+  background: #39444c !important;
 }
 </style>
