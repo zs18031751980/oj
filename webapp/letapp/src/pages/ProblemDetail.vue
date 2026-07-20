@@ -404,10 +404,10 @@ onUnmounted(() => {
       <NButton class="mt-4" @click="router.push('/problems')">返回题库</NButton>
     </div>
   </div>
-  <div v-else class="flex min-h-[calc(100vh-var(--header-h,5rem))] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-    <div class="flex flex-1 flex-col lg:flex-row relative">
-      <div class="relative flex flex-col border-r border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
-        <div class="flex items-center gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+  <div v-else class="problem-page flex min-h-[calc(100vh-var(--header-h,5rem))] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+    <div class="problem-workbench flex flex-1 flex-col lg:flex-row relative">
+      <div class="problem-sidebar relative flex flex-col border-r border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
+        <div class="problem-sidebar-header flex items-center gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <button class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" @click="router.push('/problems')">
             <Icon icon="material-symbols:arrow-back" class="h-3.5 w-3.5" />返回
           </button>
@@ -415,12 +415,12 @@ onUnmounted(() => {
           <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
         </div>
 
-        <div class="flex gap-1 border-b border-slate-100 px-5 dark:border-slate-800">
+        <div class="problem-tabs flex gap-1 border-b border-slate-100 px-5 dark:border-slate-800">
           <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'desc' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'desc'">题目</button>
           <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'testcases' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'testcases'">测试用例 ({{ problem.testCases.length }})</button>
         </div>
 
-        <div v-show="activeTab === 'desc'" class="px-5 py-5">
+        <div v-show="activeTab === 'desc'" class="problem-tab-content px-5 py-5">
           <div class="mb-6 flex flex-wrap gap-6 text-sm text-slate-500 dark:text-slate-400">
             <span>时间限制：{{ problem.timeLimit }}ms</span>
             <span>内存限制：{{ problem.memoryLimit }}MB</span>
@@ -451,7 +451,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div v-show="activeTab === 'testcases'" class="px-5 py-5">
+        <div v-show="activeTab === 'testcases'" class="problem-tab-content px-5 py-5">
           <div class="flex flex-col items-center justify-center py-16 text-center">
             <Icon icon="material-symbols:lock-outline" class="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
             <p class="text-sm font-bold text-slate-500 dark:text-slate-400">测试数据已隐藏</p>
@@ -460,9 +460,9 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="flex flex-1 min-w-0">
-        <div class="relative flex flex-col flex-1 min-w-0">
-          <div class="flex items-center justify-between border-b border-slate-200 bg-white/85 px-5 py-3 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85">
+      <div class="problem-editor-layout flex flex-1 min-w-0">
+        <div class="problem-editor-pane relative flex flex-col flex-1 min-w-0">
+          <div class="problem-topbar flex items-center justify-between border-b border-slate-200 bg-white/85 px-5 py-3 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85">
             <div class="flex items-center gap-2">
               <button class="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" @click="leftPanelOpen = !leftPanelOpen">
                 <Icon icon="material-symbols:menu" class="h-5 w-5" />
@@ -491,8 +491,8 @@ onUnmounted(() => {
           />
         </div>
 
-        <div class="w-96 shrink-0">
-          <div v-if="submitResult" class="h-full border-l border-slate-200 dark:border-slate-800 bg-white/85 backdrop-blur-2xl dark:bg-slate-900/85 flex flex-col">
+        <div v-if="submitResult" class="problem-result-pane w-96 shrink-0">
+          <div class="problem-result h-full border-l border-slate-200 dark:border-slate-800 bg-white/85 backdrop-blur-2xl dark:bg-slate-900/85 flex flex-col">
           <div class="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
             <span class="text-sm font-black text-slate-800 dark:text-slate-100">判题结果</span>
             <span class="rounded-full px-3 py-1 text-xs font-bold tracking-wider" :class="resultClassMap[submitResult] || 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ submitResult === 'AC' ? '已通过' : submitResult === 'CE' ? '编译错误' : 'WRONG ANSWER' }}</span>
@@ -686,5 +686,348 @@ onUnmounted(() => {
 .test-badge.failed {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.15);
+}
+
+.problem-page {
+  height: calc(100dvh - var(--header-h, 5rem));
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.75rem;
+  background: #e8ecef;
+  color: #17212b;
+}
+
+.problem-workbench {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #b9c3ca;
+  border-radius: 0.5rem;
+  background: #f7f9fa;
+}
+
+.problem-sidebar,
+.problem-result-pane,
+.problem-result {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.problem-sidebar {
+  flex-shrink: 0;
+  align-self: stretch !important;
+  background: #f7f9fa !important;
+}
+
+.problem-sidebar-header,
+.problem-topbar {
+  flex-shrink: 0;
+  border-color: #c6cfd5 !important;
+  background: #eef2f4 !important;
+}
+
+.problem-sidebar-header {
+  min-height: 3.5rem;
+  padding: 0.45rem 0.6rem !important;
+}
+
+.problem-sidebar-header > span:nth-of-type(1) {
+  font-size: 0.9rem;
+}
+
+.problem-tabs {
+  flex-shrink: 0;
+  border-color: #bec8cf !important;
+  background: #e8edef;
+}
+
+.problem-tabs button {
+  min-height: 2.65rem;
+  border-bottom-width: 2px;
+}
+
+.problem-tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: #8a9aa5 transparent;
+}
+
+.problem-editor-layout {
+  min-height: 0;
+  overflow: hidden;
+  background: #f4f6f7;
+}
+
+.problem-editor-pane {
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid #aebac2;
+}
+
+.problem-topbar {
+  min-height: 3.5rem;
+  padding: 0.45rem 0.6rem !important;
+}
+
+.problem-topbar > div:first-child {
+  min-width: 0;
+}
+
+.problem-topbar > div:first-child > div:last-child {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.problem-topbar > div:first-child > div:last-child button {
+  min-height: 2.1rem;
+  border: 1px solid transparent;
+  padding: 0 0.75rem;
+  color: #4b5d69;
+  font-size: 0.75rem;
+}
+
+.problem-topbar > div:first-child > div:last-child button:hover {
+  border-color: #aebbc4;
+  background: #f8fafb;
+  color: #087c93;
+}
+
+.problem-topbar > div:last-child {
+  min-width: 5rem;
+}
+
+.problem-topbar :deep(.n-button) {
+  min-height: 2.1rem;
+  border-radius: 1.25rem;
+  border-color: #0e7490;
+  background: #0e7490;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.problem-result-pane {
+  width: 24rem;
+  flex: 0 0 24rem;
+  background: #f7f9fa;
+}
+
+.problem-result {
+  border-color: #aebac2 !important;
+  background: #f7f9fa !important;
+}
+
+.problem-result > div:first-child {
+  flex-shrink: 0;
+  border-color: #bec8cf !important;
+  background: #eef2f4;
+}
+
+.problem-result .surface-panel {
+  border-color: #c6cfd5;
+  border-radius: 0.5rem;
+}
+
+.problem-result .collapse-header {
+  border-color: #c6cfd5;
+  background: #e8edef;
+}
+
+html.dark .problem-page {
+  background: #101418;
+  color: #e4e9ed;
+}
+
+html.dark .problem-workbench,
+html.dark .problem-sidebar,
+html.dark .problem-result-pane,
+html.dark .problem-result {
+  border-color: #36414a;
+  background: #151b20 !important;
+}
+
+html.dark .problem-sidebar-header,
+html.dark .problem-topbar {
+  border-color: #35414a !important;
+  background: #1b2228 !important;
+}
+
+html.dark .problem-tabs {
+  border-color: #39454e !important;
+  background: #1d252b;
+}
+
+html.dark .problem-tabs button {
+  color: #96a5af;
+}
+
+html.dark .problem-tabs button:hover,
+html.dark .problem-topbar > div:first-child > div:last-child button:hover {
+  background: #2b353d;
+  color: #67e8f9;
+}
+
+html.dark .problem-topbar > div:first-child > div:last-child button {
+  color: #b5c0c8;
+}
+
+html.dark .problem-topbar > div:first-child > div:last-child button[class*="border-cyan"] {
+  border-color: #45515a;
+  background: #151b20;
+  color: #67e8f9;
+}
+
+html.dark .problem-editor-layout {
+  background: #12171b;
+}
+
+html.dark .problem-editor-pane {
+  border-color: #3b4750;
+}
+
+html.dark .problem-result > div:first-child {
+  border-color: #39454e !important;
+  background: #1d252b;
+}
+
+html.dark .problem-result .surface-panel {
+  border-color: #38444d;
+}
+
+html.dark .problem-result .collapse-header {
+  border-color: #38444d;
+  background: #20282e;
+}
+
+@media (max-width: 1023px) {
+  .problem-page {
+    padding: 0;
+  }
+
+  .problem-workbench {
+    border-inline: 0;
+    border-bottom: 0;
+    border-radius: 0;
+  }
+
+  .problem-sidebar {
+    max-height: 50%;
+  }
+
+  .problem-result-pane {
+    width: 19rem;
+    flex-basis: 19rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .problem-workbench {
+    overflow: auto;
+  }
+
+  .problem-editor-layout {
+    min-height: 32rem;
+  }
+
+  .problem-result-pane {
+    width: 100%;
+    flex: 0 0 auto;
+    min-height: 18rem;
+  }
+}
+</style>
+
+<style>
+html:not(.dark) .problem-page .self-test-panel {
+  background: #f7f9fa;
+  box-shadow: 0 -8px 24px rgba(51, 65, 85, 0.12);
+}
+
+html:not(.dark) .problem-page .drag-handle {
+  background: #e8edef;
+  border-color: #c6cfd5;
+}
+
+html:not(.dark) .problem-page .drag-handle:hover,
+html:not(.dark) .problem-page .drag-active {
+  background: #d8e4e9;
+}
+
+html:not(.dark) .problem-page .panel-header {
+  background: #eef2f4;
+  border-color: #c6cfd5;
+}
+
+html:not(.dark) .problem-page .run-btn {
+  background: #0e7490;
+}
+
+html:not(.dark) .problem-page .run-btn:hover:not(:disabled) {
+  background: #0891b2;
+}
+
+html:not(.dark) .problem-page .collapse-btn:hover {
+  background: #dfe8ec;
+}
+
+html:not(.dark) .problem-page .surface-panel {
+  border-color: #c6cfd5;
+  background: #f7f9fa;
+}
+
+html:not(.dark) .problem-page .collapse-header {
+  color: #243542;
+  background: #e8edef;
+  border-color: #c6cfd5;
+}
+
+html:not(.dark) .problem-page .plain-textarea {
+  background: #ffffff;
+  color: #1e293b;
+}
+
+html:not(.dark) .problem-page .plain-textarea::placeholder {
+  color: #8a9aa5;
+}
+
+html:not(.dark) .problem-page .output-box {
+  background: linear-gradient(to bottom, #f8fafc 95%, #e2e8f0 95%, #e2e8f0 100%);
+  color: #166534;
+}
+
+html:not(.dark) .problem-page .output-box.is-error {
+  color: #be123c;
+}
+
+html:not(.dark) .problem-page .output-status {
+  background: #e2e8f0;
+}
+
+html:not(.dark) .problem-page .status-divider {
+  border-color: #aebbc4;
+}
+
+html:not(.dark) .problem-page .placeholder-copy {
+  color: #71828d;
+}
+
+html:not(.dark) .problem-page .problem-sidebar pre {
+  border: 1px solid #c6cfd5;
+  background: #e8edef !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: #047857 !important;
+}
+
+html:not(.dark) .problem-page .problem-sidebar .group button {
+  border: 1px solid #c6cfd5;
+  background: rgba(247, 249, 250, 0.94);
+  color: #52636e;
+}
+
+html:not(.dark) .problem-page .problem-sidebar .group button:hover {
+  background: #dce8ed;
+  color: #0e7490;
 }
 </style>

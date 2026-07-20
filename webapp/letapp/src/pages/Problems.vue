@@ -3,6 +3,7 @@ import { computed, markRaw, ref, shallowRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useProblemStats } from '../composables/useProblemStats';
+import { useAuthStore } from '../stores/auth';
 
 interface Problem {
   id: number;
@@ -15,6 +16,7 @@ const router = useRouter();
 const searchQuery = ref('');
 const difficultyFilter = ref<string>('');
 const { getStats } = useProblemStats();
+const authStore = useAuthStore();
 
 const problems = shallowRef<Problem[]>([
   { id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'] },
@@ -35,7 +37,14 @@ const filteredProblems = computed(() => {
       String(p.id).includes(q)
     );
   }
-  return list.map(p => ({ ...p, stat: getStats(p.id) }));
+  return list.map(p => {
+    const stat = getStats(p.id);
+    return {
+      ...p,
+      stat,
+      isAccepted: authStore.isAuthenticated && stat.accepted > 0,
+    };
+  });
 });
 
 const openProblem = (id: number) => {
@@ -50,8 +59,8 @@ const difficultyColorMap = markRaw({
 </script>
 
 <template>
-  <div class="flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
-    <div v-once class="border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
+  <div class="problems-page flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
+    <div v-once class="problems-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
       <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="max-w-3xl">
@@ -67,8 +76,8 @@ const difficultyColorMap = markRaw({
       </div>
     </div>
 
-    <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="problems-content mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div class="problems-controls mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="relative flex-1 max-w-md">
           <Icon icon="material-symbols:search" class="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
           <input
@@ -93,7 +102,7 @@ const difficultyColorMap = markRaw({
         </div>
       </div>
 
-      <div class="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
+      <div class="problems-list overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
         <div v-if="filteredProblems.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
           <Icon icon="material-symbols:search-off" width="48" height="48" class="mb-4 text-slate-300 dark:text-slate-600" />
           <p class="text-lg font-bold text-slate-500 dark:text-slate-400">没有找到匹配的题目</p>
@@ -102,7 +111,7 @@ const difficultyColorMap = markRaw({
           <div
             v-for="problem in filteredProblems"
             :key="problem.id"
-            class="flex cursor-pointer items-center gap-4 px-6 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+            class="problem-row flex cursor-pointer items-center gap-4 px-6 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
             @click="openProblem(problem.id)"
           >
             <div class="flex-1 min-w-0">
@@ -122,15 +131,19 @@ const difficultyColorMap = markRaw({
             <div class="hidden shrink-0 sm:block">
               <span
                 class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
-                :class="problem.stat.accepted > 0
-                  ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
-                  : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
+                :class="!authStore.isAuthenticated
+                  ? 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'
+                  : problem.isAccepted
+                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
+                    : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
               >
                 <Icon
-                  :icon="problem.stat.accepted > 0 ? 'material-symbols:check-circle' : 'material-symbols:radio-button-unchecked'"
+                  :icon="authStore.isAuthenticated && problem.isAccepted
+                    ? 'material-symbols:check-circle'
+                    : 'material-symbols:radio-button-unchecked'"
                   class="h-3.5 w-3.5"
                 />
-                {{ problem.stat.accepted > 0 ? '已通过' : '未通过' }}
+                {{ !authStore.isAuthenticated ? '未登录' : problem.isAccepted ? '已通过' : '未通过' }}
               </span>
             </div>
             <Icon icon="material-symbols:chevron-right" class="shrink-0 h-5 w-5 text-slate-300 dark:text-slate-600" />
@@ -146,3 +159,179 @@ const difficultyColorMap = markRaw({
     </footer>
   </div>
 </template>
+
+<style>
+.problems-page {
+  --page-border: #c7d2da;
+  background: #e8ecef !important;
+}
+
+.problems-hero {
+  position: relative;
+  overflow: hidden;
+  background: #f1f4f6 !important;
+}
+
+.problems-hero::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(90deg, #000, transparent 78%);
+}
+
+.problems-hero > div {
+  position: relative;
+  z-index: 1;
+}
+
+.problems-content {
+  padding-top: 2rem !important;
+}
+
+.problems-controls {
+  align-items: stretch;
+}
+
+.problems-controls input {
+  border-color: #c6cfd5 !important;
+  background: #f7f9fa !important;
+  box-shadow: 0 8px 20px rgba(51, 65, 85, 0.08);
+}
+
+.problems-controls input:focus {
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+}
+
+.problems-controls > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.problems-controls > div:last-child button {
+  border-color: #c6cfd5 !important;
+  background: #f7f9fa !important;
+  color: #52636e !important;
+}
+
+.problems-controls > div:last-child button:hover,
+.problems-controls > div:last-child button[class*="border-cyan"] {
+  border-color: #06b6d4 !important;
+  background: #e4f8fb !important;
+  color: #0e7490 !important;
+}
+
+.problems-list {
+  border-radius: 0.75rem !important;
+  border-color: #c6cfd5 !important;
+  background: #f7f9fa !important;
+  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
+}
+
+.problem-row {
+  position: relative;
+  min-height: 5.25rem;
+  border-color: #d8e0e4;
+}
+
+.problem-row::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  content: "";
+  background: #22d3ee;
+  transform: scaleY(0);
+  transition: transform 0.2s ease;
+}
+
+.problem-row:hover {
+  background: #eef7f9 !important;
+}
+
+.problem-row:hover::before {
+  transform: scaleY(1);
+}
+
+.problem-row > div:first-child > div:first-child > span:first-child {
+  color: #71828d;
+  letter-spacing: 0.08em;
+}
+
+.problem-row > div:first-child > div:nth-child(2) span {
+  border-radius: 0.35rem;
+  background: #e8edef;
+}
+
+html.dark .problems-hero {
+  background: #151b20 !important;
+}
+
+html.dark .problems-page {
+  --page-border: #35414a;
+  background: #101418 !important;
+}
+
+html.dark .problems-hero::after {
+  opacity: 0.3;
+  background-image:
+    linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
+}
+
+html.dark .problems-controls input {
+  border-color: #35414a !important;
+  background: #151b20 !important;
+  box-shadow: none;
+}
+
+html.dark .problems-controls > div:last-child button {
+  border-color: #35414a !important;
+  background: #151b20 !important;
+  color: #aebbc4 !important;
+}
+
+html.dark .problems-controls > div:last-child button:hover,
+html.dark .problems-controls > div:last-child button[class*="border-cyan"] {
+  border-color: #0891b2 !important;
+  background: #083344 !important;
+  color: #67e8f9 !important;
+}
+
+html.dark .problems-list {
+  border-color: #35414a !important;
+  background: #151b20 !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
+}
+
+html.dark .problem-row {
+  border-color: #29343c;
+}
+
+html.dark .problem-row:hover {
+  background: #1d2930 !important;
+}
+
+html.dark .problem-row > div:first-child > div:nth-child(2) span {
+  background: #202c34;
+}
+
+@media (max-width: 640px) {
+  .problems-controls > div:last-child {
+    justify-content: flex-start;
+  }
+
+  .problem-row {
+    align-items: flex-start;
+    padding: 1rem !important;
+  }
+}
+</style>

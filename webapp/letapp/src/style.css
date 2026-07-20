@@ -108,6 +108,10 @@
     font: inherit;
   }
 
+  button {
+    border-radius: 1.25rem !important;
+  }
+
   a {
     color: inherit;
     text-decoration: none;

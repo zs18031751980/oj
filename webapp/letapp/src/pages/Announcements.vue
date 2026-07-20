@@ -111,9 +111,9 @@ watch(currentFile, async (file) => {
 </script>
 
 <template>
-  <div class="flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
+  <div class="announcements-page flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
     <template v-if="!isDetailMode">
-      <div class="border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
+      <div class="announcements-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
@@ -129,7 +129,7 @@ watch(currentFile, async (file) => {
         </div>
       </div>
 
-        <div class="flex-1 overflow-y-auto">
+        <div class="announcements-content flex-1 overflow-y-auto">
           <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div v-if="sortedAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
               <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
@@ -138,7 +138,7 @@ watch(currentFile, async (file) => {
               <p class="text-lg font-bold text-slate-500 dark:text-slate-400">暂无公告</p>
               <p class="mt-2 text-sm text-slate-400 dark:text-slate-500">请稍后再来看看</p>
             </div>
-            <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div v-else class="announcements-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <button
                 v-for="item in sortedAnnouncements"
                 :key="item.file"
@@ -162,8 +162,8 @@ watch(currentFile, async (file) => {
       </template>
 
       <template v-else>
-        <div class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-          <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div class="announcement-detail mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+          <div class="detail-toolbar mb-6 flex flex-wrap items-center justify-between gap-4">
             <button
               class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
               @click="goBackToList"
@@ -173,7 +173,7 @@ watch(currentFile, async (file) => {
             </button>
           </div>
 
-          <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
+          <div class="announcement-document overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
             <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
               正在加载公告内容...
             </div>
@@ -220,6 +220,11 @@ watch(currentFile, async (file) => {
 </style>
 
 <style>
+.announcements-page {
+  --page-border: #c7d2da;
+  background: #e8ecef !important;
+}
+
 html:not(.dark) .announcement-card {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
@@ -254,5 +259,151 @@ html:not(.dark) .announcement-card:hover .card-title {
 
 html.dark .announcement-card:hover .card-title {
   color: #67e8f9 !important;
+}
+
+.announcements-hero {
+  position: relative;
+  overflow: hidden;
+  background: #f1f4f6 !important;
+}
+
+.announcements-hero::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(90deg, #000, transparent 78%);
+}
+
+.announcements-hero > div {
+  position: relative;
+  z-index: 1;
+}
+
+.announcements-content {
+  padding-top: 2rem;
+}
+
+.announcements-grid {
+  align-items: stretch;
+}
+
+.announcement-card {
+  min-height: 10rem;
+  justify-content: space-between;
+  border-radius: 0.75rem !important;
+  border-color: #c6cfd5 !important;
+  background: #f7f9fa !important;
+  box-shadow: 0 16px 35px rgba(51, 65, 85, 0.1) !important;
+}
+
+.announcement-card::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  content: "";
+  background: #22d3ee;
+  transform: scaleX(0.2);
+  transform-origin: left;
+  transition: transform 0.25s ease;
+}
+
+.announcement-card:hover {
+  transform: translateY(-4px);
+  border-color: #06b6d4 !important;
+  background: #eef7f9 !important;
+  box-shadow: 0 20px 42px rgba(14, 116, 144, 0.16) !important;
+}
+
+.announcement-card:hover::before {
+  transform: scaleX(1);
+}
+
+.card-title {
+  max-width: 26rem;
+  line-height: 1.35;
+}
+
+.card-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.04em;
+}
+
+.card-time::before {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: #22d3ee;
+  content: "";
+}
+
+.announcement-detail {
+  padding-top: 2rem;
+}
+
+.announcement-detail > .detail-toolbar {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #c6cfd5;
+}
+
+.announcement-document {
+  border-radius: 0.75rem !important;
+  border-color: #c6cfd5 !important;
+  background: #f7f9fa !important;
+  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
+}
+
+html.dark .announcements-hero {
+  background: #151b20 !important;
+}
+
+html.dark .announcements-page {
+  --page-border: #35414a;
+  background: #101418 !important;
+}
+
+html.dark .announcements-hero::after {
+  opacity: 0.3;
+  background-image:
+    linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
+}
+
+html.dark .announcement-card {
+  border-color: #35414a !important;
+  background: #151b20 !important;
+  box-shadow: none !important;
+}
+
+html.dark .announcement-card:hover {
+  border-color: #0891b2 !important;
+  background: #1d2930 !important;
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.24) !important;
+}
+
+html.dark .announcement-detail > .detail-toolbar {
+  border-color: #35414a;
+}
+
+html.dark .announcement-document {
+  border-color: #35414a !important;
+  background: #151b20 !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
+}
+
+@media (max-width: 640px) {
+  .announcement-card {
+    min-height: 8.5rem;
+  }
 }
 </style>
