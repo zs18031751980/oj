@@ -408,6 +408,10 @@ onUnmounted(() => {
 .markdown-content :deep(th) {
   @apply bg-slate-100 font-black dark:bg-slate-800;
 }
+
+.markdown-content :deep(img) {
+  @apply mx-auto my-6 block h-auto max-w-full rounded-lg border border-slate-200 dark:border-slate-700;
+}
 </style>
 
 <style>
@@ -438,6 +442,20 @@ html.dark .markdown-article header time,
 html.dark .markdown-article header span,
 html.dark .markdown-article .toc-link {
   color: #f8fafc;
+}
+
+html:not(.dark) .markdown-article .markdown-content thead,
+html:not(.dark) .markdown-article .markdown-content thead th {
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  background-color: #e2e8f0 !important;
+}
+
+html.dark .markdown-article .markdown-content thead,
+html.dark .markdown-article .markdown-content thead th {
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+  background-color: #1e293b !important;
 }
 
 html:not(.dark) .markdown-article .toc-link {
