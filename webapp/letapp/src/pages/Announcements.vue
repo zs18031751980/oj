@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import { NButton } from 'naive-ui';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MarkdownComponent from '../components/MarkdownComponent.vue';
+import {
+  getAnnouncement,
+  listAnnouncements,
+  type AnnouncementData,
+} from '../services/api';
+import { useAuthStore } from '../stores/auth';
+import {
+  parseAnnouncementId,
+  sortAnnouncementsNewestFirst,
+} from '../utils/announcement-access';
 
 interface Content {
   title?: string;
@@ -10,104 +21,98 @@ interface Content {
   content: string;
 }
 
-interface ManifestItem {
-  file: string;
-  title: string;
-  updatedAt: string;
-}
-
 const route = useRoute();
 const router = useRouter();
-const manifest = ref<ManifestItem[]>([]);
-const selectedContent = ref<Content | undefined>();
+const authStore = useAuthStore();
+const announcements = ref<AnnouncementData[]>([]);
+const selectedContent = ref<Content>();
+const isLoadingList = ref(false);
 const isLoadingDoc = ref(false);
-const docError = ref('');
+const listError = ref('');
+const detailError = ref('');
 
 const sortedAnnouncements = computed(() =>
-  [...manifest.value].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  sortAnnouncementsNewestFirst(announcements.value),
 );
+const currentAnnouncementId = computed(() => parseAnnouncementId(route.query.id));
+const isDetailMode = computed(() => route.query.id !== undefined);
+const canManageAnnouncements = computed(() => authStore.userRole === 'manager');
 
-const currentFile = computed(() => {
-  const raw = route.query.doc;
-  return Array.isArray(raw) ? raw[0] || '' : String(raw || '');
-});
-
-const isDetailMode = computed(() => Boolean(currentFile.value));
-
-const formatTime = (dateStr: string) => {
+const formatTime = (dateStr?: string) => {
+  if (!dateStr) return '时间未提供';
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '时间未提供';
   return date.toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 };
 
-const openAnnouncement = async (item: ManifestItem) => {
-  await router.push({ path: '/announcements', query: { doc: item.file } });
-};
-
-const goBackToList = async () => {
-  await router.push('/announcements');
-};
-
-function parseMarkdown(raw: string): { title?: string; date?: string; content: string } {
-  const idx = raw.indexOf('---');
-  if (idx !== 0) return { content: raw };
-  const end = raw.indexOf('---', 3);
-  if (end === -1) return { content: raw };
-  const front = raw.slice(3, end).trim();
-  const body = raw.slice(end + 3).trim();
-  const titleMatch = front.match(/^title:\s*(.+)/m);
-  const dateMatch = front.match(/^date:\s*(.+)/m);
-  return {
-    title: titleMatch ? titleMatch[1]!.trim() : undefined,
-    date: dateMatch ? dateMatch[1]!.trim() : undefined,
-    content: body,
-  };
-}
-
-const loadMarkdown = async (file: string) => {
-  isLoadingDoc.value = true;
-  docError.value = '';
-
+const loadAnnouncements = async () => {
+  isLoadingList.value = true;
+  listError.value = '';
   try {
-    const res = await fetch(`/announcements/${encodeURIComponent(file)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.text();
-    const { title, date, content } = parseMarkdown(raw);
+    announcements.value = await listAnnouncements();
+  } catch (error) {
+    listError.value = error instanceof Error ? error.message : '公告列表加载失败';
+  } finally {
+    isLoadingList.value = false;
+  }
+};
+
+const loadSelectedAnnouncement = async () => {
+  selectedContent.value = undefined;
+  detailError.value = '';
+
+  const id = currentAnnouncementId.value;
+  if (id === null) {
+    detailError.value = '公告地址无效，请返回列表重新选择。';
+    return;
+  }
+
+  isLoadingDoc.value = true;
+  try {
+    const announcement = await getAnnouncement(id);
     selectedContent.value = {
-      title,
-      content,
-      date,
+      title: announcement.title,
+      date: announcement.published_at || announcement.created_at,
+      content: announcement.content,
     };
   } catch (error) {
-    selectedContent.value = undefined;
-    docError.value = `加载失败：${error instanceof Error ? error.message : '未知错误'}`;
+    detailError.value = error instanceof Error ? error.message : '公告内容加载失败';
   } finally {
     isLoadingDoc.value = false;
   }
 };
 
+const openAnnouncement = (item: AnnouncementData) =>
+  router.push({ path: '/announcements', query: { id: String(item.id) } });
+
+const goBackToList = () => router.push('/announcements');
+const openManager = () => router.push('/admin/announcements');
+
 onMounted(async () => {
-  try {
-    const res = await fetch('/announcements/manifest.json');
-    manifest.value = await res.json();
-    if (currentFile.value) {
-      await loadMarkdown(currentFile.value);
-    }
-  } catch (e) {
-    console.error('Failed to load manifest:', e);
+  await loadAnnouncements();
+  if (isDetailMode.value) {
+    await loadSelectedAnnouncement();
   }
 });
 
-watch(currentFile, async (file) => {
-  if (!file) {
-    selectedContent.value = undefined;
-    docError.value = '';
-    return;
-  }
-  await loadMarkdown(file);
-});
+watch(
+  () => route.query.id,
+  async (id, previousId) => {
+    if (id === previousId) return;
+    if (id === undefined) {
+      selectedContent.value = undefined;
+      detailError.value = '';
+      return;
+    }
+    await loadSelectedAnnouncement();
+  },
+);
 </script>
 
 <template>
@@ -121,6 +126,12 @@ watch(currentFile, async (file) => {
               <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">公告</h1>
             </div>
             <div class="flex items-center gap-3">
+              <NButton v-if="canManageAnnouncements" secondary @click="openManager">
+                <template #icon>
+                  <Icon icon="material-symbols:settings-outline-rounded" />
+                </template>
+                管理公告
+              </NButton>
               <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
                 {{ sortedAnnouncements.length }} 条公告
               </span>
@@ -131,7 +142,20 @@ watch(currentFile, async (file) => {
 
         <div class="announcements-content flex-1 overflow-y-auto">
           <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div v-if="sortedAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+            <div v-if="isLoadingList" class="flex min-h-72 items-center justify-center text-slate-500 dark:text-slate-400">
+              正在加载公告列表...
+            </div>
+            <div v-else-if="listError" class="flex min-h-72 flex-col items-center justify-center gap-4 px-4 text-center">
+              <Icon icon="material-symbols:error-outline-rounded" class="h-10 w-10 text-rose-500" />
+              <p class="max-w-xl text-sm text-rose-600 dark:text-rose-400">{{ listError }}</p>
+              <NButton secondary @click="loadAnnouncements">
+                <template #icon>
+                  <Icon icon="material-symbols:refresh-rounded" />
+                </template>
+                重试
+              </NButton>
+            </div>
+            <div v-else-if="sortedAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
               <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
                 <Icon icon="material-symbols:campaign-outline" width="32" height="32" class="text-slate-400 dark:text-slate-500" />
               </div>
@@ -141,7 +165,7 @@ watch(currentFile, async (file) => {
             <div v-else class="announcements-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               <button
                 v-for="item in sortedAnnouncements"
-                :key="item.file"
+                :key="item.id"
                 type="button"
                 class="announcement-card group"
                 @click="openAnnouncement(item)"
@@ -149,7 +173,9 @@ watch(currentFile, async (file) => {
                 <div class="card-content">
                   <div class="card-title">{{ item.title }}</div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="card-time">{{ formatTime(item.updatedAt) }}</span>
+                    <span class="card-time">
+                      {{ formatTime(item.updated_at || item.published_at || item.created_at) }}
+                    </span>
                   </div>
                 </div>
                 <div class="card-arrow">
@@ -177,8 +203,15 @@ watch(currentFile, async (file) => {
             <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
               正在加载公告内容...
             </div>
-            <div v-else-if="docError" class="flex min-h-[320px] items-center justify-center p-8 text-center text-rose-500">
-              {{ docError }}
+            <div v-else-if="detailError" class="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
+              <Icon icon="material-symbols:error-outline-rounded" class="h-10 w-10 text-rose-500" />
+              <p class="text-rose-600 dark:text-rose-400">{{ detailError }}</p>
+              <NButton v-if="currentAnnouncementId" secondary @click="loadSelectedAnnouncement">
+                <template #icon>
+                  <Icon icon="material-symbols:refresh-rounded" />
+                </template>
+                重试
+              </NButton>
             </div>
             <MarkdownComponent v-else :content="selectedContent" :show-nav="false" :show-heading-links="false" />
           </div>

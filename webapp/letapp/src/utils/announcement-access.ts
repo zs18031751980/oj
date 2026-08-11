@@ -20,3 +20,20 @@ export const announcementToForm = (
   permission: item.permission || 'member',
   is_published: item.is_published,
 });
+
+export const parseAnnouncementId = (raw: unknown): number | null => {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+export const sortAnnouncementsNewestFirst = (items: AnnouncementData[]) =>
+  [...items].sort((left, right) => {
+    const leftTime = Date.parse(
+      left.updated_at || left.published_at || left.created_at || '',
+    );
+    const rightTime = Date.parse(
+      right.updated_at || right.published_at || right.created_at || '',
+    );
+    return rightTime - leftTime;
+  });
