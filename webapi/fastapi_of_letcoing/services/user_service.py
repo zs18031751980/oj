@@ -341,10 +341,22 @@ class UserService(DatabaseService, Injectable):
                 )
 
                 # 更新用户信息（只更新有变化的字段）
-                if user_info.get('username') and user.username != user_info['username']:
-                    user.username = user_info['username']
-                if user_info.get('email') and user.email != user_info['email']:
-                    user.email = user_info['email']
+                incoming_username = user_info.get('username')
+                if incoming_username and user.username != incoming_username:
+                    username_taken = User.select().where(
+                        (User.username == incoming_username) & (User.id != user.id)
+                    ).exists()
+                    if not username_taken:
+                        user.username = incoming_username
+
+                incoming_email = user_info.get('email')
+                if incoming_email and user.email != incoming_email:
+                    email_taken = User.select().where(
+                        (User.email == incoming_email) & (User.id != user.id)
+                    ).exists()
+                    if not email_taken:
+                        user.email = incoming_email
+
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
                 if user_info.get('role'):
@@ -353,6 +365,10 @@ class UserService(DatabaseService, Injectable):
                     highest = pick_highest_role(roles_to_compare)
                     if user.role != highest:
                         user.role = highest
+
+                incoming_status = user_info.get('is_active')
+                if isinstance(incoming_status, bool):
+                    user.is_active = incoming_status
 
                 user.last_login = datetime.now(BEIJING_TZ)
                 user.save()
@@ -380,6 +396,7 @@ class UserService(DatabaseService, Injectable):
                     except DoesNotExist:
                         pass
 
+                incoming_status = user_info.get('is_active')
                 user = User.create(
                     username=username,
                     email=email,
@@ -388,7 +405,7 @@ class UserService(DatabaseService, Injectable):
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),
-                    is_active=True,
+                    is_active=incoming_status if isinstance(incoming_status, bool) else True,
                     last_login=datetime.now(BEIJING_TZ)
                 )
 
