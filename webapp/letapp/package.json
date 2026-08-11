@@ -7,6 +7,7 @@
     "node": ">=22.12.0 <25"
   },
   "scripts": {
+    "test": "node --experimental-strip-types --test tests/announcement-access.test.ts",
     "dev": "vite",
     "build": "node --max-old-space-size=4096 ./node_modules/vue-tsc/bin/vue-tsc -b && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview"

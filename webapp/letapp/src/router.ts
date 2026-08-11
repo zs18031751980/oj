@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
+import { resolveManagerRoute } from './utils/announcement-access';
 
 const routes = [
   {
@@ -58,10 +59,20 @@ const routes = [
     component: () => import('./pages/AuthCallback.vue'),
   },
   {
+    path: '/access-denied',
+    name: 'AccessDenied',
+    meta: { title: '权限不足 - Let Coding' },
+    component: () => import('./pages/AccessDenied.vue'),
+  },
+  {
     path: '/admin',
     name: 'admin',
     component: () => import('./layouts/AdminLayout.vue'),
-    meta: { title: '管理后台 - Let Coding' },
+    meta: {
+      title: '管理后台 - Let Coding',
+      requiresAuth: true,
+      requiresManager: true,
+    },
     children: [
       {
         path: '',
@@ -98,19 +109,37 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to) => {
   document.title = (to.meta.title as string) || 'Let Coding';
 
-  if (to.meta.requiresAuth) {
-    const authStore = useAuthStore();
-    if (!authStore.isAuthenticated) {
-      authStore.startOAuthLogin('iOSClub', to.fullPath, true);
-      next(false);
-      return;
-    }
+  if (!to.meta.requiresAuth && !to.meta.requiresManager) {
+    return true;
   }
 
-  next();
+  const authStore = useAuthStore();
+  await authStore.restoreSession();
+
+  if (to.meta.requiresManager) {
+    const decision = resolveManagerRoute(
+      authStore.isAuthenticated,
+      authStore.userRole,
+    );
+    if (decision === 'login') {
+      authStore.startOAuthLogin('iOSClub', to.fullPath, true);
+      return false;
+    }
+    if (decision === 'forbidden') {
+      return { name: 'AccessDenied' };
+    }
+    return true;
+  }
+
+  if (!authStore.isAuthenticated) {
+    authStore.startOAuthLogin('iOSClub', to.fullPath, true);
+    return false;
+  }
+
+  return true;
 });
 
 export default router;

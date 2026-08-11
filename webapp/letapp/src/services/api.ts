@@ -17,6 +17,8 @@ export interface UserInfo {
   avatar_url?: string;
   provider?: string;
   role?: string;
+  is_active?: boolean;
+  last_login?: string;
   theme_preference?: string;
   created_at?: string;
 }
@@ -169,29 +171,44 @@ export const updateUserTheme = (themePreference: 'light' | 'dark' | 'system') =>
   });
 
 export interface AnnouncementData {
-  id?: number;
+  id: number;
   title: string;
   content: string;
   permission?: string;
-  is_published?: boolean;
+  is_published: boolean;
   published_at?: string;
   created_at?: string;
   updated_at?: string;
 }
 
-export const listAnnouncements = () =>
-  apiRequest<AnnouncementData[]>('/announcement/', { skipAuth: true });
+export interface AnnouncementForm {
+  id: number;
+  title: string;
+  content: string;
+  permission: string;
+  is_published: boolean;
+}
+
+export type AnnouncementInput = Omit<AnnouncementForm, 'id'>;
+
+export const listAnnouncements = (options: { includeUnpublished?: boolean } = {}) => {
+  const includeUnpublished = options.includeUnpublished === true;
+  return apiRequest<AnnouncementData[]>(
+    `/announcement/${includeUnpublished ? '?include_unpublished=true' : ''}`,
+    { skipAuth: !includeUnpublished },
+  );
+};
 
 export const getAnnouncement = (id: number) =>
   apiRequest<AnnouncementData>(`/announcement/${id}`, { skipAuth: true });
 
-export const createAnnouncement = (data: { title: string; content: string; permission?: string; is_published?: boolean }) =>
+export const createAnnouncement = (data: AnnouncementInput) =>
   apiRequest<AnnouncementData>('/announcement/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 
-export const updateAnnouncement = (id: number, data: { title?: string; content?: string; permission?: string; is_published?: boolean }) =>
+export const updateAnnouncement = (id: number, data: Partial<AnnouncementInput>) =>
   apiRequest<AnnouncementData>(`/announcement/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
