@@ -73,6 +73,8 @@ class JWTService(Injectable, IJWTService):
             'email': user_info.get('email', ''),
             'provider': user_info.get('provider', ''),
             'role': user_info.get('role', 'member'),
+            'is_active': user_info.get('is_active', True),
+            'last_login': user_info.get('last_login'),
             'exp': access_expire,      # 过期时间
             'iat': now,                # 签发时间
             'type': 'access'           # 令牌类型：访问令牌
@@ -87,6 +89,8 @@ class JWTService(Injectable, IJWTService):
             'email': user_info.get('email', ''),
             'provider': user_info.get('provider', ''),
             'role': user_info.get('role', 'member'),
+            'is_active': user_info.get('is_active', True),
+            'last_login': user_info.get('last_login'),
             'exp': refresh_expire,     # 过期时间
             'iat': now,                # 签发时间
             'type': 'refresh'          # 令牌类型：刷新令牌
@@ -144,7 +148,9 @@ class JWTService(Injectable, IJWTService):
                 'username': payload.get('username', ''),
                 'email': payload.get('email', ''),
                 'provider': payload.get('provider', ''),
-                'role': payload.get('role', 'member')
+                'role': payload.get('role', 'member'),
+                'is_active': payload.get('is_active', True),
+                'last_login': payload.get('last_login'),
             }
 
         except jwt.ExpiredSignatureError:
@@ -201,6 +207,8 @@ class JWTService(Injectable, IJWTService):
                     'email': payload.get('email', ''),
                     'provider': payload.get('provider', ''),
                     'role': payload.get('role', 'member'),
+                    'is_active': payload.get('is_active', True),
+                    'last_login': payload.get('last_login'),
                 }
 
             # 生成新的令牌对（旧的刷新令牌仍然有效，因为尚未实现令牌轮换）

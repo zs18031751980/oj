@@ -65,6 +65,8 @@ class UserInfo:
     avatar_url: str = ""           # 头像 URL
     provider: str = ""             # 登录提供商（如 github, password）
     role: str = "member"           # 用户角色（member / staff / manager）
+    is_active: bool = True          # 账号是否可用
+    last_login: Optional[str] = None  # 最近一次身份登录时间
     theme_preference: str = "system"  # 主题偏好（light / dark / system）
     created_at: datetime = field(default_factory=datetime.now)  # 创建时间
 
@@ -78,6 +80,8 @@ class UserInfo:
             'avatar_url': self.avatar_url,
             'provider': self.provider,
             'role': self.role,
+            'is_active': self.is_active,
+            'last_login': self.last_login,
             'theme_preference': self.theme_preference,
             'created_at': self.created_at.isoformat()
         }

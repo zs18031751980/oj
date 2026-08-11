@@ -24,6 +24,7 @@ import requests
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
+from utils.identity_utils import extract_account_status
 from utils.role_utils import pick_highest_role
 
 
@@ -683,7 +684,7 @@ class OIDCService(Injectable, IOIDCService):
                         all_roles.append(r)
                         break
         role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
-        return {
+        result = {
             'id': str(subject),
             'username': username,
             'name': name or user_data.get('email') or str(subject),
@@ -697,6 +698,10 @@ class OIDCService(Injectable, IOIDCService):
             'provider': provider,
             'role': role,
         }
+        account_status = extract_account_status(user_data)
+        if account_status is not None:
+            result['is_active'] = account_status
+        return result
 
     def _get_user_info(self, provider: str, client, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """

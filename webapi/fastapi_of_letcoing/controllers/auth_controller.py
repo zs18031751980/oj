@@ -26,6 +26,7 @@ from werkzeug.security import check_password_hash   # Werkzeug 安全工具，�
 from core.di_container import inject  # 依赖注入辅助函数
 from interfaces.service_interfaces import IConfigService, IJWTService, ILoggerService, IOIDCService, IUserService
 from models.auth_models import TokenResponse, UserInfo
+from utils.identity_utils import extract_account_status
 from utils.role_utils import normalize_role, pick_highest_role
 
 
@@ -180,6 +181,8 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
         avatar_url=user_info_data.get('avatar_url', '') or '',
         provider=user_info_data.get('provider', provider),
         role=role,
+        is_active=user_info_data.get('is_active', True),
+        last_login=user_info_data.get('last_login'),
         theme_preference=user_info_data.get('theme_preference', 'system'),
     )
 
@@ -272,10 +275,9 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     """
     claims = _decode_unverified_jwt(token)
 
-    # 打印 JWT claims 便于调试身份字段
-    import json as _json
     logger_service = inject(ILoggerService)
-    logger_service.info(f'JWT claims for {provider}: {_json.dumps({k: claims.get(k) for k in claims if not k.startswith("_")}, ensure_ascii=False, default=str)}')
+    claim_names = sorted(key for key in claims if not key.startswith('_'))
+    logger_service.info(f'JWT claim fields for {provider}: {",".join(claim_names)}')
 
     subject = (
         claims.get('sub')
@@ -326,7 +328,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
                     all_roles.append(r)
                     break
     role = pick_highest_role(all_roles) if all_roles else 'member'
-    return {
+    result = {
         'id': str(subject),
         'username': str(username or ''),
         'email': str(email or ''),
@@ -340,6 +342,10 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
         'provider': provider,
         'role': role,
     }
+    account_status = extract_account_status(claims)
+    if account_status is not None:
+        result['is_active'] = account_status
+    return result
 
 
 def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
@@ -358,21 +364,26 @@ def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
     Returns:
         (user_info, token_response) 元组
     """
-    jwt_service = inject(IJWTService)
     provider_id = str(user_info_data.get('id') or '')
+    if not provider_id:
+        raise ValueError('provider user id is required')
 
-    # 如果存在提供商用户 ID，尝试在本地数据库同步用户信息
-    if provider_id:
-        try:
-            user_service = inject(IUserService)
-            user_info_data = asyncio.run(
-                user_service.find_or_create_user(provider, provider_id, user_info_data)
-            )
-        except Exception as e:
-            logger_service = inject(ILoggerService)
-            import traceback as _tb
-            logger_service.error(f'用户同步失败 (provider={provider}, id={provider_id}): {e}\n{_tb.format_exc()}')
+    try:
+        user_service = inject(IUserService)
+        user_info_data = asyncio.run(
+            user_service.find_or_create_user(provider, provider_id, user_info_data)
+        )
+    except Exception as ex:
+        logger_service = inject(ILoggerService)
+        logger_service.error(
+            f'用户同步失败 (provider={provider}, id={provider_id}): {type(ex).__name__}'
+        )
+        raise RuntimeError('provider user synchronization failed') from ex
 
+    if user_info_data.get('is_active') is False:
+        raise PermissionError('account is inactive')
+
+    jwt_service = inject(IJWTService)
     user_info = _build_user_info(provider, user_info_data)
     jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
     token_response = TokenResponse(
@@ -670,9 +681,11 @@ class AuthProviderPasswordLoginController(Resource):
             logger_service.error(f'Provider password login request failed: {resolved_provider}', ex)
             return {'success': False, 'error': 'provider login request failed'}, 502
 
-        # 打印完整 iOSClub 响应，找到角色信息
-        import json as _json
-        logger_service.info(f'iOSClub login response: {_json.dumps({k: v for k, v in response_data.items() if k != "data"}, ensure_ascii=False, default=str)}')
+        response_fields = sorted(response_data.keys()) if isinstance(response_data, dict) else []
+        logger_service.info(
+            f'Provider password response fields for {resolved_provider}: '
+            f'{",".join(response_fields)}'
+        )
 
         # 检查上游响应是否成功
         if (
@@ -713,7 +726,21 @@ class AuthProviderPasswordLoginController(Resource):
             user_info_data['role'] = pick_highest_role(all_roles)
             logger_service.info(f'iOSClub 合并多来源角色: {all_roles} -> {user_info_data["role"]}')
 
-        user_info, token_response = _issue_tokens_for_provider_user(resolved_provider, user_info_data)
+        account_status = extract_account_status(response_data)
+        if account_status is None and isinstance(user_obj, dict):
+            account_status = extract_account_status(user_obj)
+        if account_status is not None:
+            user_info_data['is_active'] = account_status
+
+        try:
+            user_info, token_response = _issue_tokens_for_provider_user(
+                resolved_provider,
+                user_info_data,
+            )
+        except PermissionError:
+            return {'success': False, 'error': '账号已被停用'}, 403
+        except (ValueError, RuntimeError):
+            return {'success': False, 'error': '同步登录身份失败，请稍后重试'}, 500
 
         return {
             'success': True,
@@ -738,8 +765,6 @@ class AuthCallbackController(Resource):
     def get(self, provider: str):
         """处理 OAuth 回调并签发本地 JWT 令牌"""
         oidc_service = inject(IOIDCService)
-        jwt_service = inject(IJWTService)
-
         if not oidc_service.validate_provider(provider):
             return {'success': False, 'error': f'不支持的登录方式：{provider}'}, 400
 
@@ -792,30 +817,32 @@ class AuthCallbackController(Resource):
                 )
             )
 
-        # 尝试在本地数据库同步用户信息
         user_info_data = auth_result['user_info']
-        provider_id = str(user_info_data.get('id') or '')
-        print(f"[AUTH_CALLBACK] provider={resolved_provider}, provider_id={provider_id}, username={user_info_data.get('username')}")
-        if provider_id:
-            try:
-                user_service = inject(IUserService)
-                user_info_data = asyncio.run(
-                    user_service.find_or_create_user(resolved_provider, provider_id, user_info_data)
+        try:
+            user_info, token_response = _issue_tokens_for_provider_user(
+                resolved_provider,
+                user_info_data,
+            )
+        except PermissionError:
+            if request.args.get('format') == 'json':
+                return {'success': False, 'error': '账号已被停用'}, 403
+            return redirect(
+                _frontend_error_callback_url(
+                    '账号已被停用',
+                    next_path,
+                    resolved_provider,
                 )
-            except Exception as e:
-                logger_service = inject(ILoggerService)
-                import traceback as _tb
-                logger_service.error(f'用户同步失败 (provider={resolved_provider}, id={provider_id}): {e}\n{_tb.format_exc()}')
-
-        # 签发本地 JWT 令牌
-        user_info = _build_user_info(resolved_provider, user_info_data)
-        jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
-        token_response = TokenResponse(
-            access_token=jwt_tokens.access_token,
-            refresh_token=jwt_tokens.refresh_token,
-            expires_in=jwt_tokens.expires_in,
-            user_info=user_info,
-        )
+            )
+        except (ValueError, RuntimeError):
+            if request.args.get('format') == 'json':
+                return {'success': False, 'error': '同步登录身份失败，请稍后重试'}, 500
+            return redirect(
+                _frontend_error_callback_url(
+                    '同步登录身份失败，请稍后重试',
+                    next_path,
+                    resolved_provider,
+                )
+            )
 
         # 根据 format 参数决定返回 JSON 还是重定向到前端
         if request.args.get('format') == 'json':
