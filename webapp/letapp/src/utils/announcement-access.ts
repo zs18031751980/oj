@@ -21,6 +21,9 @@ export const announcementToForm = (
   is_published: item.is_published,
 });
 
+export const canSaveAnnouncement = (form: AnnouncementForm) =>
+  Boolean(form.title.trim() && form.content.trim());
+
 export const parseAnnouncementId = (raw: unknown): number | null => {
   const value = Array.isArray(raw) ? raw[0] : raw;
   const parsed = Number(value);
