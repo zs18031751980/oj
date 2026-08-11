@@ -2,3 +2,5 @@
 .env.*
 !.env.example
 !.env.local.example
+.worktrees/
+.superpowers/
