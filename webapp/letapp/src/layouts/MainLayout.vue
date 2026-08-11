@@ -8,8 +8,12 @@
         :style="{ width: `${desktopSidebarWidth}px` }"
       >
         <div
-          class="flex h-20 items-center justify-between gap-3"
-          :class="sidebarExpanded ? 'px-5' : 'px-3.5'"
+          class="flex h-20 items-center gap-3"
+          :class="
+            sidebarExpanded
+              ? 'justify-between px-5'
+              : 'justify-center px-0'
+          "
         >
           <a
             href="https://www.xauat.site/"
