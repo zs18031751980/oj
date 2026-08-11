@@ -58,7 +58,21 @@ class AnnouncementListController(Resource):
     @api.doc('list_announcements')
     @api.response(200, 'Success', [announcement_model])
     def get(self):
-        announcements = Announcement.select().order_by(Announcement.created_at.desc())
+        include_unpublished = (
+            request.args.get('include_unpublished', '').strip().lower() == 'true'
+        )
+        if include_unpublished:
+            result = _require_manager()
+            if isinstance(result, tuple):
+                return result
+            query = Announcement.select()
+        else:
+            query = Announcement.select().where(Announcement.is_published == True)
+
+        announcements = query.order_by(
+            Announcement.published_at.desc(),
+            Announcement.created_at.desc(),
+        )
         return [a.to_dict() for a in announcements], 200
 
     @api.expect(announcement_input)
@@ -97,6 +111,10 @@ class AnnouncementDetailController(Resource):
     def get(self, announcement_id: int):
         try:
             announcement = Announcement.get_by_id(announcement_id)
+            if not announcement.is_published:
+                result = _require_manager()
+                if isinstance(result, tuple):
+                    return {'error': '公告不存在'}, 404
             return announcement.to_dict(), 200
         except Announcement.DoesNotExist:
             return {'error': '公告不存在'}, 404
@@ -119,12 +137,20 @@ class AnnouncementDetailController(Resource):
 
         data = request.get_json(silent=True) or {}
         if 'title' in data:
-            announcement.title = data['title'].strip()
+            title = str(data['title'] or '').strip()
+            if not title:
+                return {'error': '标题不能为空'}, 400
+            announcement.title = title
         if 'content' in data:
-            announcement.content = data['content'].strip()
+            content = str(data['content'] or '').strip()
+            if not content:
+                return {'error': '内容不能为空'}, 400
+            announcement.content = content
         if 'permission' in data:
             announcement.permission = data['permission']
         if 'is_published' in data:
+            if not isinstance(data['is_published'], bool):
+                return {'error': 'is_published 必须是布尔值'}, 400
             announcement.is_published = data['is_published']
             if data['is_published'] and not announcement.published_at:
                 announcement.published_at = datetime.now()
