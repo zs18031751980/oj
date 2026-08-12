@@ -27,7 +27,8 @@ from core.di_container import inject  # 依赖注入辅助函数
 from interfaces.service_interfaces import IConfigService, IJWTService, ILoggerService, IOIDCService, IUserService
 from models.auth_models import TokenResponse, UserInfo
 from utils.identity_utils import extract_account_status
-from utils.role_utils import normalize_role, pick_highest_role
+from utils.oauth_utils import normalize_provider_scope
+from utils.role_utils import extract_highest_role, pick_highest_role
 
 
 # ============================================================
@@ -172,7 +173,7 @@ def _build_user_info(provider: str, user_info_data: dict) -> UserInfo:
     """
     username = user_info_data.get('username', '') or ''
     email = user_info_data.get('email') or None
-    role = normalize_role(user_info_data.get('role', 'member'))
+    role = extract_highest_role(user_info_data)
     return UserInfo(
         id=str(user_info_data.get('id') or ''),
         username=username,
@@ -230,12 +231,12 @@ def _provider_client_id(provider_config: dict) -> str:
     return str(provider_config.get('client_id') or '')
 
 
-def _provider_scope(provider_config: dict) -> str:
+def _provider_scope(provider: str, provider_config: dict) -> str:
     """从提供商配置中获取 OAuth 授权范围（Scope）"""
     client_kwargs = provider_config.get('client_kwargs')
     if isinstance(client_kwargs, dict):
-        return str(client_kwargs.get('scope') or '')
-    return ''
+        return normalize_provider_scope(provider, client_kwargs.get('scope'))
+    return normalize_provider_scope(provider, '')
 
 
 def _decode_unverified_jwt(token: str) -> dict:
@@ -298,36 +299,7 @@ def _user_info_from_provider_token(provider: str, identifier: str, token: str) -
     email = claims.get('email') or None
     name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
 
-    # 从 JWT claims 中收集所有角色，选取权限最高的
-    all_roles = []
-    raw_role = claims.get('role')
-    if raw_role:
-        if isinstance(raw_role, list):
-            all_roles.extend(raw_role)
-        elif isinstance(raw_role, str) and raw_role:
-            all_roles.append(raw_role)
-    for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf',
-                  'position', 'department', 'identity', 'type'):
-        val = claims.get(field)
-        if val:
-            if isinstance(val, list):
-                all_roles.extend(val)
-            elif isinstance(val, str):
-                all_roles.append(val)
-
-    # 兜底：遍历所有 claims 值，找到标准角色关键词
-    known_roles = ('member', 'staff', 'manager', 'admin', 'minister', 'president', 'founder',
-                   '部长', '部员', '社员', '社长', '副社长', '副部长', '干事', '管理员', '普通用户')
-    if not all_roles:
-        for key, val in claims.items():
-            s = str(val).strip()
-            if not s:
-                continue
-            for r in known_roles:
-                if r.lower() in s.lower():
-                    all_roles.append(r)
-                    break
-    role = pick_highest_role(all_roles) if all_roles else 'member'
+    role = extract_highest_role(claims)
     result = {
         'id': str(subject),
         'username': str(username or ''),
@@ -654,7 +626,7 @@ class AuthProviderPasswordLoginController(Resource):
         provider_config = _provider_config(resolved_provider)
         issuer = _provider_issuer(provider_config)
         client_id = _provider_client_id(provider_config)
-        scope = _provider_scope(provider_config)
+        scope = _provider_scope(resolved_provider, provider_config)
 
         if not issuer or not client_id:
             return {'success': False, 'error': 'provider login is not configured'}, 500
@@ -708,23 +680,13 @@ class AuthProviderPasswordLoginController(Resource):
         provider_token = str(response_data.get('data') or '')
         user_info_data = _user_info_from_provider_token(resolved_provider, identifier, provider_token)
 
-        # 同时检查 iOSClub 响应体中是否有独立 role 字段，与 JWT 角色合并取最高
-        all_roles = [user_info_data.get('role', 'member')]
-        for src in ('role', 'roles', 'userType', 'user_type', 'userRole'):
-            val = response_data.get(src)
-            if val and isinstance(val, str):
-                all_roles.append(val)
-                break
+        # 同时检查提供商响应体中的角色，与 JWT 角色合并取最高
+        response_role = extract_highest_role(response_data)
+        user_info_data['role'] = pick_highest_role([
+            user_info_data.get('role', 'member'),
+            response_role,
+        ])
         user_obj = response_data.get('user')
-        if isinstance(user_obj, dict):
-            for field in ('role', 'roles', 'type', 'userType', 'level'):
-                val = user_obj.get(field)
-                if val and isinstance(val, str):
-                    all_roles.append(val)
-                    break
-        if len(all_roles) > 1:
-            user_info_data['role'] = pick_highest_role(all_roles)
-            logger_service.info(f'iOSClub 合并多来源角色: {all_roles} -> {user_info_data["role"]}')
 
         account_status = extract_account_status(response_data)
         if account_status is None and isinstance(user_obj, dict):

@@ -25,7 +25,8 @@ import requests
 from core.di_container import Injectable
 from interfaces.service_interfaces import IConfigService, ILoggerService, IOIDCService
 from utils.identity_utils import extract_account_status
-from utils.role_utils import pick_highest_role
+from utils.oauth_utils import merge_oidc_identity_claims, normalize_provider_scope
+from utils.role_utils import extract_highest_role
 
 
 def _safe_client_id(client_id: Any) -> str:
@@ -159,9 +160,10 @@ class OIDCService(Injectable, IOIDCService):
         if not isinstance(client_kwargs, dict):
             client_kwargs = {}
 
-        # 设置默认 scope
-        if not client_kwargs.get('scope'):
-            client_kwargs['scope'] = 'openid profile role'
+        client_kwargs['scope'] = normalize_provider_scope(
+            provider_name,
+            client_kwargs.get('scope') or 'openid profile',
+        )
 
         # 设置默认令牌端点认证方式
         if not client_kwargs.get('token_endpoint_auth_method'):
@@ -648,42 +650,7 @@ class OIDCService(Injectable, IOIDCService):
         )
         name = user_data.get('name') or user_data.get('nickname') or username
 
-        # 从多个字段收集所有角色，选取权限最高的
-        all_roles = []
-        raw_role = user_data.get('role')
-        if raw_role:
-            if isinstance(raw_role, list):
-                all_roles.extend(raw_role)
-            elif isinstance(raw_role, str):
-                all_roles.append(raw_role)
-        for field in ('roles', 'groups', 'group', 'user_type', 'authorities', 'memberOf',
-                      'position', 'department', 'identity', 'type'):
-            val = user_data.get(field)
-            if val:
-                if isinstance(val, list):
-                    all_roles.extend(val)
-                elif isinstance(val, str):
-                    all_roles.append(val)
-        realm_access = user_data.get('realm_access')
-        if isinstance(realm_access, dict):
-            roles = realm_access.get('roles', [])
-            if isinstance(roles, list):
-                tech_roles = {'offline_access', 'uma_authorization'}
-                all_roles.extend(r for r in roles if str(r).lower() not in tech_roles)
-
-        # 兜底：遍历所有 user_data 值，找到标准角色关键词
-        known_roles = ('member', 'staff', 'manager', 'admin', 'minister', 'president', 'founder',
-                       '部长', '部员', '社员', '社长', '副社长', '副部长', '干事', '管理员', '普通用户')
-        if not all_roles:
-            for key, val in user_data.items():
-                s = str(val).strip()
-                if not s:
-                    continue
-                for r in known_roles:
-                    if r.lower() in s.lower():
-                        all_roles.append(r)
-                        break
-        role = pick_highest_role(all_roles, self._logger_service) if all_roles else 'member'
+        role = extract_highest_role(user_data, self._logger_service)
         result = {
             'id': str(subject),
             'username': username,
@@ -802,13 +769,7 @@ class OIDCService(Injectable, IOIDCService):
 
             # 用 id_token claims 覆盖 userinfo 数据（id_token 是签名的，更权威）
             if id_token_claims:
-                print(f"[ROLE_DEBUG] id_token claims keys: {sorted(id_token_claims.keys())}")
-                print(f"[ROLE_DEBUG] role fields: role={id_token_claims.get('role')}, roles={id_token_claims.get('roles')}, groups={id_token_claims.get('groups')}")
-                for key in ('preferred_username', 'nickname', 'name', 'email', 'picture',
-                           'avatar', 'avatar_url', 'role', 'roles', 'groups', 'group',
-                           'user_type', 'authorities', 'memberOf', 'realm_access'):
-                    if key in id_token_claims:
-                        normalized_user_data[key] = id_token_claims[key]
+                merge_oidc_identity_claims(normalized_user_data, id_token_claims)
 
             self._logger_service.info(
                 'OIDC user info received: '

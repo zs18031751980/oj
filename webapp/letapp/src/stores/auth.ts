@@ -13,6 +13,7 @@ import {
   type UserInfo,
 } from '../services/api';
 import { useThemeStore } from './theme';
+import { ensureRoleScope } from '../utils/oauth-scope';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -23,7 +24,9 @@ const OAUTH_NEXT_KEY = 'oauth_login_next';
 const IOSCLUB_OAUTH_URL = String(import.meta.env.VITE_IOSCLUB_OAUTH_URL || '').trim();
 const IOSCLUB_CLIENT_ID = String(import.meta.env.VITE_IOSCLUB_CLIENT_ID || '').trim();
 const IOSCLUB_REDIRECT_URI = String(import.meta.env.VITE_IOSCLUB_REDIRECT_URI || '').trim();
-const IOSCLUB_SCOPE = String(import.meta.env.VITE_IOSCLUB_SCOPE || 'openid profile').trim();
+const IOSCLUB_SCOPE = ensureRoleScope(
+  String(import.meta.env.VITE_IOSCLUB_SCOPE || 'openid profile'),
+);
 const AUTH_ROUTE_PREFIXES = ['/login', '/auth/callback'];
 
 type SessionPayload = TokenResponse | {
@@ -132,13 +135,13 @@ const buildProviderLoginUrl = (provider: string, next: string) => {
       ResponseType: 'code',
       CodeChallenge: '',
       CodeChallengeMethod: '',
-      Scope: IOSCLUB_SCOPE || 'openid profile',
+      Scope: IOSCLUB_SCOPE,
       Nonce: createRandomToken(),
     }));
     loginUrl.searchParams.set('client_id', IOSCLUB_CLIENT_ID);
     loginUrl.searchParams.set('redirect_uri', IOSCLUB_REDIRECT_URI);
     loginUrl.searchParams.set('response_type', 'code');
-    loginUrl.searchParams.set('scope', IOSCLUB_SCOPE || 'openid profile');
+    loginUrl.searchParams.set('scope', IOSCLUB_SCOPE);
     return loginUrl;
   }
 

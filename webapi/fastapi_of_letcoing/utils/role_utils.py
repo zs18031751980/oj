@@ -5,7 +5,8 @@
 所有涉及角色解析的模块（auth_controller、oidc_service、user_service）共享此实现。
 """
 
-from typing import List, Optional, Union
+from collections.abc import Mapping
+from typing import Any, Iterator, List
 
 ROLE_PRIORITY = {
     'manager': 3,
@@ -42,8 +43,89 @@ _ROLE_MAP = {
     '管理员': 'manager',
 }
 
+_ROLE_FIELD_NAMES = {
+    'authorities',
+    'department',
+    'group',
+    'groups',
+    'identities',
+    'identity',
+    'level',
+    'memberof',
+    'position',
+    'realmaccess',
+    'role',
+    'roles',
+    'userrole',
+    'usertype',
+}
 
-def normalize_role(raw_role, logger=None) -> str:
+_IDENTITY_CONTAINER_FIELD_NAMES = {
+    'account',
+    'claims',
+    'principal',
+    'user',
+    'userinfo',
+}
+
+
+def _normalize_field_name(field_name: Any) -> str:
+    return ''.join(character for character in str(field_name).casefold() if character.isalnum())
+
+
+def _is_role_field(field_name: Any) -> bool:
+    normalized = _normalize_field_name(field_name)
+    return (
+        normalized in _ROLE_FIELD_NAMES
+        or normalized.endswith('claimsrole')
+        or normalized.endswith('claimsroles')
+    )
+
+
+def _iter_role_values(value: Any) -> Iterator[str]:
+    if isinstance(value, str):
+        yield value
+        return
+
+    if isinstance(value, Mapping):
+        for field_name, nested_value in value.items():
+            if _is_role_field(field_name) or _normalize_field_name(field_name) == 'name':
+                yield from _iter_role_values(nested_value)
+        return
+
+    if isinstance(value, (list, tuple, set)):
+        for nested_value in value:
+            yield from _iter_role_values(nested_value)
+
+
+def collect_role_values(source: Mapping[str, Any]) -> List[str]:
+    roles: List[str] = []
+
+    def visit(value: Any, *, allow_ambiguous_fields: bool = False) -> None:
+        if isinstance(value, Mapping):
+            for field_name, nested_value in value.items():
+                normalized_field = _normalize_field_name(field_name)
+                if _is_role_field(field_name) or (
+                    allow_ambiguous_fields and normalized_field == 'type'
+                ):
+                    roles.extend(_iter_role_values(nested_value))
+                if normalized_field in _IDENTITY_CONTAINER_FIELD_NAMES:
+                    if isinstance(nested_value, Mapping):
+                        visit(nested_value, allow_ambiguous_fields=True)
+                    elif isinstance(nested_value, (list, tuple, set)):
+                        for item in nested_value:
+                            if isinstance(item, Mapping):
+                                visit(item, allow_ambiguous_fields=True)
+
+    visit(source)
+    return roles
+
+
+def extract_highest_role(source: Mapping[str, Any], logger: Any = None) -> str:
+    return pick_highest_role(collect_role_values(source), logger)
+
+
+def normalize_role(raw_role: Any, logger: Any = None) -> str:
     """
     将原始角色值标准化为内部格式（member/staff/manager）
 
@@ -68,7 +150,7 @@ def normalize_role(raw_role, logger=None) -> str:
     return result
 
 
-def pick_highest_role(raw_roles: List[str], logger=None) -> str:
+def pick_highest_role(raw_roles: List[Any], logger: Any = None) -> str:
     """
     从多个角色值中选出权限最高的角色
 
