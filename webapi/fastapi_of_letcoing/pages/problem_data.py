@@ -1,3 +1,6 @@
+from pages.c_language_problems import C_LANGUAGE_PROBLEMS
+
+
 PROBLEMS = {
     1001: {
         "id": 1001, "title": "两数之和", "difficulty": "简单", "tags": ["数组", "哈希表"],
@@ -46,3 +49,5 @@ PROBLEMS = {
     },
 
 }
+
+PROBLEMS.update(C_LANGUAGE_PROBLEMS)

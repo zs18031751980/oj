@@ -19,6 +19,9 @@ interface TestCase {
 
 interface Problem {
   id: number;
+  sourceNumber?: number;
+  category?: string;
+  categoryLabel?: string;
   title: string;
   difficulty: '简单' | '中等' | '困难';
   tags: string[];
@@ -27,6 +30,8 @@ interface Problem {
   outputFormat: string;
   samples: TestCase[];
   testCases: TestCase[];
+  interactive?: boolean;
+  judgeable?: boolean;
   timeLimit: number;
   memoryLimit: number;
 }
@@ -40,7 +45,7 @@ const authStore = useAuthStore();
 const { isDark } = storeToRefs(themeStore);
 
 const leftPanelOpen = ref(true);
-const language = ref('cpp');
+const language = ref('c');
 const code = ref('');
 const isSubmitting = ref(false);
 const submitResult = ref<string | null>(null);
@@ -65,79 +70,33 @@ const selfTestStatus = ref('');
 const isSelfTesting = ref(false);
 const selfTestVerdict = ref<'pass' | 'fail' | null>(null);
 
-const problems: Record<number, Problem> = markRaw({
-  1001: {
-    id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'],
-    description: '给定一个整数数组 nums 和一个整数目标值 target，请你在该数组中找出和为目标值 target 的那两个整数，并返回它们的数组下标。\n\n你可以假设每种输入只会对应一个答案，并且你不能使用两次相同的元素。',
-    inputFormat: '第一行包含两个整数 n 和 target，分别表示数组长度和目标值。\n第二行包含 n 个整数，表示数组 nums。',
-    outputFormat: '输出两个整数，表示两个数的下标（从 0 开始），用空格分隔。',
-    samples: [
-      { input: '4 9\n2 7 11 15', output: '0 1' },
-      { input: '3 6\n3 2 4', output: '1 2' },
-      { input: '2 6\n3 3', output: '0 1' },
-    ],
-    testCases: [
-      { input: '5 10\n1 3 5 7 9', output: '2 4' },
-      { input: '4 0\n0 2 4 6', output: '0 0' },
-      { input: '3 15\n-1 5 10 15', output: '1 2' },
-      { input: '6 20\n2 4 6 8 10 12', output: '3 5' },
-      { input: '2 100\n50 50', output: '0 1' },
-    ],
-    timeLimit: 1000, memoryLimit: 256,
-  },
-  1002: {
-    id: 1002, title: '反转字符串', difficulty: '简单', tags: ['字符串', '双指针'],
-    description: '编写一个函数，其作用是将输入的字符串反转过来。输入字符串以字符数组的形式给出。\n\n不要给另外的数组分配额外的空间，你必须原地修改输入数组。',
-    inputFormat: '一行字符串 s，只包含可打印 ASCII 字符。',
-    outputFormat: '输出反转后的字符串。',
-    samples: [
-      { input: 'hello', output: 'olleh' },
-      { input: 'Hannah', output: 'hannaH' },
-    ],
-    testCases: [
-      { input: 'abc123', output: '321cba' },
-      { input: 'x', output: 'x' },
-      { input: '12345', output: '54321' },
-      { input: 'a b c', output: 'c b a' },
-      { input: '!@#$%', output: '%$#@!' },
-      { input: 'racecar', output: 'racecar' },
-    ],
-    timeLimit: 1000, memoryLimit: 256,
-  },
-  1003: {
-    id: 1003, title: '斐波那契数列', difficulty: '简单', tags: ['递归', '动态规划'],
-    description: '斐波那契数列的定义如下：\nF(0) = 0, F(1) = 1\nF(n) = F(n-1) + F(n-2)（n ≥ 2）\n\n给定 n，请计算 F(n)。',
-    inputFormat: '一个整数 n（0 ≤ n ≤ 30）。',
-    outputFormat: '输出 F(n) 的值。',
-    samples: [
-      { input: '2', output: '1' },
-      { input: '3', output: '2' },
-      { input: '4', output: '3' },
-    ],
-    testCases: [
-      { input: '0', output: '0' },
-      { input: '1', output: '1' },
-      { input: '2', output: '1' },
-      { input: '15', output: '610' },
-      { input: '20', output: '6765' },
-      { input: '30', output: '832040' },
-    ],
-    timeLimit: 1000, memoryLimit: 256,
-  },
-});
+const problem = ref<Problem | null>(null);
+const isProblemLoading = ref(true);
+const problemLoadError = ref('');
+const problemId = computed(() => Number(route.params.id));
 
-const problem = computed(() => {
-  const id = Number(route.params.id);
-  return problems[id] || null;
-});
+const loadProblem = async () => {
+  isProblemLoading.value = true;
+  problemLoadError.value = '';
+  problem.value = null;
+  try {
+    problem.value = await apiRequest<Problem>(`/problems/${problemId.value}`, { skipAuth: true });
+  } catch (error) {
+    problemLoadError.value = error instanceof Error ? error.message : '题目加载失败，请稍后重试。';
+  } finally {
+    isProblemLoading.value = false;
+  }
+};
 
 const languageTemplates: Record<string, string> = markRaw({
+  c: '#include <stdio.h>\n\nint main(void) {\n  // 在此编写代码\n  return 0;\n}',
   cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n  // 在此编写代码\n  return 0;\n}',
   python: '# 在此编写代码\n',
   java: 'public class Main {\n  public static void main(String[] args) {\n    // 在此编写代码\n  }\n}',
 });
 
 const langButtons = markRaw([
+  { v: 'c', l: 'C' },
   { v: 'cpp', l: 'C++' },
   { v: 'python', l: 'Python' },
   { v: 'java', l: 'Java' },
@@ -151,7 +110,6 @@ const resultClassMap: Record<string, string> = {
 };
 
 const { saveCode, loadCode } = useProblemCode();
-const problemId = computed(() => Number(route.params.id));
 
 (async () => {
   if (!code.value) {
@@ -196,6 +154,11 @@ const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const { incrementSubmissions, incrementAccepted } = useProblemStats();
 
 const submitCode = async () => {
+  const p = problem.value;
+  if (!p || p.judgeable === false) {
+    message.info('这是一道练习题，不参与自动判题。');
+    return;
+  }
   if (!authStore.isAuthenticated) {
     dialog.warning({
       title: '提示',
@@ -222,9 +185,6 @@ const submitCode = async () => {
   testResults.value = [];
   failedTestCaseIndex.value = null;
   currentResultPage.value = 0;
-
-  const p = problem.value;
-  if (!p) return;
 
   try {
     const created = await apiRequest<SubmissionResponse>('/submissions', {
@@ -318,7 +278,7 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
 };
 
 const editorLanguageMap: Record<string, string> = {
-  cpp: 'cpp', python: 'python', java: 'java',
+  c: 'c', cpp: 'cpp', python: 'python', java: 'java',
 };
 
 const runSelfTest = async () => {
@@ -385,7 +345,12 @@ const handleKeyboard = (e: KeyboardEvent) => {
 };
 
 onMounted(() => {
+  loadProblem();
   window.addEventListener('keydown', handleKeyboard);
+});
+
+watch(problemId, () => {
+  loadProblem();
 });
 
 onUnmounted(() => {
@@ -399,10 +364,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="!problem" class="flex min-h-[calc(100vh-var(--header-h,5rem))] items-center justify-center">
+  <div v-if="isProblemLoading" class="flex min-h-[calc(100vh-var(--header-h,5rem))] items-center justify-center">
+    <div class="text-center text-slate-500 dark:text-slate-400">
+      <Icon icon="material-symbols:progress-activity" class="mx-auto mb-4 h-12 w-12 animate-spin text-cyan-500" />
+      <p class="text-lg font-bold">正在加载题目...</p>
+    </div>
+  </div>
+  <div v-else-if="problemLoadError || !problem" class="flex min-h-[calc(100vh-var(--header-h,5rem))] items-center justify-center">
     <div class="text-center">
       <Icon icon="material-symbols:error-outline" class="mx-auto mb-4 h-12 w-12 text-slate-300 dark:text-slate-600" />
-      <p class="text-lg font-bold text-slate-500 dark:text-slate-400">题目不存在</p>
+      <p class="text-lg font-bold text-slate-500 dark:text-slate-400">{{ problemLoadError || '题目不存在' }}</p>
       <NButton class="mt-4" @click="router.push('/problems')">返回题库</NButton>
     </div>
   </div>
@@ -413,7 +384,7 @@ onUnmounted(() => {
           <button class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" @click="router.push('/problems')">
             <Icon icon="material-symbols:arrow-back" class="h-3.5 w-3.5" />返回
           </button>
-          <span class="text-lg font-black truncate">{{ problem.id }}. {{ problem.title }}</span>
+          <span class="text-lg font-black truncate">{{ problem.sourceNumber ?? problem.id }}. {{ problem.title }}</span>
           <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="problem.difficulty === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' : problem.difficulty === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400'">{{ problem.difficulty }}</span>
         </div>
 
@@ -473,7 +444,8 @@ onUnmounted(() => {
                 <button v-for="lang in langButtons" :key="lang.v" class="rounded-lg px-3 py-1.5 text-xs font-bold transition" :class="language === lang.v ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'" @click="updateLanguage(lang.v)">{{ lang.l }}</button>
               </div>
             </div>
-            <NButton type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
+            <span v-if="problem.judgeable === false" class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">练习题 · 不参与自动判题</span>
+            <NButton v-else type="primary" size="small" :loading="isSubmitting" @click="submitCode">提交</NButton>
           </div>
 
           <div class="flex-1 min-h-0">

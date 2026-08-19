@@ -1,31 +1,59 @@
 <script setup lang="ts">
-import { computed, markRaw, ref, shallowRef } from 'vue';
+import { computed, markRaw, onMounted, ref, shallowRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useAuthStore } from '../stores/auth';
+import { apiRequest } from '../services/api';
 
 interface Problem {
   id: number;
+  sourceNumber?: number;
+  category: string;
+  categoryLabel?: string;
   title: string;
   difficulty: '简单' | '中等' | '困难';
   tags: string[];
+  interactive?: boolean;
+  judgeable?: boolean;
+}
+
+interface ProblemListResponse {
+  data: Problem[];
+  total: number;
 }
 
 const router = useRouter();
 const searchQuery = ref('');
 const difficultyFilter = ref<string>('');
+const categoryFilter = ref('');
+const isLoading = ref(true);
+const loadError = ref('');
 const { getStats } = useProblemStats();
 const authStore = useAuthStore();
 
-const problems = shallowRef<Problem[]>([
-  { id: 1001, title: '两数之和', difficulty: '简单', tags: ['数组', '哈希表'] },
-  { id: 1002, title: '反转字符串', difficulty: '简单', tags: ['字符串', '双指针'] },
-  { id: 1003, title: '斐波那契数列', difficulty: '简单', tags: ['递归', '动态规划'] },
-]);
+const problems = shallowRef<Problem[]>([]);
+
+const loadProblems = async () => {
+  isLoading.value = true;
+  loadError.value = '';
+  try {
+    const response = await apiRequest<ProblemListResponse>('/problems', { skipAuth: true });
+    problems.value = response.data;
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '题目加载失败，请稍后重试。';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+onMounted(loadProblems);
 
 const filteredProblems = computed(() => {
   let list = problems.value;
+  if (categoryFilter.value) {
+    list = list.filter(p => p.category === categoryFilter.value);
+  }
   if (difficultyFilter.value) {
     list = list.filter(p => p.difficulty === difficultyFilter.value);
   }
@@ -60,7 +88,7 @@ const difficultyColorMap = markRaw({
 
 <template>
   <div class="problems-page flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
-    <div v-once class="problems-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
+    <div class="problems-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
       <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div class="max-w-3xl">
@@ -87,7 +115,18 @@ const difficultyColorMap = markRaw({
             class="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-cyan-500"
           />
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="category in [{ value: '', label: '全部题目' }, { value: 'c-language', label: 'C 语言专区' }]"
+            :key="category.value"
+            class="rounded-xl border px-4 py-2 text-sm font-bold transition"
+            :class="categoryFilter === category.value
+              ? 'border-cyan-400 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
+              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-cyan-500 dark:hover:text-slate-950'"
+            @click="categoryFilter = category.value"
+          >
+            {{ category.label }}
+          </button>
           <button
             v-for="d in ['', '简单', '中等', '困难']"
             :key="d"
@@ -103,7 +142,16 @@ const difficultyColorMap = markRaw({
       </div>
 
       <div class="problems-list overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
-        <div v-if="filteredProblems.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+        <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-center text-slate-500 dark:text-slate-400">
+          <Icon icon="material-symbols:progress-activity" width="40" height="40" class="mb-4 animate-spin text-cyan-500" />
+          <p class="text-lg font-bold">正在加载题目...</p>
+        </div>
+        <div v-else-if="loadError" class="flex flex-col items-center justify-center py-20 text-center text-rose-500">
+          <Icon icon="material-symbols:error-outline" width="48" height="48" class="mb-4" />
+          <p class="text-lg font-bold">{{ loadError }}</p>
+          <button class="mt-4 rounded-lg border border-rose-300 px-4 py-2 text-sm font-bold" @click="loadProblems">重试</button>
+        </div>
+        <div v-else-if="filteredProblems.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
           <Icon icon="material-symbols:search-off" width="48" height="48" class="mb-4 text-slate-300 dark:text-slate-600" />
           <p class="text-lg font-bold text-slate-500 dark:text-slate-400">没有找到匹配的题目</p>
         </div>
@@ -116,9 +164,11 @@ const difficultyColorMap = markRaw({
           >
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-3">
-                <span class="w-12 shrink-0 text-sm font-mono text-slate-400 dark:text-slate-500">{{ problem.id }}</span>
+                <span class="w-12 shrink-0 text-sm font-mono text-slate-400 dark:text-slate-500">{{ problem.sourceNumber ?? problem.id }}</span>
                 <span class="text-base font-bold text-slate-900 dark:text-white truncate">{{ problem.title }}</span>
                 <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="difficultyColorMap[problem.difficulty]">{{ problem.difficulty }}</span>
+                <span v-if="problem.categoryLabel" class="shrink-0 rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300">{{ problem.categoryLabel }}</span>
+                <span v-if="problem.interactive" class="shrink-0 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">练习题</span>
               </div>
               <div class="mt-1 flex flex-wrap gap-2">
                 <span

@@ -30,6 +30,7 @@ from controllers.code_controller import api as code_api
 from controllers.submission_controller import api as submission_api
 from controllers.user_code_controller import api as user_code_api
 from controllers.announcement_controller import api as announcement_api
+from controllers.problem_controller import api as problem_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
@@ -449,6 +450,7 @@ api.add_namespace(auth_api, path='/auth')
 api.add_namespace(submission_api, path='/submissions')
 api.add_namespace(user_code_api, path='/user')
 api.add_namespace(announcement_api, path='/announcement')
+api.add_namespace(problem_api, path='/problems')
 
 
 # ============================================================
