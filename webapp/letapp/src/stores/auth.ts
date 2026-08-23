@@ -13,7 +13,6 @@ import {
   type UserInfo,
 } from '../services/api';
 import { useThemeStore } from './theme';
-import { ensureRoleScope } from '../utils/oauth-scope';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -21,12 +20,6 @@ const USER_INFO_KEY = 'user_info';
 const OAUTH_REMEMBER_KEY = 'oauth_login_remember';
 const OAUTH_PROVIDER_KEY = 'oauth_login_provider';
 const OAUTH_NEXT_KEY = 'oauth_login_next';
-const IOSCLUB_OAUTH_URL = String(import.meta.env.VITE_IOSCLUB_OAUTH_URL || '').trim();
-const IOSCLUB_CLIENT_ID = String(import.meta.env.VITE_IOSCLUB_CLIENT_ID || '').trim();
-const IOSCLUB_REDIRECT_URI = String(import.meta.env.VITE_IOSCLUB_REDIRECT_URI || '').trim();
-const IOSCLUB_SCOPE = ensureRoleScope(
-  String(import.meta.env.VITE_IOSCLUB_SCOPE || 'openid profile'),
-);
 const AUTH_ROUTE_PREFIXES = ['/login', '/auth/callback'];
 
 type SessionPayload = TokenResponse | {
@@ -104,47 +97,16 @@ const normalizeOAuthErrorMessage = (error: string, errorDescription: string) => 
   return errorDescription || error || '登录失败，请稍后重试。';
 };
 
-const createRandomToken = () => {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  }
-
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-};
-
-const encodeOAuthState = (payload: Record<string, string>) => btoa(JSON.stringify(payload));
-
 const normalizeNextPath = (next: string) => {
   const safeNext = next.startsWith('/') ? next : '/';
   return AUTH_ROUTE_PREFIXES.some((prefix) => safeNext.startsWith(prefix)) ? '/' : safeNext;
 };
 
 const buildProviderLoginUrl = (provider: string, next: string) => {
-  if (provider === 'iOSClub') {
-    if (!IOSCLUB_OAUTH_URL || !IOSCLUB_CLIENT_ID || !IOSCLUB_REDIRECT_URI) {
-      throw new Error('iOSClub OAuth 登录配置缺失，请检查前端环境变量。');
-    }
-
-    const loginUrl = new URL(IOSCLUB_OAUTH_URL);
-    loginUrl.searchParams.set('state', encodeOAuthState({
-      ClientId: IOSCLUB_CLIENT_ID,
-      RedirectUri: IOSCLUB_REDIRECT_URI,
-      State: createRandomToken(),
-      ResponseType: 'code',
-      CodeChallenge: '',
-      CodeChallengeMethod: '',
-      Scope: IOSCLUB_SCOPE,
-      Nonce: createRandomToken(),
-    }));
-    loginUrl.searchParams.set('client_id', IOSCLUB_CLIENT_ID);
-    loginUrl.searchParams.set('redirect_uri', IOSCLUB_REDIRECT_URI);
-    loginUrl.searchParams.set('response_type', 'code');
-    loginUrl.searchParams.set('scope', IOSCLUB_SCOPE);
-    return loginUrl;
-  }
-
+  // 所有提供商统一走后端 OAuth 流程：后端负责拼授权地址、保存 state，
+  // 并在回调后用本地 JWT 换回前端。前端直接拼 provider 授权地址会得到
+  // 授权码（code），而 /auth/callback 只认 access_token/refresh_token，
+  // 这会导致「登录回调缺少必要令牌」。因此不再自行构造 provider 直连地址。
   const loginUrl = new URL(`${API_BASE_URL}/auth/login/${encodeURIComponent(provider)}`);
   loginUrl.searchParams.set('next', next);
   return loginUrl;

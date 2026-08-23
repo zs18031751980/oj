@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
-import * as monaco from "monaco-editor";
+// 按需引入 Monaco（性能优化）：只加载编辑器核心 + 本项目用到的 c/cpp/python/java
+// 语法高亮，不再引入完整的 monaco-editor（含 typescript/json/css/html 语言服务，
+// 体积约 3.7MB）。这些语言服务本题库用不到，统一走基础 editor.worker。
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import "monaco-editor/esm/vs/editor/editor.all";
+import "monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution";
+import "monaco-editor/esm/vs/basic-languages/python/python.contribution";
+import "monaco-editor/esm/vs/basic-languages/java/java.contribution";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import TsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
-import JsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
-import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
-import HtmlWorker from "monaco-editor/esm/vs/language/html/html.worker?worker";
 
 const props = withDefaults(
   defineProps<{
@@ -31,24 +34,9 @@ let preventUpdate = false;
 const setupMonacoEnvironment = () => {
   if (typeof window !== "undefined" && !("MonacoEnvironment" in window)) {
     (window as any).MonacoEnvironment = {
-      getWorker(_: string, label: string) {
-        switch (label) {
-          case "json":
-            return new JsonWorker();
-          case "css":
-          case "scss":
-          case "less":
-            return new CssWorker();
-          case "html":
-          case "handlebars":
-          case "razor":
-            return new HtmlWorker();
-          case "typescript":
-          case "javascript":
-            return new TsWorker();
-          default:
-            return new EditorWorker();
-        }
+      // 只使用基础编辑器 worker（c/cpp/python/java 无需独立语言服务 worker）
+      getWorker() {
+        return new EditorWorker();
       },
     };
   }

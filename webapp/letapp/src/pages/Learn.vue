@@ -115,7 +115,31 @@ function parseCardInfo(markdown: string): CardInfo {
   return { description, points };
 }
 
+// 卡片摘要缓存：资料文件基本不变，重复访问时直接用本地缓存，避免每次进入
+// 学习页都并发拉取全部 markdown 原文（性能优化）。
+const CARD_INFO_CACHE_KEY = 'learn_card_info_cache_v1';
+
+function readCardInfoCache(): Record<string, CardInfo> {
+  try {
+    const raw = localStorage.getItem(CARD_INFO_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCardInfoCache(map: Record<string, CardInfo>) {
+  try {
+    localStorage.setItem(CARD_INFO_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    // 存储不可用时静默忽略，不影响功能
+  }
+}
+
 async function loadCardData() {
+  const cache = readCardInfoCache();
   const results = await Promise.all(
     allResources.map(async (resource) => {
       if (resource.description) {
@@ -124,6 +148,11 @@ async function loadCardData() {
 
       if (!resource.markdownFile) {
         return { id: resource.id, description: '', points: [] };
+      }
+
+      const cached = cache[resource.id];
+      if (cached && typeof cached.description === 'string') {
+        return { id: resource.id, description: cached.description, points: cached.points || [] };
       }
 
       try {
@@ -140,6 +169,7 @@ async function loadCardData() {
     map[r.id] = { description: r.description, points: r.points };
   }
   cardInfoMap.value = map;
+  writeCardInfoCache(map);
 }
 
 const filteredCourses = computed(() => courses);

@@ -8,6 +8,7 @@ import { useAuthStore } from '../stores/auth';
 import { storeToRefs } from 'pinia';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import SelfTestPanel from '../components/SelfTestPanel.vue';
+import MarkdownComponent from '../components/MarkdownComponent.vue';
 import { apiRequest } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useProblemCode } from '../composables/useProblemCode';
@@ -29,11 +30,12 @@ interface Problem {
   inputFormat: string;
   outputFormat: string;
   samples: TestCase[];
-  testCases: TestCase[];
+  testCaseCount: number;
   interactive?: boolean;
   judgeable?: boolean;
   timeLimit: number;
   memoryLimit: number;
+  learningMaterial?: string;
 }
 
 const route = useRoute();
@@ -50,12 +52,14 @@ const code = ref('');
 const isSubmitting = ref(false);
 const submitResult = ref<string | null>(null);
 const resultPanelOpen = ref(true);
-const activeTab = ref<'desc' | 'testcases'>('desc');
+const activeTab = ref<'desc' | 'learn' | 'testcases'>('desc');
 
 interface TestResult {
   testCaseIndex: number;
   passed: boolean;
   actualOutput: string;
+  input: string;
+  expected: string;
 }
 
 const testResults = ref<TestResult[]>([]);
@@ -74,6 +78,37 @@ const problem = ref<Problem | null>(null);
 const isProblemLoading = ref(true);
 const problemLoadError = ref('');
 const problemId = computed(() => Number(route.params.id));
+
+interface MarkdownContent {
+  content: string;
+}
+
+const learningMarkdown = ref<MarkdownContent | undefined>();
+const isLearningLoading = ref(false);
+const learningError = ref('');
+
+const loadLearningMaterial = async () => {
+  const file = problem.value?.learningMaterial;
+  if (!file) {
+    learningMarkdown.value = undefined;
+    return;
+  }
+  isLearningLoading.value = true;
+  learningError.value = '';
+  try {
+    const url = `/learn/${file.split('/').map((s) => encodeURIComponent(s)).join('/')}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    learningMarkdown.value = { content: await res.text() };
+  } catch {
+    learningMarkdown.value = undefined;
+    learningError.value = '学习资料加载失败，请稍后重试。';
+  } finally {
+    isLearningLoading.value = false;
+  }
+};
+
+const descMarkdown = computed<MarkdownContent>(() => ({ content: problem.value?.description || '' }));
 
 const loadProblem = async () => {
   isProblemLoading.value = true;
@@ -242,17 +277,21 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
         testCaseIndex: idx,
         passed: tr.passed,
         actualOutput: tr.actualOutput || tr.stdout || '',
+        input: tr.input || '',
+        expected: tr.expected || '',
       });
     }
   } else {
-    const total = p.testCases.length;
+    const total = p.testCaseCount;
     const firstFailedIdx = res.fail_testcase_index;
     for (let i = 0; i < total; i++) {
       const passed = firstFailedIdx === null || firstFailedIdx === undefined || i < firstFailedIdx;
       results.push({
         testCaseIndex: i,
         passed,
-        actualOutput: passed ? (p.testCases[i]?.output ?? '') : '(实际输出未记录)',
+        actualOutput: '(实际输出未记录)',
+        input: '',
+        expected: '',
       });
     }
   }
@@ -351,6 +390,14 @@ onMounted(() => {
 
 watch(problemId, () => {
   loadProblem();
+  learningMarkdown.value = undefined;
+  learningError.value = '';
+});
+
+watch(activeTab, (tab) => {
+  if (tab === 'learn') {
+    loadLearningMaterial();
+  }
 });
 
 onUnmounted(() => {
@@ -379,7 +426,7 @@ onUnmounted(() => {
   </div>
   <div v-else class="problem-page flex min-h-[calc(100vh-var(--header-h,5rem))] bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
     <div class="problem-workbench flex flex-1 flex-col lg:flex-row relative">
-      <div class="problem-sidebar relative flex flex-col border-r border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[420px]' : 'w-0 lg:w-0 overflow-hidden'">
+      <div class="problem-sidebar relative flex flex-col border-r border-slate-200 bg-white/85 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 lg:self-start" :class="leftPanelOpen ? 'w-full lg:w-[460px] xl:w-[560px]' : 'w-0 lg:w-0 overflow-hidden'">
         <div class="problem-sidebar-header flex items-center gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <button class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300" @click="router.push('/problems')">
             <Icon icon="material-symbols:arrow-back" class="h-3.5 w-3.5" />返回
@@ -390,7 +437,8 @@ onUnmounted(() => {
 
         <div class="problem-tabs flex gap-1 border-b border-slate-100 px-5 dark:border-slate-800">
           <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'desc' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'desc'">题目</button>
-          <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'testcases' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'testcases'">测试用例 ({{ problem.testCases.length }})</button>
+          <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'learn' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'learn'">学习资料</button>
+          <button class="px-3 py-3 text-sm font-bold border-b-2 transition" :class="activeTab === 'testcases' ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'" @click="activeTab = 'testcases'">测试用例 ({{ problem.testCaseCount }})</button>
         </div>
 
         <div v-show="activeTab === 'desc'" class="problem-tab-content px-5 py-5">
@@ -400,7 +448,9 @@ onUnmounted(() => {
           </div>
 
           <h3 class="text-base font-black mb-2">题目描述</h3>
-          <p class="whitespace-pre-line leading-7 text-sm text-slate-700 dark:text-slate-300">{{ problem.description }}</p>
+          <div class="markdown-body text-sm leading-7">
+            <MarkdownComponent :content="descMarkdown" :show-nav="false" :show-heading-links="false" />
+          </div>
 
           <h3 class="mt-5 text-base font-black mb-2">输入格式</h3>
           <p class="whitespace-pre-line leading-7 text-sm text-slate-700 dark:text-slate-300">{{ problem.inputFormat }}</p>
@@ -421,6 +471,25 @@ onUnmounted(() => {
                 <pre class="rounded-xl bg-slate-900 p-3 font-mono text-xs text-emerald-300 overflow-x-auto">{{ sample.output }}</pre>
               </div>
             </div>
+          </div>
+          <div v-if="problem.learningMaterial" class="mt-6 rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3 text-sm text-cyan-800 dark:border-cyan-900/50 dark:bg-cyan-950/30 dark:text-cyan-200">
+            提示：切换到「学习资料」标签页，可边看讲解边写代码。
+          </div>
+        </div>
+
+        <div v-show="activeTab === 'learn'" class="problem-tab-content px-5 py-5">
+          <div v-if="!problem.learningMaterial" class="flex flex-col items-center justify-center py-16 text-center">
+            <Icon icon="material-symbols:menu-book" class="mb-3 h-10 w-10 text-slate-300 dark:text-slate-600" />
+            <p class="text-sm font-bold text-slate-500 dark:text-slate-400">本题暂未关联学习资料</p>
+          </div>
+          <div v-else-if="isLearningLoading" class="flex min-h-[240px] items-center justify-center text-slate-500 dark:text-slate-400">
+            正在加载学习资料...
+          </div>
+          <div v-else-if="learningError" class="flex min-h-[240px] items-center justify-center text-center text-sm text-rose-500">
+            {{ learningError }}
+          </div>
+          <div v-else-if="learningMarkdown" class="markdown-body">
+            <MarkdownComponent :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
           </div>
         </div>
 
@@ -534,7 +603,7 @@ onUnmounted(() => {
                     <span>输入</span>
                   </div>
                   <div class="collapse-body">
-                    <pre class="output-box">{{ problem.testCases[currentResultPage]?.input }}</pre>
+                    <pre class="output-box">{{ testResults[currentResultPage]?.input || '(已隐藏)' }}</pre>
                   </div>
                 </div>
                 <div class="surface-panel">
@@ -542,7 +611,7 @@ onUnmounted(() => {
                     <span>期望输出</span>
                   </div>
                   <div class="collapse-body">
-                    <pre class="output-box">{{ problem.testCases[currentResultPage]?.output }}</pre>
+                    <pre class="output-box">{{ testResults[currentResultPage]?.expected || '(已隐藏)' }}</pre>
                   </div>
                 </div>
                 <div class="surface-panel">

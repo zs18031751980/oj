@@ -126,16 +126,39 @@ class JudgeWorker:
             outp = tc.output_data if hasattr(tc, 'output_data') else tc['output']
             result = self._judge_single(code, language, inp, outp)
             result['testCaseIndex'] = idx
+            if result["passed"]:
+                # 通过的用例不回传输入/期望输出，避免测试数据泄露
+                result['input'] = ''
+                result['expected'] = ''
+                results.append(result)
+                continue
+            result['input'] = inp
             results.append(result)
-            if not result["passed"] and first_failed is None:
+            if first_failed is None:
                 first_failed = idx
             if result.get("stderr") and compile_error is None:
                 compile_error = result["stderr"]
+            # 性能优化：首个用例失败即停止后续执行（65 个用例无需全部跑完）
+            break
+
+        # 未执行的用例标记为失败，保持用例总数一致（整体结论已确定为 WA/CE）
+        if first_failed is not None:
+            for idx in range(len(results), len(testcases)):
+                results.append({
+                    "passed": False,
+                    "stdout": "",
+                    "stderr": "",
+                    "input": "",
+                    "expected": "",
+                    "skipped": True,
+                    "testCaseIndex": idx,
+                })
 
         all_passed = first_failed is None
 
-        all_have_stderr = all(r.get("stderr") for r in results)
-        final_status = 'CE' if all_have_stderr else ('AC' if all_passed else 'WA')
+        final_status = 'AC' if all_passed else (
+            'CE' if (first_failed is not None and results[first_failed].get("stderr")) else 'WA'
+        )
 
         total_time = sum(r.get("time_used", 0) or 0 for r in results)
 
@@ -146,7 +169,11 @@ class JudgeWorker:
             'memory_used': 0,
             'testcase_results': results,
             'fail_testcase_index': first_failed,
-            'compile_error': compile_error if all_have_stderr else None,
+            'compile_error': (
+                results[first_failed].get("stderr")
+                if first_failed is not None and final_status == 'CE'
+                else None
+            ),
         }
         self._save_to_redis(submission_id, result_data)
 

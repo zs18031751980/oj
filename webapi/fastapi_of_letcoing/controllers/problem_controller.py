@@ -33,6 +33,10 @@ def serialize_summary(problem):
 
 def serialize_problem(problem):
     data = dict(problem)
+    # 测试用例（含答案）不下发到前端，仅用于后端判题，防止答案泄露；
+    # 前端只需要用例总数用于展示。
+    test_cases = data.pop("testCases", None) or []
+    data["testCaseCount"] = len(test_cases)
     data.setdefault("category", "general")
     data.setdefault("categoryLabel", "通用题库")
     data.setdefault("interactive", False)
