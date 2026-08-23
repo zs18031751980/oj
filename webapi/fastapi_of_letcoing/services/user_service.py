@@ -20,7 +20,7 @@ from peewee import DoesNotExist, IntegrityError, fn   # Peewee ORM 工具
 from services.database_service import DatabaseService  # 数据库服务基类
 from models.db_models import User                       # 用户 ORM 模型
 from core.di_container import Injectable
-from utils.role_utils import normalize_role, pick_highest_role
+from utils.role_utils import normalize_role, pick_highest_role, extract_highest_role
 
 BEIJING_TZ = timezone(timedelta(hours=8))
 
@@ -397,11 +397,17 @@ class UserService(DatabaseService, Injectable):
                         pass
 
                 incoming_status = user_info.get('is_active')
+                # 从提供商返回的身份信息中取最高权限角色（支持多角色列表）
+                highest_role = (
+                    extract_highest_role(user_info)
+                    if isinstance(user_info, dict)
+                    else normalize_role(user_info.get('role', 'member'))
+                )
                 user = User.create(
                     username=username,
                     email=email,
                     password_hash=None,
-                    role=normalize_role(user_info.get('role', 'member')),
+                    role=highest_role,
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),

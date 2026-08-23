@@ -20,6 +20,7 @@ from peewee import (
 from playhouse.pool import PooledPostgresqlExtDatabase
 
 from core.db_config import DatabaseConfig
+from core.db_robust import ensure_connected, sanitize_db_error, DatabaseUnavailableError
 
 
 # ============================================================
@@ -325,29 +326,89 @@ def close_database():
         db.close()
 
 
-def migrate_add_role_column():
-    """
-    迁移：为已有 users 表添加缺失的列并修复约束（如果尚不存在）
+# 已登记的数据库迁移（按执行顺序）。每条迁移都是幂等的（使用 IF NOT EXISTS 等）。
+# 新增迁移时在此追加即可，无需手动维护版本号（由 schema_migrations 表记录）。
+_SCHEMA_MIGRATIONS = [
+    (
+        "0001_users_role_oauth_columns",
+        [
+            # 添加缺失的列
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'member';",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider VARCHAR(50);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id VARCHAR(255);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(10) DEFAULT 'system';",
+            # 修复旧表的列约束（兼容 OAuth 用户无需密码的场景）
+            "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;",
+            "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true;",
+            "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();",
+            "ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();",
+        ],
+    ),
+]
 
-    兼容已有数据库：如果 users 表在相关列加入之前已创建，
-    此函数通过执行 PostgreSQL 的 ALTER TABLE 来安全地添加缺失的列并修复约束。
+
+def _apply_migrations(db):
+    """
+    在已建立连接的前提下应用所有尚未执行的迁移。
+
+    迁移记录保存在 schema_migrations 表中；若该表无法创建，
+    仍会继续执行迁移（迁移语句本身幂等，可重复运行）。
+    """
+    try:
+        db.execute_sql(
+            "CREATE TABLE IF NOT EXISTS schema_migrations ("
+            "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT now())"
+        )
+    except Exception:
+        pass
+
+    applied = set()
+    try:
+        applied = {
+            row[0]
+            for row in db.execute_sql("SELECT name FROM schema_migrations").fetchall()
+        }
+    except Exception:
+        applied = set()
+
+    for name, sqls in _SCHEMA_MIGRATIONS:
+        if name in applied:
+            continue
+        try:
+            with db.atomic():
+                for sql in sqls:
+                    db.execute_sql(sql)
+            try:
+                db.execute_sql(
+                    "INSERT INTO schema_migrations(name) VALUES (%s) "
+                    "ON CONFLICT (name) DO NOTHING",
+                    (name,),
+                )
+            except Exception:
+                pass
+            print(f"[DB] 迁移已应用: {name}")
+        except Exception as e:
+            print(f"[DB] 迁移失败(已跳过): {name}: {sanitize_db_error(str(e))}")
+
+
+def run_schema_migrations():
+    """
+    执行所有数据库迁移。
+
+    在连接建立（含自动重连）后应用迁移，数据库暂时不可用时安全跳过，
+    不会阻塞应用启动。
     """
     db = get_database()
-    migrations = [
-        # 添加缺失的列
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'member';",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider VARCHAR(50);",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id VARCHAR(255);",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500);",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(10) DEFAULT 'system';",
-        # 修复旧表的列约束（兼容 OAuth 用户无需密码的场景）
-        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;",
-        "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true;",
-        "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();",
-        "ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();",
-    ]
-    for sql in migrations:
-        try:
-            db.execute_sql(sql)
-        except Exception:
-            pass
+    try:
+        with ensure_connected(db):
+            _apply_migrations(db)
+    except DatabaseUnavailableError as e:
+        print(f"[DB] 迁移跳过(数据库不可用): {sanitize_db_error(str(e))}")
+
+
+def migrate_add_role_column():
+    """
+    迁移入口（保留旧名以兼容既有调用）：执行全部数据库迁移。
+    """
+    run_schema_migrations()

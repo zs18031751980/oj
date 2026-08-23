@@ -26,8 +26,12 @@ announcement_input = api.model('AnnouncementInput', {
 })
 
 
-def _require_manager() -> (dict | tuple):
-    """验证请求携带的 JWT 令牌，确保用户角色为 manager（副部长/部长/社长/管理员等）"""
+# 允许编辑/管理公告的角色集合（manager 与 staff 均可）
+ANNOUNCEMENT_EDITOR_ROLES = {'manager', 'staff'}
+
+
+def _require_editor() -> (dict | tuple):
+    """验证请求携带的 JWT 令牌，确保用户具有公告编辑权限（manager / staff）"""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return {'error': '请先登录'}, 401
@@ -47,8 +51,8 @@ def _require_manager() -> (dict | tuple):
     except Exception:
         pass
 
-    if user_info.get('role', 'member') != 'manager':
-        return {'error': '权限不足，仅副部长/部长/社长/管理员可执行此操作'}, 403
+    if user_info.get('role', 'member') not in ANNOUNCEMENT_EDITOR_ROLES:
+        return {'error': '权限不足，仅管理员/副部长/部长/社长/干事等可管理公告'}, 403
 
     return user_info
 
@@ -62,7 +66,7 @@ class AnnouncementListController(Resource):
             request.args.get('include_unpublished', '').strip().lower() == 'true'
         )
         if include_unpublished:
-            result = _require_manager()
+            result = _require_editor()
             if isinstance(result, tuple):
                 return result
             query = Announcement.select()
@@ -81,7 +85,7 @@ class AnnouncementListController(Resource):
     @api.response(401, 'Unauthorized')
     @api.response(403, 'Forbidden')
     def post(self):
-        result = _require_manager()
+        result = _require_editor()
         if isinstance(result, tuple):
             return result
 
@@ -112,7 +116,7 @@ class AnnouncementDetailController(Resource):
         try:
             announcement = Announcement.get_by_id(announcement_id)
             if not announcement.is_published:
-                result = _require_manager()
+                result = _require_editor()
                 if isinstance(result, tuple):
                     return {'error': '公告不存在'}, 404
             return announcement.to_dict(), 200
@@ -126,7 +130,7 @@ class AnnouncementDetailController(Resource):
     @api.response(403, 'Forbidden')
     @api.response(404, 'Not Found')
     def put(self, announcement_id: int):
-        result = _require_manager()
+        result = _require_editor()
         if isinstance(result, tuple):
             return result
 
@@ -164,7 +168,7 @@ class AnnouncementDetailController(Resource):
     @api.response(403, 'Forbidden')
     @api.response(404, 'Not Found')
     def delete(self, announcement_id: int):
-        result = _require_manager()
+        result = _require_editor()
         if isinstance(result, tuple):
             return result
 

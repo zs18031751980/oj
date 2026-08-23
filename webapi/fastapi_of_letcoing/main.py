@@ -22,7 +22,8 @@ import gzip
 import io
 from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
 
-from models.db_models import create_tables, migrate_add_role_column
+from models.db_models import create_tables, migrate_add_role_column, run_schema_migrations
+from core.db_robust import DatabaseUnavailableError, sanitize_db_error
 
 # 导入 API 命名空间
 from controllers.auth_controller import api as auth_api
@@ -331,13 +332,12 @@ def healthcheck():
 
 @app.get('/healthz/db')
 def db_healthcheck():
-    """数据库连接诊断端点"""
+    """数据库连接诊断端点（脱敏，不暴露账号/密码等敏感信息）"""
     from models.db_models import get_database
+    from core.db_robust import run_db_operation
     db = get_database()
     try:
-        if not db.is_connection_usable():
-            db.connect()
-        db.execute_sql('SELECT 1')
+        run_db_operation(db, lambda: db.execute_sql('SELECT 1'))
         return {
             'connection': 'ok',
             'db_name': str(db.database),
@@ -345,7 +345,7 @@ def db_healthcheck():
     except Exception as e:
         return {
             'connection': 'error',
-            'error': str(e),
+            'error': sanitize_db_error(str(e)),
             'db_name': str(db.database),
         }
 
@@ -407,11 +407,11 @@ try:
 except Exception as e:
     app.logger.warning(f"Database table creation failed (app will still start): {e}")
 
-# 执行数据库迁移（如已有 users 表缺少 role 列则自动添加）
+# 执行数据库迁移（如已有 users 表缺少 role 列则自动添加；数据库不可用时安全跳过）
 try:
-    migrate_add_role_column()
+    run_schema_migrations()
 except Exception as e:
-    app.logger.warning(f"Database migration failed (app will still start): {e}")
+    app.logger.warning(f"Database migration failed (app will still start): {sanitize_db_error(str(e))}")
 
 # 获取依赖注入容器
 container = get_container()
@@ -440,9 +440,15 @@ import traceback
 
 @api.errorhandler(Exception)
 def handle_uncaught_error(e):
-    """捕获所有未处理的异常，返回 JSON 格式的错误信息"""
+    """捕获所有未处理的异常，返回 JSON 格式的错误信息（对数据库错误脱敏）"""
     app.logger.error(f"Unhandled exception: {traceback.format_exc()}")
-    return {"error": f"服务器内部错误: {str(e)}", "detail": traceback.format_exc() if app.debug else ""}, 500
+    if isinstance(e, DatabaseUnavailableError):
+        return {"error": "数据库暂时不可用，请稍后重试"}, 503
+    safe_message = sanitize_db_error(str(e))
+    return {
+        "error": f"服务器内部错误: {safe_message}",
+        "detail": traceback.format_exc() if app.debug else "",
+    }, 500
 
 # 注册 API 命名空间
 api.add_namespace(code_api, path='/code')

@@ -36,7 +36,9 @@ const sortedAnnouncements = computed(() =>
 );
 const currentAnnouncementId = computed(() => parseAnnouncementId(route.query.id));
 const isDetailMode = computed(() => route.query.id !== undefined);
-const canManageAnnouncements = computed(() => authStore.userRole === 'manager');
+const canManageAnnouncements = computed(
+  () => authStore.userRole === 'manager' || authStore.userRole === 'staff',
+);
 
 const formatTime = (dateStr?: string) => {
   if (!dateStr) return '时间未提供';

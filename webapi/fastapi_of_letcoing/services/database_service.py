@@ -17,6 +17,11 @@ from typing import List, Optional, Dict, Any
 from peewee import DoesNotExist, IntegrityError, fn, Model, Database
 from playhouse.pool import PooledPostgresqlExtDatabase
 from core.di_container import Injectable
+from core.db_robust import (
+    DatabaseUnavailableError,
+    sanitize_db_error,
+    run_db_operation,
+)
 from interfaces.service_interfaces import IConfigService
 
 
@@ -64,14 +69,13 @@ class DatabaseService(Injectable):
         return self._database
 
     def _ensure_connection(self):
-        """确保数据库连接可用，如果不可用则尝试建立新连接"""
+        """确保数据库连接可用，如果不可用则记录警告（不阻塞启动，首次查询时再重试）"""
         try:
             db = self._get_database()
-            if not db.is_connection_usable():
+            if db.is_closed() or not db.is_connection_usable():
                 db.connect()
         except Exception as e:
-            print(f"数据库连接失败: {e}")
-            raise
+            print(f"[DB] 初始化连接不可用(将在首次查询时重试): {sanitize_db_error(str(e))}")
 
     # ============================================================
     # 通用 CRUD（增删改查）操作
@@ -92,14 +96,21 @@ class DatabaseService(Injectable):
             ValueError: 如果违反唯一约束等数据完整性错误
             RuntimeError: 其他数据库操作错误
         """
-        try:
-            with self._get_database().atomic():
+        db = self._get_database()
+
+        def _op():
+            with db.atomic():
                 instance = model_class.create(**kwargs)
                 return instance.to_dict()
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except IntegrityError as e:
             raise ValueError(f"创建失败: {str(e)}")
         except Exception as e:
-            raise RuntimeError(f"创建记录时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"创建记录时发生错误: {e}"))
 
     async def get_by_id(self, model_class: type, record_id: int) -> Optional[Dict[str, Any]]:
         """
@@ -112,13 +123,20 @@ class DatabaseService(Injectable):
         Returns:
             记录的字典表示，不存在时返回 None
         """
-        try:
+        db = self._get_database()
+
+        def _op():
             instance = model_class.get_by_id(record_id)
             return instance.to_dict()
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except DoesNotExist:
             return None
         except Exception as e:
-            raise RuntimeError(f"获取记录时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"获取记录时发生错误: {e}"))
 
     async def update(self, model_class: type, record_id: int, **kwargs) -> bool:
         """
@@ -132,12 +150,19 @@ class DatabaseService(Injectable):
         Returns:
             是否更新成功（True 表示至少有一行被更新）
         """
-        try:
-            with self._get_database().atomic():
+        db = self._get_database()
+
+        def _op():
+            with db.atomic():
                 query = model_class.update(**kwargs).where(model_class.id == record_id)
                 return query.execute() > 0
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except Exception as e:
-            raise RuntimeError(f"更新记录时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"更新记录时发生错误: {e}"))
 
     async def delete(self, model_class: type, record_id: int) -> bool:
         """
@@ -150,12 +175,19 @@ class DatabaseService(Injectable):
         Returns:
             是否删除成功（True 表示至少有一行被删除）
         """
-        try:
-            with self._get_database().atomic():
+        db = self._get_database()
+
+        def _op():
+            with db.atomic():
                 query = model_class.delete().where(model_class.id == record_id)
                 return query.execute() > 0
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except Exception as e:
-            raise RuntimeError(f"删除记录时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"删除记录时发生错误: {e}"))
 
     async def list_all(self, model_class: type, limit: int = 50, offset: int = 0, order_by=None) -> List[Dict[str, Any]]:
         """
@@ -170,15 +202,22 @@ class DatabaseService(Injectable):
         Returns:
             记录字典列表
         """
-        try:
+        db = self._get_database()
+
+        def _op():
             query = model_class.select()
             if order_by:
                 query = query.order_by(order_by)
             query = query.limit(limit).offset(offset)
 
             return [instance.to_dict() for instance in query]
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except Exception as e:
-            raise RuntimeError(f"查询列表时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"查询列表时发生错误: {e}"))
 
     async def count(self, model_class: type) -> int:
         """
@@ -190,27 +229,34 @@ class DatabaseService(Injectable):
         Returns:
             记录总数
         """
-        try:
+        db = self._get_database()
+
+        def _op():
             return model_class.select().count()
+
+        try:
+            return run_db_operation(db, _op)
+        except DatabaseUnavailableError:
+            raise
         except Exception as e:
-            raise RuntimeError(f"计数时发生错误: {e}")
+            raise RuntimeError(sanitize_db_error(f"计数时发生错误: {e}"))
 
     # ============================================================
     # 数据库管理操作
     # ============================================================
 
     def test_connection(self) -> bool:
-        """测试数据库连接是否正常（执行 SELECT 1）"""
+        """测试数据库连接是否正常（执行 SELECT 1），对瞬时故障自动重试"""
         try:
             db = self._get_database()
-            db.execute_sql("SELECT 1")
+            run_db_operation(db, lambda: db.execute_sql("SELECT 1"))
             return True
         except Exception:
             return False
 
     def get_database_info(self) -> Dict[str, Any]:
         """
-        获取数据库连接信息
+        获取数据库连接信息（脱敏，不暴露账号/密码等敏感连接细节）
 
         Returns:
             包含数据库名称、主机、端口和连接状态的字典
@@ -224,7 +270,7 @@ class DatabaseService(Injectable):
                 "is_connected": not db.is_closed() and db.is_connection_usable()
             }
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": sanitize_db_error(str(e))}
 
     def close(self):
         """关闭数据库连接（如果当前是打开状态）"""

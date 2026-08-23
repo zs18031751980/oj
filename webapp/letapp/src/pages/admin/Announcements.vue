@@ -36,7 +36,9 @@ const EMPTY_FORM: AnnouncementForm = {
 const authStore = useAuthStore();
 const dialog = useDialog();
 const message = useMessage();
-const isManager = computed(() => authStore.userRole === 'manager');
+const isManager = computed(
+  () => authStore.userRole === 'manager' || authStore.userRole === 'staff',
+);
 const loading = ref(true);
 const loadError = ref('');
 const saving = ref(false);
