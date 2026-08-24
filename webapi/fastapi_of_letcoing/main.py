@@ -368,14 +368,29 @@ def add_cors_headers(response):
     """在每个 HTTP 响应后添加 CORS（跨域资源共享）相关的响应头
 
     仅当请求来源（Origin）在允许的域名列表中时，才会添加 CORS 头。
-    这样可以确保只有受信任的前端应用才能调用 API。
+    同时自动允许同源请求（Origin 为空或与 Host 相同）。
     """
     origin = request.headers.get('Origin')
     allowed_origins = app.config.get('ALLOWED_ORIGINS', [])
-    if origin in allowed_origins:
-        response.headers['Access-Control-Allow-Origin'] = origin
+
+    # 同源请求（Origin 为空、或 Origin 的 host 与请求 Host 一致）直接放行
+    is_same_origin = False
+    if not origin:
+        is_same_origin = True
+    else:
+        try:
+            from urllib.parse import urlparse
+            origin_host = urlparse(origin).hostname or ''
+            request_host = request.host.split(':')[0]
+            is_same_origin = (origin_host == request_host)
+        except Exception:
+            pass
+
+    if is_same_origin or origin in allowed_origins:
+        if origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Vary'] = 'Origin, Accept-Encoding'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'   # 允许携带 Cookie
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
 

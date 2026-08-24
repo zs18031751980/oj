@@ -2058,7 +2058,9 @@ onUnmounted(() => {
 .io-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
   gap: 0.75rem;
+  align-items: stretch;
 }
 @media (max-width: 640px) {
   .io-grid {
@@ -2088,7 +2090,9 @@ onUnmounted(() => {
 }
 .io-textarea {
   width: 100%;
-  min-height: 90px;
+  min-height: 120px;
+  height: 100%;
+  flex: 1;
   resize: vertical;
   border: 1px solid #e2e8f0;
   border-top: none;
@@ -2100,6 +2104,7 @@ onUnmounted(() => {
   background: #fff;
   color: #1e293b;
   outline: none;
+  box-sizing: border-box;
 }
 .io-textarea:focus {
   border-color: #2563eb;
