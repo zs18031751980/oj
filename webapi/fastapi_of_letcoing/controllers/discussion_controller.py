@@ -66,6 +66,9 @@ def _calc_hotness(d):
 def _discussion_to_dict(d, current_user=None):
     """转换讨论为字典"""
     data = d.to_dict()
+    # 将 ForeignKey 字段 author 重命名为 author_id
+    if 'author' in data:
+        data['author_id'] = data.pop('author')
     if d.author:
         data['author_name'] = d.author.username or '匿名'
     else:
@@ -91,18 +94,21 @@ class DiscussionListController(Resource):
         category = request.args.get('category', '').strip()
         current_user = _get_current_user()
 
-        query = Discussion.select()
-        if category and category != '全部':
-            query = query.where(Discussion.category == category)
+        try:
+            query = Discussion.select()
+            if category and category != '全部':
+                query = query.where(Discussion.category == category)
 
-        discussions = list(query)
-        # 置顶帖排最前，其余按热度降序
-        pinned = [d for d in discussions if d.is_pinned]
-        normal = [d for d in discussions if not d.is_pinned]
-        normal.sort(key=lambda d: _calc_hotness(d), reverse=True)
-        sorted_discussions = pinned + normal
+            discussions = list(query)
+            # 置顶帖排最前，其余按热度降序
+            pinned = [d for d in discussions if d.is_pinned]
+            normal = [d for d in discussions if not d.is_pinned]
+            normal.sort(key=lambda d: _calc_hotness(d), reverse=True)
+            sorted_discussions = pinned + normal
 
-        return [_discussion_to_dict(d, current_user) for d in sorted_discussions], 200
+            return [_discussion_to_dict(d, current_user) for d in sorted_discussions], 200
+        except Exception as e:
+            return {'error': f'获取讨论列表失败: {str(e)}'}, 500
 
     @api.expect(discussion_input)
     def post(self):
@@ -145,6 +151,8 @@ class DiscussionDetailController(Resource):
             data['replies'] = []
             for r in replies:
                 rd = r.to_dict()
+                if 'author' in rd:
+                    rd['author_id'] = rd.pop('author')
                 if r.author:
                     rd['author_name'] = r.author.username or '匿名'
                 else:
@@ -238,6 +246,8 @@ class DiscussionReplyListController(Resource):
         d.save()
 
         rd = reply.to_dict()
+        if 'author' in rd:
+            rd['author_id'] = rd.pop('author')
         rd['author_name'] = user.username or '匿名'
         rd['is_liked'] = False
         return rd, 201

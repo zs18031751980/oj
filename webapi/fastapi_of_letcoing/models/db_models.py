@@ -124,12 +124,15 @@ class BaseModel(Model):
         将模型实例转换为字典
 
         datetime 类型的字段会自动转换为 ISO 格式字符串。
+        ForeignKey 字段自动提取关联对象的 id，避免序列化失败。
         """
         data = {}
         for field_name in self._meta.fields.keys():
             value = getattr(self, field_name)
             if isinstance(value, datetime):
                 value = value.isoformat()
+            elif isinstance(value, Model):
+                value = getattr(value, 'id', None)
             data[field_name] = value
         return data
 
@@ -460,6 +463,7 @@ class LearnBrowsingHistory(BaseModel):
 # 所有已注册模型的列表（用于表创建和删除操作）
 MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
           Contest, ContestParticipant, Discussion, DiscussionReply,
+          DiscussionLike, DiscussionReplyLike,
           ContestProblem, ContestTestcase, LearnFavorite, LearnBrowsingHistory]
 
 
