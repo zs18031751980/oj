@@ -2,8 +2,10 @@
 import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { listContests, joinContest, type ContestData } from '../services/api';
+import { useMessage } from 'naive-ui';
 
 const router = useRouter();
+const message = useMessage();
 const activeTab = ref<'ongoing' | 'upcoming' | 'past'>('ongoing');
 const contests = ref<ContestData[]>([]);
 const isLoading = ref(false);
@@ -39,9 +41,16 @@ const enterContest = async (c: ContestData) => {
   if (c.status === 'ongoing') {
     try {
       await joinContest(c.id);
-    } catch {}
+    } catch (e: any) {
+      const msg = e?.message || '';
+      if (!msg.includes('already') && !msg.includes('已加入')) {
+        message.warning('加入比赛失败：' + (msg || '请稍后重试'));
+      }
+    }
     router.push(`/contests/${c.id}`);
   } else if (c.status === 'upcoming') {
+    router.push(`/contests/${c.id}`);
+  } else {
     router.push(`/contests/${c.id}`);
   }
 };

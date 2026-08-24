@@ -40,6 +40,7 @@ from controllers.rankings_controller import api as rankings_api
 from controllers.contest_problem_controller import api as contest_problem_api
 from controllers.learn_favorite_controller import api as learn_favorite_api
 from controllers.learn_history_controller import api as learn_history_api
+from controllers.user_controller import api as user_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
@@ -376,7 +377,7 @@ def add_cors_headers(response):
         response.headers['Vary'] = 'Origin, Accept-Encoding'
         response.headers['Access-Control-Allow-Credentials'] = 'true'   # 允许携带 Cookie
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
 
     accept_encoding = request.headers.get('Accept-Encoding', '')
     content_type = response.headers.get('Content-Type', '')
@@ -479,10 +480,26 @@ api.add_namespace(rankings_api, path='/rankings')
 api.add_namespace(contest_problem_api, path='/admin/contests')
 api.add_namespace(learn_favorite_api, path='/learn-favorites')
 api.add_namespace(learn_history_api, path='/learn-history')
+api.add_namespace(user_api, path='/users')
 
 
 # ============================================================
-# 7. 应用启动入口
+# 7. 静态文件服务（头像等上传文件）
+# ============================================================
+
+from flask import send_from_directory
+
+_UPLOADS_DIR = os.path.join(os.path.dirname(__file__), 'uploads')
+
+
+@app.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """提供上传文件的访问（头像等）"""
+    return send_from_directory(_UPLOADS_DIR, filename)
+
+
+# ============================================================
+# 8. 应用启动入口
 # ============================================================
 
 if __name__ == '__main__':

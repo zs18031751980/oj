@@ -147,6 +147,7 @@ class User(BaseModel):
 
     id = AutoField(primary_key=True, verbose_name="用户ID")
     username = CharField(max_length=50, unique=True, null=True, verbose_name="用户名")
+    name = CharField(max_length=100, null=True, verbose_name="显示名称")
     email = CharField(max_length=100, unique=True, null=True, verbose_name="邮箱")
     password_hash = CharField(max_length=255, null=True, verbose_name="密码哈希")
     is_active = BooleanField(default=True, verbose_name="是否激活")
@@ -155,6 +156,7 @@ class User(BaseModel):
     provider = CharField(max_length=50, null=True, verbose_name="登录提供商")
     provider_id = CharField(max_length=255, null=True, verbose_name="提供商用户ID")
     avatar_url = CharField(max_length=500, null=True, verbose_name="头像URL")
+    bio = CharField(max_length=500, null=True, verbose_name="个人简介")
     theme_preference = CharField(max_length=10, null=True, default="system", verbose_name="主题偏好")
 
     class Meta:
@@ -626,6 +628,13 @@ _SCHEMA_MIGRATIONS = [
             "browsed_at TIMESTAMP DEFAULT now());",
             "CREATE INDEX IF NOT EXISTS idx_learn_history_user "
             "ON learn_browsing_history(user_id, browsed_at DESC);",
+        ],
+    ),
+    (
+        "0005_user_name_bio_columns",
+        [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(100);",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS bio VARCHAR(500);",
         ],
     ),
 ]

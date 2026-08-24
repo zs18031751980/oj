@@ -405,6 +405,7 @@ class UserService(DatabaseService, Injectable):
                 )
                 user = User.create(
                     username=username,
+                    name=user_info.get('name') or username,
                     email=email,
                     password_hash=None,
                     role=highest_role,

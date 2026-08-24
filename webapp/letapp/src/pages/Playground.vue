@@ -136,11 +136,11 @@ function toggleFullscreen() {
     document.documentElement.requestFullscreen().catch(() => {});
   }
 }
-document.addEventListener('fullscreenchange', () => {
+const onFullscreenChange = () => {
   if (!document.fullscreenElement) {
     isFullscreen.value = false;
   }
-});
+};
 const showLeftPanel = ref(true);
 const bottomPanelHeight = ref(240);
 const isDraggingBottom = ref(false);
@@ -374,11 +374,13 @@ onMounted(() => {
   void loadContestProblem();
   window.addEventListener("keydown", handleGlobalShortcut);
   window.addEventListener("click", closeLanguageMenuOnOutsideClick);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
 });
 
 onUnmounted(() => {
   window.removeEventListener("keydown", handleGlobalShortcut);
   window.removeEventListener("click", closeLanguageMenuOnOutsideClick);
+  document.removeEventListener("fullscreenchange", onFullscreenChange);
 });
 
 watch(selectedLanguage, (lang) => {

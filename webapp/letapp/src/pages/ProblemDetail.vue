@@ -392,12 +392,13 @@ const runSelfTest = async () => {
 
 const runThisSample = (sample: TestCase) => {
   stdin.value = sample.input;
+  expectedOutput.value = sample.output;
   selfTestStatus.value = '';
   selfTestVerdict.value = null;
   selfTestOutput.value = '';
   activeResultTab.value = 'testcases';
   resultVisible.value = true;
-  message.info('已将样例输入填入测试区');
+  message.info('已将样例输入/输出填入测试区');
 };
 
 /* ============ 复制 ============ */
@@ -641,6 +642,11 @@ const startBottomDrag = (e: MouseEvent) => {
 };
 
 /* ============ 专注模式 ============ */
+const onFullscreenChange = () => {
+  if (!document.fullscreenElement && isFocusMode.value) {
+    isFocusMode.value = false;
+  }
+};
 watch(isFocusMode, (v) => {
   if (v) {
     document.documentElement.classList.add('focus-mode');
@@ -650,11 +656,6 @@ watch(isFocusMode, (v) => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
-  }
-});
-document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement && isFocusMode.value) {
-    isFocusMode.value = false;
   }
 });
 
@@ -733,6 +734,7 @@ onMounted(async () => {
   MarkdownComp.value = mdMod.default;
   loadProblem();
   window.addEventListener('keydown', handleKeyboard);
+  document.addEventListener('fullscreenchange', onFullscreenChange);
 });
 watch(problemId, () => {
   loadProblem();
@@ -748,6 +750,7 @@ watch(activeTab, (t) => {
 onUnmounted(() => {
   saveCode(problemId.value, language.value, code.value);
   window.removeEventListener('keydown', handleKeyboard);
+  document.removeEventListener('fullscreenchange', onFullscreenChange);
   if (pollTimer.value) clearInterval(pollTimer.value);
   document.documentElement.classList.remove('focus-mode');
 });
@@ -877,7 +880,7 @@ onUnmounted(() => {
             <section class="md-section">
               <div class="md-head">题目描述</div>
               <div class="md-body markdown-body text-sm leading-7">
-                <component :is="MarkdownComp" :content="descMarkdown" :show-nav="false" :show-heading-links="false" />
+                <component v-if="MarkdownComp" :is="MarkdownComp" :content="descMarkdown" :show-nav="false" :show-heading-links="false" />
               </div>
             </section>
 
@@ -959,7 +962,7 @@ onUnmounted(() => {
               <p class="text-rose-500">{{ learningError }}</p>
             </div>
             <div v-else-if="learningMarkdown" class="md-body markdown-body">
-              <component :is="MarkdownComp" :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
+              <component v-if="MarkdownComp" :is="MarkdownComp" :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
             </div>
           </div>
         </div>
@@ -1021,6 +1024,7 @@ onUnmounted(() => {
         <!-- 编辑器 -->
         <div class="editor-body">
           <component
+            v-if="MonacoEditorComp"
             :is="MonacoEditorComp"
             v-model="code"
             :language="editorLanguageMap[language] || 'cpp'"
@@ -1028,6 +1032,7 @@ onUnmounted(() => {
             height="100%"
             @ready="onEditorReady"
           />
+          <div v-else class="flex h-full items-center justify-center text-sm text-[#94A3B8]">正在加载编辑器…</div>
         </div>
 
         <!-- 底部结果区 -->
