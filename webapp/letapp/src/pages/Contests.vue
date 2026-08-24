@@ -3,9 +3,12 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { listContests, joinContest, type ContestData } from '../services/api';
 import { useMessage } from 'naive-ui';
+import { useAuthStore } from '../stores/auth';
 
 const router = useRouter();
 const message = useMessage();
+const authStore = useAuthStore();
+const isManager = computed(() => authStore.userRole === 'manager');
 const activeTab = ref<'ongoing' | 'upcoming' | 'past'>('ongoing');
 const contests = ref<ContestData[]>([]);
 const isLoading = ref(false);
@@ -73,9 +76,14 @@ onMounted(loadData);
 <template>
   <div class="min-h-[calc(100vh-var(--header-h,4rem))] bg-[#F6F8FC] dark:bg-[#0F172A]">
     <div class="app-container py-6">
-      <div class="mb-6">
-        <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">比赛</h1>
-        <p class="ui-section-sub mt-1">参与编程竞赛，挑战自我</p>
+      <div class="mb-6 flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">比赛</h1>
+          <p class="ui-section-sub mt-1">参与编程竞赛，挑战自我</p>
+        </div>
+        <button v-if="isManager" class="ui-btn ui-btn-primary" @click="router.push('/admin/contests')">
+          ⚙️ 管理比赛
+        </button>
       </div>
 
       <div class="mb-4 flex gap-2">

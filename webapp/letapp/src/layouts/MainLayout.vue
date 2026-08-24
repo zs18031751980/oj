@@ -196,7 +196,7 @@
       </aside>
     </transition>
 
-    <main class="pt-[var(--header-h,4rem)]">
+    <main class="pt-16">
       <router-view v-slot="{ Component, route }">
         <transition name="page-shift" mode="out-in">
           <component :is="Component" :key="route.path" />

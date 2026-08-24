@@ -357,8 +357,10 @@ const runSelfTest = async () => {
   activeResultTab.value = 'run';
   resultVisible.value = true;
   try {
-    const res = await apiRequest<any>('/code/run', {
+    const endpoint = authStore.isAuthenticated ? '/code/run' : '/code/run/public';
+    const res = await apiRequest<any>(endpoint, {
       method: 'POST',
+      skipAuth: !authStore.isAuthenticated,
       body: JSON.stringify({
         code: code.value,
         language: editorLanguageMap[language.value] || language.value,
@@ -381,9 +383,9 @@ const runSelfTest = async () => {
         selfTestStatus.value = stdout ? '执行成功' : '程序无输出';
       }
     }
-  } catch {
-    selfTestOutput.value = '请求失败，请重试';
-    selfTestStatus.value = '网络错误';
+  } catch (error) {
+    selfTestOutput.value = error instanceof Error ? error.message : '请求失败，请重试';
+    selfTestStatus.value = '运行出错';
     selfTestVerdict.value = 'fail';
   } finally {
     isSelfTesting.value = false;
