@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, markRaw, onMounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
-import MarkdownComponent from '../components/MarkdownComponent.vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../components/MarkdownComponent.vue'),
+);
+
+import {
+  listLearnFavorites, addLearnFavorite, removeLearnFavorite,
+  listLearnHistory, recordLearnHistory,
+} from '../services/api';
 
 interface ChapterItem {
   id: string;
@@ -26,10 +34,6 @@ interface ResourceItem extends LearnResource {
   language: string;
 }
 
-interface LearningPath extends LearnResource {
-  accent: string;
-}
-
 interface CardInfo {
   description: string;
   points: string[];
@@ -44,12 +48,6 @@ interface MarkdownContent {
 
 const route = useRoute();
 const router = useRouter();
-
-const learningPaths: LearningPath[] = markRaw([
-  { id: 'web-path', title: 'Web 开发路径', accent: 'from-blue-500 to-sky-500', markdownFile: 'Web 开发路径.md' },
-  { id: 'data-path', title: '数据科学路径', accent: 'from-emerald-500 to-lime-500', markdownFile: '数据科学路径.md' },
-  { id: 'algorithm-path', title: '算法与竞赛路径', accent: 'from-amber-500 to-orange-500', markdownFile: '算法与竞赛路径.md' },
-]);
 
 const cLanguageChapters: ChapterItem[] = markRaw([
   { id: 'chapter-01', label: 'CHAPTER 01', title: '第一章：程序设计和 C 语言', summary: '认识程序、编译过程、C 程序结构与开发环境。', markdownFile: 'c-language/chapters/01-introduction.md' },
@@ -73,6 +71,67 @@ const courses: ResourceItem[] = markRaw([
   { id: 'algorithm-basic', title: '算法', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
   { id: 'vue-components', title: 'Vue 组件化开发', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
   { id: 'oj-strategy', title: 'Agent 开发', duration: '', author: '', language: '通用', markdownFile: 'agent开发.md' },
+  // 计算机基础 - 操作系统
+  { id: 'os-process-thread', title: '进程和线程的区别', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程和线程的区别.md' },
+  { id: 'os-ipc', title: '进程间通信方式', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程间通信方式.md' },
+  { id: 'os-scheduling', title: '进程调度算法', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程调度算法.md' },
+  { id: 'os-user-kernel', title: '用户态和内核态', duration: '', author: '', language: '通用', markdownFile: 'cs/os/用户态和内核态.md' },
+  { id: 'os-virtual-memory', title: '虚拟内存', duration: '', author: '', language: '通用', markdownFile: 'cs/os/虚拟内存.md' },
+  { id: 'os-page-replace', title: '页面置换算法', duration: '', author: '', language: '通用', markdownFile: 'cs/os/页面置换算法.md' },
+  { id: 'os-deadlock', title: '死锁', duration: '', author: '', language: '通用', markdownFile: 'cs/os/死锁.md' },
+  { id: 'os-locks', title: '典型的锁', duration: '', author: '', language: '通用', markdownFile: 'cs/os/典型的锁.md' },
+  { id: 'os-io-model', title: 'IO 模型', duration: '', author: '', language: '通用', markdownFile: 'cs/os/IO模型.md' },
+  { id: 'os-epoll', title: 'epoll vs select vs poll', duration: '', author: '', language: '通用', markdownFile: 'cs/os/epoll-select-poll区别.md' },
+  // 计算机基础 - 数据库
+  { id: 'db-transaction', title: '事务四大特性', duration: '', author: '', language: '通用', markdownFile: 'cs/database/事务四大特性.md' },
+  { id: 'db-sql-exec', title: 'SQL 查询执行流程', duration: '', author: '', language: '通用', markdownFile: 'cs/database/SQL查询执行流程.md' },
+  { id: 'db-mvcc', title: 'MVCC 机制', duration: '', author: '', language: '通用', markdownFile: 'cs/database/MVCC机制.md' },
+  { id: 'db-btree', title: 'MySQL 索引 B+ 树', duration: '', author: '', language: '通用', markdownFile: 'cs/database/MySQL索引B+树.md' },
+  { id: 'db-index-types', title: '索引种类', duration: '', author: '', language: '通用', markdownFile: 'cs/database/索引种类.md' },
+  { id: 'redis-data', title: 'Redis 数据结构', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis数据结构.md' },
+  { id: 'redis-persist', title: 'Redis 持久化', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis持久化.md' },
+  { id: 'redis-cache', title: 'Redis 缓存问题', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis缓存问题.md' },
+  { id: 'redis-lock', title: 'Redis 分布式锁', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis分布式锁.md' },
+  // 计算机基础 - 网络
+  { id: 'net-tcp-udp', title: 'TCP 与 UDP 区别', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP与UDP区别.md' },
+  { id: 'net-3way', title: 'TCP 三次握手', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP三次握手.md' },
+  { id: 'net-4way', title: 'TCP 四次挥手', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP四次挥手.md' },
+  { id: 'net-http-code', title: 'HTTP 状态码', duration: '', author: '', language: '通用', markdownFile: 'cs/network/HTTP状态码.md' },
+  { id: 'net-https', title: 'HTTPS 原理', duration: '', author: '', language: '通用', markdownFile: 'cs/network/HTTPS原理.md' },
+  { id: 'net-url', title: '从输入 URL 到页面展示', duration: '', author: '', language: '通用', markdownFile: 'cs/network/从输入URL到页面展示.md' },
+  // 计算机基础 - 组成原理
+  { id: 'arch-von', title: '冯诺依曼与哈佛体系结构', duration: '', author: '', language: '通用', markdownFile: 'cs/arch/冯诺依曼与哈佛体系结构.md' },
+  { id: 'arch-cpu-gpu', title: 'CPU 与 GPU 区别', duration: '', author: '', language: '通用', markdownFile: 'cs/arch/CPU与GPU区别.md' },
+  // C++
+  { id: 'cpp-3principles', title: 'C++ 三大特性：封装、继承、多态', duration: '', author: '', language: 'C++', markdownFile: 'cpp/C++三大特性.md' },
+  { id: 'cpp-ptr-ref', title: '指针与引用的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/指针与引用.md' },
+  { id: 'cpp-static-const', title: 'static 与 const 的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/static与const.md' },
+  { id: 'cpp-virtual', title: '虚函数的实现机制', duration: '', author: '', language: 'C++', markdownFile: 'cpp/虚函数机制.md' },
+  { id: 'cpp-deep-copy', title: '深拷贝与浅拷贝', duration: '', author: '', language: 'C++', markdownFile: 'cpp/深拷贝与浅拷贝.md' },
+  { id: 'cpp-heap-stack', title: '堆与栈的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/堆与栈.md' },
+  { id: 'cpp-new-malloc', title: 'new 和 malloc 的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/new与malloc.md' },
+  { id: 'cpp-smart-ptr', title: '智能指针的区别与选型', duration: '', author: '', language: 'C++', markdownFile: 'cpp/智能指针.md' },
+  { id: 'cpp-vector', title: 'vector 底层原理和扩容', duration: '', author: '', language: 'C++', markdownFile: 'cpp/vector底层原理.md' },
+  { id: 'cpp-map', title: 'map 与 unordered_map 区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/map与unordered_map.md' },
+  { id: 'cpp-lambda', title: 'Lambda 表达式', duration: '', author: '', language: 'C++', markdownFile: 'cpp/Lambda表达式.md' },
+  { id: 'cpp-move', title: '移动语义', duration: '', author: '', language: 'C++', markdownFile: 'cpp/移动语义.md' },
+  { id: 'cpp-io-multiplex', title: 'select / poll / epoll 区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/select-poll-epoll.md' },
+  // Java
+  { id: 'java-oop', title: '面向对象三大特性', duration: '', author: '', language: 'Java', markdownFile: 'java/面向对象三大特性.md' },
+  { id: 'java-hashmap', title: 'HashMap 实现原理', duration: '', author: '', language: 'Java', markdownFile: 'java/HashMap原理.md' },
+  { id: 'java-arraylist', title: 'ArrayList 与 LinkedList 区别', duration: '', author: '', language: 'Java', markdownFile: 'java/ArrayList与LinkedList.md' },
+  { id: 'java-jvm-mem', title: 'JVM 内存结构', duration: '', author: '', language: 'Java', markdownFile: 'java/JVM内存结构.md' },
+  { id: 'java-gc', title: '垃圾回收', duration: '', author: '', language: 'Java', markdownFile: 'java/垃圾回收.md' },
+  { id: 'java-deadlock', title: '死锁', duration: '', author: '', language: 'Java', markdownFile: 'java/死锁.md' },
+  { id: 'java-threadpool', title: '线程池', duration: '', author: '', language: 'Java', markdownFile: 'java/线程池.md' },
+  { id: 'java-spring-ioc', title: 'Spring IOC', duration: '', author: '', language: 'Java', markdownFile: 'java/Spring-IOC.md' },
+  { id: 'java-spring-aop', title: 'Spring AOP', duration: '', author: '', language: 'Java', markdownFile: 'java/Spring-AOP.md' },
+  // Go
+  { id: 'go-interface', title: 'Go 接口', duration: '', author: '', language: 'Go', markdownFile: 'go/Go接口.md' },
+  { id: 'go-goroutine', title: 'Goroutine', duration: '', author: '', language: 'Go', markdownFile: 'go/Goroutine.md' },
+  { id: 'go-channel', title: 'channel 区别', duration: '', author: '', language: 'Go', markdownFile: 'go/channel区别.md' },
+  { id: 'go-gmp', title: 'GMP 调度模型', duration: '', author: '', language: 'Go', markdownFile: 'go/GMP调度模型.md' },
+  { id: 'go-mem', title: 'Go 内存管理', duration: '', author: '', language: 'Go', markdownFile: 'go/Go内存管理.md' },
 ]);
 
 const selectedTitle = ref('');
@@ -80,7 +139,7 @@ const selectedResource = ref<MarkdownContent | undefined>();
 const isLoadingDoc = ref(false);
 const docError = ref('');
 
-const allResources = [...learningPaths, ...courses];
+const allResources = [...courses];
 
 const cardInfoMap = ref<Record<string, CardInfo>>({});
 
@@ -309,10 +368,61 @@ const loadMarkdown = async (resourceId: string, chapterId: string = '') => {
   }
 };
 
+const favoriteIds = ref<Set<string>>(new Set());
+const recentHistory = ref<{ resource_id: string; browsed_at: string | null }[]>([]);
+
+async function loadFavorites() {
+  try {
+    const res = await listLearnFavorites();
+    if (res?.data) {
+      favoriteIds.value = new Set(res.data.map(f => f.resource_id));
+    }
+  } catch { /* 未登录或出错 */ }
+}
+
+async function toggleFavorite(resourceId: string, e: MouseEvent) {
+  e.stopPropagation();
+  const wasFavorited = favoriteIds.value.has(resourceId);
+  // 乐观更新
+  const next = new Set(favoriteIds.value);
+  if (wasFavorited) next.delete(resourceId); else next.add(resourceId);
+  favoriteIds.value = next;
+
+  try {
+    if (wasFavorited) {
+      await removeLearnFavorite(resourceId);
+    } else {
+      await addLearnFavorite(resourceId);
+    }
+  } catch {
+    // 回滚
+    favoriteIds.value = new Set(wasFavorited ? [...next, resourceId] : [...next].filter(id => id !== resourceId));
+  }
+}
+
+async function loadHistory() {
+  try {
+    const res = await listLearnHistory();
+    if (res?.data) {
+      recentHistory.value = res.data;
+    }
+  } catch { /* 未登录或出错 */ }
+}
+
+async function trackBrowse(resourceId: string) {
+  try {
+    await recordLearnHistory(resourceId);
+    await loadHistory();
+  } catch { /* 静默 */ }
+}
+
+const isHistoryMode = ref(false);
+
 const searchQuery = ref('');
+
 const activeCategory = ref('全部');
 
-const categories = ['全部', 'C', 'JavaScript', 'Python', 'C++', 'Vue', '通用'];
+const categories = ['全部', 'C', 'JavaScript', 'Python', 'C++', 'Java', 'Go', 'Vue', '通用'];
 const categoryCount = computed(() => {
   const map: Record<string, number> = {};
   for (const cat of categories) {
@@ -327,24 +437,31 @@ const categoryCount = computed(() => {
 
 const displayedCourses = computed(() => {
   let list = filteredCourses.value;
-  if (activeCategory.value !== '全部') {
+
+  // 搜索时跨模式搜索所有资源
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase().replace(/\s+/g, '');
+    list = allResources.filter(r => {
+      const title = r.title.toLowerCase().replace(/\s+/g, '');
+      const lang = 'language' in r ? (r as ResourceItem).language.toLowerCase().replace(/\s+/g, '') : '';
+      const desc = (cardInfoMap.value[r.id]?.description || '').toLowerCase().replace(/\s+/g, '');
+      return title.includes(q) || lang.includes(q) || desc.includes(q);
+    });
+  } else if (isFavoritesMode.value) {
+    list = list.filter(r => favoriteIds.value.has(r.id));
+  } else if (isHistoryMode.value) {
+    const historyIds = recentHistory.value.map(h => h.resource_id);
+    list = list.filter(r => historyIds.includes(r.id));
+    list.sort((a, b) => historyIds.indexOf(a.id) - historyIds.indexOf(b.id));
+  } else if (activeCategory.value !== '全部') {
     list = list.filter(r => r.language === activeCategory.value);
   }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    list = list.filter(r => r.title.toLowerCase().includes(q) || (cardInfoMap.value[r.id]?.description || '').toLowerCase().includes(q));
-  }
+
   return list;
 });
 
-const displayedPaths = computed(() => {
-  if (activeCategory.value !== '全部') return [];
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    return learningPaths.filter(p => p.title.toLowerCase().includes(q) || (cardInfoMap.value[p.id]?.description || '').toLowerCase().includes(q));
-  }
-  return learningPaths;
-});
+const isFavoritesMode = ref(false);
+
 
 const getLanguageColor = (lang: string) => {
   const map: Record<string, string> = {
@@ -359,6 +476,7 @@ const getLanguageColor = (lang: string) => {
 };
 
 onMounted(async () => {
+  await Promise.all([loadFavorites(), loadHistory()]);
   if (currentDocId.value) {
     await loadMarkdown(currentDocId.value, currentChapterId.value);
   }
@@ -376,6 +494,7 @@ watch(
     }
 
     await loadMarkdown(resourceId, chapterId);
+    trackBrowse(resourceId);
   },
 );
 </script>
@@ -398,25 +517,19 @@ watch(
             <!-- 个人区域 -->
             <div class="sidebar-section">
               <button class="sidebar-item" @click="router.push('/learn')">
-                <Icon icon="material-symbols:recommend" class="h-4 w-4 text-blue-500" />
-                <span>精选推荐</span>
-              </button>
-              <button class="sidebar-item" @click="router.push('/learn')">
                 <Icon icon="material-symbols:library-books" class="h-4 w-4 text-emerald-500" />
                 <span>全部资源</span>
                 <span class="sidebar-count">{{ allResources.length }}</span>
               </button>
-              <button class="sidebar-item">
+              <button class="sidebar-item" :class="{ active: isFavoritesMode }" @click="isFavoritesMode = !isFavoritesMode; activeCategory = '全部'; isHistoryMode = false">
                 <Icon icon="material-symbols:favorite" class="h-4 w-4 text-rose-500" />
                 <span>我的收藏</span>
+                <span class="sidebar-count">{{ favoriteIds.size }}</span>
               </button>
-              <button class="sidebar-item">
+              <button class="sidebar-item" :class="{ active: isHistoryMode }" @click="isHistoryMode = !isHistoryMode; activeCategory = '全部'; isFavoritesMode = false">
                 <Icon icon="material-symbols:history" class="h-4 w-4 text-amber-500" />
                 <span>最近浏览</span>
-              </button>
-              <button class="sidebar-item">
-                <Icon icon="material-symbols:play-circle" class="h-4 w-4 text-violet-500" />
-                <span>继续学习</span>
+                <span class="sidebar-count">{{ recentHistory.length }}</span>
               </button>
             </div>
 
@@ -427,8 +540,8 @@ watch(
                 v-for="cat in categories"
                 :key="cat"
                 class="sidebar-item"
-                :class="{ active: activeCategory === cat }"
-                @click="activeCategory = cat"
+                :class="{ active: activeCategory === cat && !isFavoritesMode && !isHistoryMode }"
+                @click="activeCategory = cat; isFavoritesMode = false; isHistoryMode = false"
               >
                 <Icon :icon="cat === '全部' ? 'material-symbols:grid-view' : 'material-symbols:folder'" class="h-4 w-4" />
                 <span>{{ cat === '全部' ? '全部资源' : cat }}</span>
@@ -476,49 +589,21 @@ watch(
               v-for="cat in categories"
               :key="cat"
               class="learn-cat-chip"
-              :class="{ active: activeCategory === cat }"
-              @click="activeCategory = cat"
+              :class="{ active: activeCategory === cat && !isFavoritesMode && !isHistoryMode }"
+              @click="activeCategory = cat; isFavoritesMode = false; isHistoryMode = false"
             >
               {{ cat === '全部' ? '全部' : cat }}
               <span class="learn-cat-count">{{ categoryCount[cat] || 0 }}</span>
             </button>
           </div>
 
-          <!-- 精选学习路径 -->
-          <div v-if="displayedPaths.length" class="mb-8">
-            <div class="mb-4 flex items-center gap-2">
-              <Icon icon="material-symbols:route" class="h-5 w-5 text-[#2563EB]" />
-              <h2 class="text-lg font-black text-[#1E293B] dark:text-[#E5E7EB]">学习路径</h2>
-              <span class="ui-badge ui-badge-blue text-[10px]">推荐</span>
-            </div>
-            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <article
-                v-for="(path, idx) in displayedPaths"
-                :key="path.id"
-                class="learn-path-card"
-              >
-                <div class="learn-path-cover" :class="['bg-gradient-to-br', path.accent]">
-                  <span class="learn-path-badge">PATH {{ String(idx + 1).padStart(2, '0') }}</span>
-                </div>
-                <div class="learn-path-body">
-                  <h3 class="text-base font-black text-[#1E293B] dark:text-[#E5E7EB]">{{ path.title }}</h3>
-                  <p class="mt-2 line-clamp-2 text-sm text-[#64748B] dark:text-[#94A3B8]">
-                    {{ cardInfoMap[path.id]?.description || '暂无简介' }}
-                  </p>
-                  <button class="learn-path-btn" @click="openResource(path)">
-                    <Icon icon="material-symbols:open-in-new" class="h-3.5 w-3.5" />
-                    查看路径
-                  </button>
-                </div>
-              </article>
-            </div>
-          </div>
-
           <!-- 全部资源网格 -->
           <div>
             <div class="mb-4 flex items-center gap-2">
               <Icon icon="material-symbols:library-books" class="h-5 w-5 text-[#2563EB]" />
-              <h2 class="text-lg font-black text-[#1E293B] dark:text-[#E5E7EB]">全部资源</h2>
+              <h2 class="text-lg font-black text-[#1E293B] dark:text-[#E5E7EB]">
+                {{ searchQuery.trim() ? '搜索结果' : isFavoritesMode ? '我的收藏' : isHistoryMode ? '最近浏览' : '全部资源' }}
+              </h2>
               <span class="text-sm text-[#94A3B8]">（{{ displayedCourses.length }}）</span>
             </div>
             <div v-if="displayedCourses.length" class="learn-grid">
@@ -530,7 +615,17 @@ watch(
               >
                 <div class="learn-card-top">
                   <span class="learn-card-index">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="learn-card-lang" :class="getLanguageColor(course.language)">{{ course.language }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="learn-card-lang" :class="getLanguageColor(course.language)">{{ course.language }}</span>
+                    <button
+                      class="learn-fav-btn"
+                      :class="{ active: favoriteIds.has(course.id) }"
+                      :title="favoriteIds.has(course.id) ? '取消收藏' : '收藏'"
+                      @click="toggleFavorite(course.id, $event)"
+                    >
+                      <Icon :icon="favoriteIds.has(course.id) ? 'material-symbols:bookmark' : 'material-symbols:bookmark_border'" class="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <h3 class="learn-card-title">{{ course.title }}</h3>
                 <p class="learn-card-desc">
@@ -549,8 +644,8 @@ watch(
             </div>
             <div v-else class="ui-empty mt-4">
               <Icon icon="material-symbols:search-off" class="mb-2 h-10 w-10 text-[#CBD5E1] dark:text-[#475569]" />
-              <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">没有找到匹配的资源</p>
-              <p class="text-sm text-[#94A3B8]">试试其他关键词或分类</p>
+              <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ searchQuery.trim() ? '没有找到匹配的资源' : isFavoritesMode ? '还没有收藏任何资源' : isHistoryMode ? '还没有浏览记录' : '没有找到匹配的资源' }}</p>
+              <p class="text-sm text-[#94A3B8]">{{ searchQuery.trim() ? '试试其他关键词或分类' : isFavoritesMode ? '点击资源卡片右上角的书签图标即可收藏' : isHistoryMode ? '打开任意资源后会自动记录' : '试试其他关键词或分类' }}</p>
             </div>
           </div>
         </section>
@@ -819,72 +914,6 @@ watch(
   opacity: 0.7;
 }
 
-/* ===== 学习路径卡片 ===== */
-.learn-path-card {
-  display: flex;
-  flex-direction: column;
-  border-radius: 1rem;
-  border: 1px solid #E2E8F0;
-  background: white;
-  overflow: hidden;
-  transition: all 0.2s;
-}
-.learn-path-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  border-color: #93C5FD;
-}
-:global(html.dark) .learn-path-card {
-  border-color: #1E293B;
-  background: #111827;
-}
-:global(html.dark) .learn-path-card:hover {
-  border-color: #3B82F6;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-.learn-path-cover {
-  height: 72px;
-  padding: 0.75rem;
-}
-.learn-path-badge {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: white;
-  letter-spacing: 0.1em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-.learn-path-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  padding: 1rem;
-}
-.learn-path-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  align-self: flex-start;
-  margin-top: auto;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #2563EB;
-  background: #EFF6FF;
-  transition: all 0.15s;
-}
-.learn-path-btn:hover {
-  background: #DBEAFE;
-}
-:global(html.dark) .learn-path-btn {
-  color: #60A5FA;
-  background: #172554;
-}
-:global(html.dark) .learn-path-btn:hover {
-  background: #1E3A8A;
-}
-
 /* ===== 资源网格 ===== */
 .learn-grid {
   display: grid;
@@ -991,6 +1020,35 @@ watch(
   font-size: 0.72rem;
   font-weight: 600;
   color: #94A3B8;
+}
+
+/* ===== 收藏按钮 ===== */
+.learn-fav-btn {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.5rem;
+  color: #94A3B8;
+  background: transparent;
+  transition: all 0.15s;
+}
+.learn-fav-btn:hover {
+  background: #FEF2F2;
+  color: #F43F5E;
+}
+.learn-fav-btn.active {
+  color: #F43F5E;
+}
+.learn-fav-btn.active:hover {
+  background: #FEF2F2;
+}
+:global(html.dark) .learn-fav-btn:hover {
+  background: #4C1D2566;
+  color: #FB7185;
+}
+:global(html.dark) .learn-fav-btn.active {
+  color: #FB7185;
 }
 
 /* ===== 详情页 ===== */

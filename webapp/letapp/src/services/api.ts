@@ -533,3 +533,42 @@ export const regenerateTestcases = (problemId: number) =>
   apiRequest<{ success: boolean; count: number }>(`/admin/contests/${problemId}/regenerate-testcases`, {
     method: 'POST',
   });
+
+// ---------- 学习资源收藏 ----------
+
+export interface LearnFavoriteItem {
+  resource_id: string;
+  favorited_at: string | null;
+}
+
+export const listLearnFavorites = () =>
+  apiRequest<{ data: LearnFavoriteItem[]; total: number }>('/learn-favorites');
+
+export const addLearnFavorite = (resourceId: string) =>
+  apiRequest<{ success: boolean; favorited: boolean }>(`/learn-favorites/${encodeURIComponent(resourceId)}`, {
+    method: 'POST',
+  });
+
+export const removeLearnFavorite = (resourceId: string) =>
+  apiRequest<{ success: boolean; favorited: boolean }>(`/learn-favorites/${encodeURIComponent(resourceId)}`, {
+    method: 'DELETE',
+  });
+
+export const getLearnFavoriteStatus = (resourceId: string) =>
+  apiRequest<{ favorited: boolean }>(`/learn-favorites/${encodeURIComponent(resourceId)}/status`);
+
+// ---------- 学习资源浏览记录 ----------
+
+export interface LearnHistoryItem {
+  resource_id: string;
+  browsed_at: string | null;
+}
+
+export const listLearnHistory = () =>
+  apiRequest<{ data: LearnHistoryItem[]; total: number }>('/learn-history');
+
+export const recordLearnHistory = (resourceId: string) =>
+  apiRequest<{ success: boolean }>('/learn-history', {
+    method: 'POST',
+    body: JSON.stringify({ resource_id: resourceId }),
+  });

@@ -38,9 +38,11 @@
           <div class="relative hidden xl:flex">
             <Icon icon="material-symbols:search-rounded" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
             <input
+              v-model="globalSearchQuery"
               type="text"
               placeholder="搜索题目…"
               class="h-10 w-48 rounded-lg border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm text-[#1E293B] outline-none transition focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30 dark:border-[#1E293B] dark:bg-[#0F172A] dark:text-[#E5E7EB] dark:placeholder-[#64748B]"
+              @keydown.enter="goSearch"
             />
           </div>
           <button
@@ -231,6 +233,14 @@ const { toggleTheme } = themeStore;
 
 const menuVisible = ref(false);
 const userMenuVisible = ref(false);
+const globalSearchQuery = ref('');
+
+const goSearch = () => {
+  const q = globalSearchQuery.value.trim();
+  if (!q) return;
+  router.push({ path: '/problems', query: { q } });
+  globalSearchQuery.value = '';
+};
 
 const currentPath = computed(() => router.currentRoute.value.path);
 const isActive = (to: string) =>

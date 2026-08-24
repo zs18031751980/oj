@@ -7,8 +7,12 @@ import {
   useDialog,
   useMessage,
 } from 'naive-ui';
-import { computed, onMounted, ref } from 'vue';
-import MarkdownComponent from '../../components/MarkdownComponent.vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../../components/MarkdownComponent.vue'),
+);
+
 import {
   ApiError,
   createAnnouncement,

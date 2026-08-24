@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { useMessage } from 'naive-ui';
 import {
   listContests, createContest, getContest,
   type ContestData
 } from '../../services/api';
 import { apiRequest } from '../../services/api';
-import MarkdownComponent from '../../components/MarkdownComponent.vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../../components/MarkdownComponent.vue'),
+);
 
 const message = useMessage();
 

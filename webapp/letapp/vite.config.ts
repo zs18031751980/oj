@@ -57,18 +57,16 @@ export default defineConfig({
         cssMinify: 'esbuild',
         sourcemap: false,
         reportCompressedSize: false,
+        chunkSizeWarningLimit: 500,
         rollupOptions: {
             output: {
                 manualChunks: {
                     'vendor-vue': ['vue', 'vue-router', 'pinia'],
                     'vendor-naive': ['naive-ui'],
-                    // 不再用 ['monaco-editor'] 强制打包完整入口（会把 typescript/json/css/html
-                    // 语言服务与 worker 全部拉进来，约 3.7MB）。MonacoEditor 组件已改为按需
-                    // 引入 c/cpp/python/java 子路径，由 Rollup 自然分包。
-                    // echarts 未被任何源码引用，移除以避免误打包。
                     'vendor-markdown': ['markdown-it', 'markdown-it-anchor', 'markdown-it-attrs', 'markdown-it-container', 'markdown-it-footnote', 'markdown-it-mark', 'markdown-it-sup', 'markdown-it-task-lists', 'markdown-it-expand-tabs'],
                     'vendor-icons': ['@iconify/vue'],
                     'vendor-prism': ['prismjs'],
+                    'vendor-mermaid': ['mermaid'],
                 },
             },
         },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, defineAsyncComponent, onMounted, computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import {
@@ -7,7 +7,10 @@ import {
   likeDiscussion, replyToDiscussion, likeDiscussionReply,
   type DiscussionData, type DiscussionReplyData,
 } from '../services/api';
-import MarkdownComponent from '../components/MarkdownComponent.vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../components/MarkdownComponent.vue'),
+);
 
 const authStore = useAuthStore();
 const router = useRouter();

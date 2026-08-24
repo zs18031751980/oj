@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import MarkdownComponent from '../components/MarkdownComponent.vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../components/MarkdownComponent.vue'),
+);
+
 import {
   getAnnouncement,
   listAnnouncements,

@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getContestProblem, type ContestProblemData } from '../services/api';
-import MarkdownComponent from '../components/MarkdownComponent.vue';
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import('../components/MarkdownComponent.vue'),
+);
 
 const route = useRoute();
 const router = useRouter();

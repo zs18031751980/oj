@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useAuthStore } from '../stores/auth';
 import { apiRequest, listFavorites, addFavorite, removeFavorite } from '../services/api';
+
+const route = useRoute();
 
 interface Problem {
   id: number;
@@ -149,6 +151,10 @@ const resetFilters = () => {
 };
 
 onMounted(() => {
+  const q = route.query.q;
+  if (typeof q === 'string' && q.trim()) {
+    searchQuery.value = q.trim();
+  }
   loadProblems();
   loadFavorites();
 });

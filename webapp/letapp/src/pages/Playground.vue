@@ -6,7 +6,10 @@ import { useRoute, useRouter } from "vue-router";
 import { apiRequest, getContestProblem, type ContestProblemData } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
-import MarkdownComponent from "../components/MarkdownComponent.vue";
+
+const MarkdownComponent = defineAsyncComponent(
+  () => import("../components/MarkdownComponent.vue"),
+);
 
 const MonacoEditor = defineAsyncComponent(
   () => import("../components/MonacoEditor.vue"),
@@ -121,6 +124,23 @@ const problemListLoading = ref(false);
 const activeLeftTab = ref<"problem" | "submissions" | "hints">("problem");
 const activeBottomTab = ref<"testcase" | "result" | "submit">("testcase");
 const isFullscreen = ref(false);
+
+function toggleFullscreen() {
+  if (isFullscreen.value) {
+    isFullscreen.value = false;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  } else {
+    isFullscreen.value = true;
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) {
+    isFullscreen.value = false;
+  }
+});
 const showLeftPanel = ref(true);
 const bottomPanelHeight = ref(240);
 const isDraggingBottom = ref(false);
@@ -395,7 +415,7 @@ watch(selectedLanguage, (lang) => {
             <svg v-if="showLeftPanel" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
             <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
           </button>
-          <button class="ide-icon-btn" title="全屏" @click="isFullscreen = !isFullscreen">
+          <button class="ide-icon-btn" title="全屏" @click="toggleFullscreen">
             <svg v-if="!isFullscreen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
             <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
           </button>
@@ -649,7 +669,8 @@ html.dark .ide-page { background: #0B1120; color: #E5E7EB; }
 }
 html.dark .ide-workbench { border-color: #1E293B; background: #0F172A; }
 
-.ide-fullscreen { position: fixed; z-index: 9999; inset: 0; border: 0; border-radius: 0; }
+.ide-fullscreen,
+:fullscreen .ide-workbench { position: fixed; z-index: 9999; inset: 0; border: 0; border-radius: 0; }
 
 /* ===== 顶部状态栏 ===== */
 .ide-topbar {

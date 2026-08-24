@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, markRaw, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import { useMessage, useDialog } from 'naive-ui';
 import { useThemeStore } from '../stores/theme';
 import { useAuthStore } from '../stores/auth';
 import { storeToRefs } from 'pinia';
-import MonacoEditor from '../components/MonacoEditor.vue';
-import MarkdownComponent from '../components/MarkdownComponent.vue';
+import type MonacoEditor from '../components/MonacoEditor.vue';
+import type MarkdownComponent from '../components/MarkdownComponent.vue';
 import {
   apiRequest,
   getFavoriteStatus,
@@ -17,6 +17,9 @@ import {
 } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useProblemCode } from '../composables/useProblemCode';
+
+const MonacoEditorComp = shallowRef<typeof MonacoEditor>();
+const MarkdownComp = shallowRef<typeof MarkdownComponent>();
 
 interface TestCase {
   input: string;
@@ -639,8 +642,20 @@ const startBottomDrag = (e: MouseEvent) => {
 
 /* ============ 专注模式 ============ */
 watch(isFocusMode, (v) => {
-  if (v) document.documentElement.classList.add('focus-mode');
-  else document.documentElement.classList.remove('focus-mode');
+  if (v) {
+    document.documentElement.classList.add('focus-mode');
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.documentElement.classList.remove('focus-mode');
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && isFocusMode.value) {
+    isFocusMode.value = false;
+  }
 });
 
 /* ============ 快捷键 ============ */
@@ -709,7 +724,13 @@ const saveStatusText = computed(() => {
 });
 
 /* ============ 生命周期 ============ */
-onMounted(() => {
+onMounted(async () => {
+  const [monacoMod, mdMod] = await Promise.all([
+    import('../components/MonacoEditor.vue'),
+    import('../components/MarkdownComponent.vue'),
+  ]);
+  MonacoEditorComp.value = monacoMod.default;
+  MarkdownComp.value = mdMod.default;
   loadProblem();
   window.addEventListener('keydown', handleKeyboard);
 });
@@ -856,7 +877,7 @@ onUnmounted(() => {
             <section class="md-section">
               <div class="md-head">题目描述</div>
               <div class="md-body markdown-body text-sm leading-7">
-                <MarkdownComponent :content="descMarkdown" :show-nav="false" :show-heading-links="false" />
+                <component :is="MarkdownComp" :content="descMarkdown" :show-nav="false" :show-heading-links="false" />
               </div>
             </section>
 
@@ -938,7 +959,7 @@ onUnmounted(() => {
               <p class="text-rose-500">{{ learningError }}</p>
             </div>
             <div v-else-if="learningMarkdown" class="md-body markdown-body">
-              <MarkdownComponent :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
+              <component :is="MarkdownComp" :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
             </div>
           </div>
         </div>
@@ -999,7 +1020,8 @@ onUnmounted(() => {
 
         <!-- 编辑器 -->
         <div class="editor-body">
-          <MonacoEditor
+          <component
+            :is="MonacoEditorComp"
             v-model="code"
             :language="editorLanguageMap[language] || 'cpp'"
             :is-dark="effectiveDark"
@@ -1217,7 +1239,8 @@ onUnmounted(() => {
   background: #0b1120;
   color: #e2e8f0;
 }
-.editor-page--focus {
+.editor-page--focus,
+:fullscreen .editor-page {
   position: fixed;
   inset: 0;
   z-index: 60;

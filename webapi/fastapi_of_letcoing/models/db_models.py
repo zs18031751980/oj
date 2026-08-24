@@ -424,6 +424,33 @@ class ContestTestcase(BaseModel):
         table_name = "contest_testcases"
 
 
+class LearnFavorite(BaseModel):
+    """学习资源收藏模型（每个用户每个资源最多收藏一次）"""
+    id = AutoField(primary_key=True)
+    user = ForeignKeyField(User, backref="learn_favorites", verbose_name="用户")
+    resource_id = CharField(max_length=100, verbose_name="资源ID")
+
+    class Meta:
+        table_name = "learn_favorites"
+        indexes = (
+            (('user', 'resource_id'), True),
+        )
+
+
+class LearnBrowsingHistory(BaseModel):
+    """学习资源浏览记录模型"""
+    id = AutoField(primary_key=True)
+    user = ForeignKeyField(User, backref="learn_history", verbose_name="用户")
+    resource_id = CharField(max_length=100, verbose_name="资源ID")
+    browsed_at = DateTimeField(default=datetime.now, verbose_name="浏览时间")
+
+    class Meta:
+        table_name = "learn_browsing_history"
+        indexes = (
+            (('user', 'resource_id'), False),
+        )
+
+
 # ============================================================
 # 4. 表管理与数据库维护方法
 # ============================================================
@@ -431,7 +458,7 @@ class ContestTestcase(BaseModel):
 # 所有已注册模型的列表（用于表创建和删除操作）
 MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
           Contest, ContestParticipant, Discussion, DiscussionReply,
-          ContestProblem, ContestTestcase]
+          ContestProblem, ContestTestcase, LearnFavorite, LearnBrowsingHistory]
 
 
 def create_tables():
@@ -581,6 +608,24 @@ _SCHEMA_MIGRATIONS = [
             "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
             "created_at TIMESTAMP DEFAULT now(), "
             "UNIQUE(reply_id, user_id));",
+        ],
+    ),
+    (
+        "0004_learn_favorites_history_tables",
+        [
+            "CREATE TABLE IF NOT EXISTS learn_favorites ("
+            "id SERIAL PRIMARY KEY, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "resource_id VARCHAR(100) NOT NULL, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "UNIQUE(user_id, resource_id));",
+            "CREATE TABLE IF NOT EXISTS learn_browsing_history ("
+            "id SERIAL PRIMARY KEY, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "resource_id VARCHAR(100) NOT NULL, "
+            "browsed_at TIMESTAMP DEFAULT now());",
+            "CREATE INDEX IF NOT EXISTS idx_learn_history_user "
+            "ON learn_browsing_history(user_id, browsed_at DESC);",
         ],
     ),
 ]
