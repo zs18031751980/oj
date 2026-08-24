@@ -159,10 +159,10 @@ watch(
 </script>
 
 <template>
-  <div class="announcements-page min-h-[calc(100vh-var(--header-h,4rem))] bg-[#F6F8FC] dark:bg-[#0F172A]">
+  <div class="announcements-page min-h-[calc(100vh-var(--header-h,4rem))] bg-[#F6F8FC] pt-12 dark:bg-[#0F172A]">
     <!-- ===== 列表视图 ===== -->
     <template v-if="!isDetailMode">
-      <div class="app-container-with-sidebar py-6 pt-8">
+      <div class="app-container-with-sidebar py-6 pt-4">
         <!-- 左侧分类栏 240px -->
         <aside class="app-sidebar-col">
           <div class="ui-card space-y-1 p-3">
