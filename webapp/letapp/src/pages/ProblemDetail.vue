@@ -424,10 +424,13 @@ const loadFavoriteStatus = async () => {
     isFavorited.value = false;
   }
 };
+const goLogin = () => {
+  authStore.startOAuthLogin('iOSClub', router.currentRoute.value.fullPath, true);
+};
 const toggleFavorite = async () => {
   if (!authStore.isAuthenticated) {
     message.warning('请先登录后再收藏题目');
-    router.push('/login');
+    goLogin();
     return;
   }
   if (favoriteBusy.value) return;
@@ -928,7 +931,7 @@ onUnmounted(() => {
           <div v-else-if="activeTab === 'submissions'">
             <div v-if="!authStore.isAuthenticated" class="state-box">
               <p>登录后可查看本题提交记录</p>
-              <button class="text-btn" @click="router.push('/login')">去登录</button>
+              <button class="text-btn" @click="goLogin">去登录</button>
             </div>
             <div v-else-if="submissionsLoading" class="state-box">
               <Icon icon="material-symbols:progress-activity" class="h-8 w-8 animate-spin text-[#2563EB]" />

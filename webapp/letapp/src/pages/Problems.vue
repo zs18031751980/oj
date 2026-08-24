@@ -116,11 +116,15 @@ const openProblem = (id: number) => {
 
 const isFavorited = (id: number) => favoriteIds.value.has(id);
 
+const goLogin = () => {
+  authStore.startOAuthLogin('iOSClub', router.currentRoute.value.fullPath, true);
+};
+
 const toggleFavorite = async (problem: Problem, event: MouseEvent) => {
   event.stopPropagation();
   if (!authStore.isAuthenticated) {
     message.warning('请先登录后再收藏题目');
-    router.push('/login');
+    goLogin();
     return;
   }
   const favorited = favoriteIds.value.has(problem.id);

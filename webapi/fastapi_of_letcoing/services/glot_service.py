@@ -1,55 +1,58 @@
 """
-Glot.io 代码执行服务模块
+代码执行服务模块（Judge0 后端）
 
-通过 Glot.io 公共 API 实现远程代码执行功能。
-支持 40+ 种编程语言的代码运行，包括：
-JavaScript, Python, Java, C++, Go, Rust, TypeScript 等。
+通过 Judge0 API 实现远程代码执行功能。
+支持 60+ 种编程语言的代码运行。
 
-Glot.io 是一个开源的代码运行平台，提供沙箱化的代码执行环境。
-使用方式：通过 HTTP API 提交代码文件，获取执行结果。
+Judge0 是一个开源的代码运行平台，提供沙箱化的代码执行环境。
+免费层：RapidAPI 免费注册后每日 2000 次提交。
 """
 
-import aiohttp        # 异步 HTTP 客户端库
-import asyncio        # 异步 I/O 支持
-import json           # JSON 数据处理
+import aiohttp
+import asyncio
+import json
+import os
 from typing import Dict, Optional
 
 from core.di_container import Injectable
 from interfaces.service_interfaces import ICodeExecutionService, IConfigService, ILoggerService
-from models.glot_models import PostFile, PostDataModel, RunResult, CodeExecutionRequest, CodeExecutionResponse
+from models.glot_models import RunResult, CodeExecutionRequest, CodeExecutionResponse
+
+
+# Judge0 语言 ID 映射（常用语言）
+# 参考：https://judge0.com/languages
+JUDGE0_LANGUAGES: Dict[str, int] = {
+    "bash": 46,
+    "c": 50,
+    "c++": 54,
+    "cpp": 54,
+    "csharp": 51,
+    "go": 60,
+    "java": 62,
+    "javascript": 63,
+    "kotlin": 78,
+    "perl": 85,
+    "php": 68,
+    "python": 71,
+    "python3": 71,
+    "r": 80,
+    "ruby": 72,
+    "rust": 73,
+    "scala": 81,
+    "swift": 82,
+    "typescript": 74,
+    "typescript-node": 75,
+}
 
 
 class GlotService(ICodeExecutionService, Injectable):
     """
-    Glot.io 远程代码执行服务
+    Judge0 远程代码执行服务
 
-    通过 Glot.io 的公共 API 执行代码，支持多种编程语言。
-    使用 API Token 进行身份认证，通过 aiohttp 异步 HTTP 客户端发送请求。
+    通过 Judge0 (RapidAPI) 执行代码，支持多种编程语言。
     """
 
-    # 编程语言名称到文件扩展名的映射字典
-    # 键：语言名称（小写），值：文件扩展名
-    # Glot.io API 要求使用文件扩展名来标识代码类型
-    LANGUAGES: Dict[str, str] = {
-        "assembly": "asm", "ats": "dats", "bash": "sh", "c": "c", "clojure": "clj",
-        "cobol": "cob", "coffeescript": "coffee", "cpp": "cpp", "crystal": "cr",
-        "csharp": "cs", "d": "d", "elixir": "ex", "elm": "elm", "erlang": "erl",
-        "fsharp": "fs", "go": "go", "groovy": "groovy", "hare": "hare", "haskell": "hs",
-        "idris": "idr", "java": "java", "javascript": "js", "julia": "jl", "kotlin": "kt",
-        "lua": "lua", "mercury": "m", "nim": "nim", "nix": "nix", "ocaml": "ml",
-        "perl": "pl", "php": "php", "python": "py", "raku": "raku", "ruby": "rb",
-        "rust": "rs", "sac": "sac", "scala": "scala", "swift": "swift", "typescript": "ts",
-        "zig": "zig",
-    }
-
     def __init__(self, config_service: IConfigService, logger_service: ILoggerService):
-        """
-        初始化 Glot.io 服务
-
-        Args:
-            config_service: 配置服务，用于获取 API Token 和超时时间
-            logger_service: 日志服务，用于记录执行日志
-        """
         self._config_service = config_service
         self._logger_service = logger_service
         self._timeout = aiohttp.ClientTimeout(total=config_service.get_timeout())
@@ -57,7 +60,6 @@ class GlotService(ICodeExecutionService, Injectable):
         self._session_loop_id: Optional[int] = None
 
     def _get_session(self) -> aiohttp.ClientSession:
-        """获取或创建复用的 aiohttp 会话，避免每次请求重建 TCP 连接"""
         try:
             current_loop = asyncio.get_running_loop()
             current_loop_id = id(current_loop)
@@ -79,41 +81,23 @@ class GlotService(ICodeExecutionService, Injectable):
         return self._session
 
     async def close(self):
-        """关闭 aiohttp 会话，释放连接资源"""
         if self._session and not self._session.closed:
             await self._session.close()
             self._session = None
 
     async def execute_code(self, request: CodeExecutionRequest) -> CodeExecutionResponse:
-        """
-        执行代码（对外公开的接口方法）
-
-        流程：
-        1. 记录执行日志
-        2. 检查 API Token 是否已配置
-        3. 调用 Glot.io API 执行代码
-        4. 返回标准化的执行结果
-
-        Args:
-            request: 代码执行请求（包含源代码、语言和标准输入）
-
-        Returns:
-            代码执行响应（包含标准输出、错误输出和执行状态）
-        """
         try:
             self._logger_service.info(f"开始执行代码，语言: {request.language}")
 
-            # 检查 API Token 是否已配置
             api_token = self._config_service.get_api_token()
             if not api_token:
                 return CodeExecutionResponse(
                     stdout="",
-                    stderr="API Token 未配置",
+                    stderr="API Token 未配置（Judge0 RapidAPI Key）",
                     success=False,
                 )
 
-            # 异步调用 Glot.io API
-            result = await self._run_glot_async(api_token, request.code, request.language, request.stdin)
+            result = await self._run_judge0_async(api_token, request.code, request.language, request.stdin)
 
             if result["ok"]:
                 return CodeExecutionResponse(
@@ -135,74 +119,83 @@ class GlotService(ICodeExecutionService, Injectable):
                 success=False,
             )
 
-    async def _run_glot_async(
+    async def _run_judge0_async(
         self,
         api_token: str,
         code: str,
-        language: str = "javascript",
+        language: str = "python",
         stdin: Optional[str] = None,
     ) -> Dict[str, str | bool]:
         """
-        异步调用 Glot.io API 执行代码（内部实现）
+        异步调用 Judge0 API 执行代码
 
-        构建符合 Glot.io API 格式的请求，发送 HTTP POST 请求，
-        解析返回的 JSON 响应并提取标准输出和错误输出。
-
-        Args:
-            api_token: Glot.io API Token
-            code: 要执行的源代码
-            language: 编程语言名称
-            stdin: 程序的标准输入
-
-        Returns:
-            包含 ok（是否成功）、stdout（标准输出）、stderr（错误输出）的字典
+        使用 ?wait=true 参数实现同步执行（提交后等待结果）。
         """
-        # 验证请求参数
         if not code or code.strip() == "":
             return {"ok": False, "stdout": "", "stderr": "请输入代码"}
-        if not language or language.strip() == "":
-            language = "javascript"
 
-        # 将语言名称映射为文件扩展名
-        language_lower = language.lower()
-        extension = self.LANGUAGES.get(language_lower)
-        if not extension:
-            return {"ok": False, "stdout": "", "stderr": "不支持的语言"}
+        language_lower = language.lower().strip()
+        language_id = JUDGE0_LANGUAGES.get(language_lower)
+        if not language_id:
+            supported = ", ".join(sorted(JUDGE0_LANGUAGES.keys()))
+            return {"ok": False, "stdout": "", "stderr": f"不支持的语言: {language}。支持: {supported}"}
 
-        # 构建 Glot.io API 请求
-        url = f"https://glot.io/api/run/{language_lower}/latest"
-        post_file = PostFile(name=f"main.{extension}", content=code)
-        data = PostDataModel(files=[post_file], stdin=stdin)
+        url = "https://judge0-ce.p.rapidapi.com/submissions"
+        params = {
+            "base64_encoded": "false",
+            "wait": "true",
+            "fields": "stdout,stderr,status,compile_output,time,memory",
+        }
+        payload = {
+            "source_code": code,
+            "language_id": language_id,
+        }
+        if stdin:
+            payload["stdin"] = stdin
+
         headers = {
-            "Authorization": f"Token {api_token}",
+            "X-RapidAPI-Key": api_token,
+            "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
             "Content-Type": "application/json",
         }
 
         try:
-            async with self._get_session().post(url, json=data.to_dict(), headers=headers) as response:
+            async with self._get_session().post(url, json=payload, params=params, headers=headers) as response:
                 resp_text = await response.text()
+
+                if response.status == 429:
+                    return {"ok": False, "stdout": "", "stderr": "API 请求过于频繁，请稍后再试"}
 
                 if not response.ok:
                     return {
                         "ok": False,
                         "stdout": "",
-                        "stderr": f"请求失败: HTTP {response.status}",
+                        "stderr": f"请求失败: HTTP {response.status} - {resp_text[:200]}",
                     }
 
                 resp_json = json.loads(resp_text)
-                result = RunResult(
-                    stdout=resp_json.get("stdout", ""),
-                    stderr=resp_json.get("stderr", ""),
-                )
 
-                # Glot.io 约定：stderr 为空表示执行成功
+                stdout = resp_json.get("stdout", "") or ""
+                stderr = resp_json.get("stderr", "") or ""
+                compile_output = resp_json.get("compile_output", "") or ""
+                status = resp_json.get("status", {})
+
+                if compile_output:
+                    stderr = compile_output
+
+                is_success = status.get("id") in (3, None)
+                # status.id: 1=in queue, 2=processing, 3=accepted, 4=wrong answer,
+                # 5=time limit, 6=runtime error, 7=compilation error, etc.
+                if not is_success and not stderr:
+                    stderr = f"执行状态: {status.get('description', '未知')}"
+
                 return {
-                    "ok": result.stderr == "",
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
+                    "ok": is_success and not stderr,
+                    "stdout": stdout,
+                    "stderr": stderr,
                 }
         except asyncio.TimeoutError:
-            return {"ok": False, "stdout": "", "stderr": "请求超时"}
+            return {"ok": False, "stdout": "", "stderr": "请求超时（超过30秒限制）"}
         except aiohttp.ClientError as ex:
             return {"ok": False, "stdout": "", "stderr": f"请求失败: {str(ex)}"}
         except Exception as ex:
