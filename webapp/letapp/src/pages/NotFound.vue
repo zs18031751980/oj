@@ -8,12 +8,6 @@ const router = useRouter();
 <template>
   <main class="grid min-h-screen place-items-center bg-[#F6F8FC] px-6 text-[#1E293B] dark:bg-[#0F172A] dark:text-[#E5E7EB]">
     <section class="w-full max-w-[480px] text-center">
-      <img
-        src="/assets/404-illustration.svg"
-        alt=""
-        class="mx-auto w-[260px]"
-        @error="($event.target as HTMLImageElement).style.display='none'"
-      />
       <Icon
         icon="material-symbols:search-off-rounded"
         class="mx-auto mb-4 h-16 w-16 text-[#CBD5E1] dark:text-[#475569]"
