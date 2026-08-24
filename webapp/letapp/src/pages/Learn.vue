@@ -72,7 +72,7 @@ const courses: ResourceItem[] = markRaw([
   { id: 'todo-project', title: 'Web 项目练习：Todo 应用', duration: '', author: '', language: 'JavaScript', markdownFile: 'Web 项目练习：Todo 应用.md' },
   { id: 'algorithm-basic', title: '算法', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
   { id: 'vue-components', title: 'Vue 组件化开发', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
-  { id: 'oj-strategy', title: 'agent开发', duration: '', author: '', language: '通用', markdownFile: 'agent开发.md' },
+  { id: 'oj-strategy', title: 'Agent 开发', duration: '', author: '', language: '通用', markdownFile: 'agent开发.md' },
 ]);
 
 const selectedTitle = ref('');
@@ -115,8 +115,6 @@ function parseCardInfo(markdown: string): CardInfo {
   return { description, points };
 }
 
-// 卡片摘要缓存：资料文件基本不变，重复访问时直接用本地缓存，避免每次进入
-// 学习页都并发拉取全部 markdown 原文（性能优化）。
 const CARD_INFO_CACHE_KEY = 'learn_card_info_cache_v1';
 
 function readCardInfoCache(): Record<string, CardInfo> {
@@ -134,7 +132,7 @@ function writeCardInfoCache(map: Record<string, CardInfo>) {
   try {
     localStorage.setItem(CARD_INFO_CACHE_KEY, JSON.stringify(map));
   } catch {
-    // 存储不可用时静默忽略，不影响功能
+    // ignore
   }
 }
 
@@ -311,6 +309,55 @@ const loadMarkdown = async (resourceId: string, chapterId: string = '') => {
   }
 };
 
+const searchQuery = ref('');
+const activeCategory = ref('全部');
+
+const categories = ['全部', 'C', 'JavaScript', 'Python', 'C++', 'Vue', '通用'];
+const categoryCount = computed(() => {
+  const map: Record<string, number> = {};
+  for (const cat of categories) {
+    if (cat === '全部') {
+      map[cat] = allResources.length;
+    } else {
+      map[cat] = allResources.filter(r => 'language' in r && (r as ResourceItem).language === cat).length;
+    }
+  }
+  return map;
+});
+
+const displayedCourses = computed(() => {
+  let list = filteredCourses.value;
+  if (activeCategory.value !== '全部') {
+    list = list.filter(r => r.language === activeCategory.value);
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    list = list.filter(r => r.title.toLowerCase().includes(q) || (cardInfoMap.value[r.id]?.description || '').toLowerCase().includes(q));
+  }
+  return list;
+});
+
+const displayedPaths = computed(() => {
+  if (activeCategory.value !== '全部') return [];
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    return learningPaths.filter(p => p.title.toLowerCase().includes(q) || (cardInfoMap.value[p.id]?.description || '').toLowerCase().includes(q));
+  }
+  return learningPaths;
+});
+
+const getLanguageColor = (lang: string) => {
+  const map: Record<string, string> = {
+    C: 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
+    JavaScript: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
+    Python: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
+    'C++': 'bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
+    Vue: 'bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-400',
+    '通用': 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  };
+  return map[lang] || map['通用'];
+};
+
 onMounted(async () => {
   if (currentDocId.value) {
     await loadMarkdown(currentDocId.value, currentChapterId.value);
@@ -334,124 +381,216 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E5E7EB]">
+  <div class="learn-page min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A]">
+
+    <!-- ===== 列表页 ===== -->
     <template v-if="!isDetailMode">
-      <section v-once class="learn-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="max-w-3xl">
-              <p class="learn-eyebrow text-sm font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">Learning Hub</p>
-              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">路径、资料、练习连成一条线。</h1>
+      <div class="app-container-with-sidebar py-6">
+
+        <!-- 左侧导航 -->
+        <aside class="app-sidebar-col">
+          <div class="learn-sidebar">
+            <!-- 顶部入口 -->
+            <div class="sidebar-section">
+              <div class="sidebar-section-title">学习资源</div>
             </div>
 
-            <button class="learn-primary-button inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300" @click="router.push('/playground')">
-              <Icon icon="material-symbols:code" class="h-5 w-5" />
+            <!-- 个人区域 -->
+            <div class="sidebar-section">
+              <button class="sidebar-item" @click="router.push('/learn')">
+                <Icon icon="material-symbols:recommend" class="h-4 w-4 text-blue-500" />
+                <span>精选推荐</span>
+              </button>
+              <button class="sidebar-item" @click="router.push('/learn')">
+                <Icon icon="material-symbols:library-books" class="h-4 w-4 text-emerald-500" />
+                <span>全部资源</span>
+                <span class="sidebar-count">{{ allResources.length }}</span>
+              </button>
+              <button class="sidebar-item">
+                <Icon icon="material-symbols:favorite" class="h-4 w-4 text-rose-500" />
+                <span>我的收藏</span>
+              </button>
+              <button class="sidebar-item">
+                <Icon icon="material-symbols:history" class="h-4 w-4 text-amber-500" />
+                <span>最近浏览</span>
+              </button>
+              <button class="sidebar-item">
+                <Icon icon="material-symbols:play-circle" class="h-4 w-4 text-violet-500" />
+                <span>继续学习</span>
+              </button>
+            </div>
+
+            <!-- 分类区域 -->
+            <div class="sidebar-section">
+              <div class="sidebar-section-title mt-2">资源分类</div>
+              <button
+                v-for="cat in categories"
+                :key="cat"
+                class="sidebar-item"
+                :class="{ active: activeCategory === cat }"
+                @click="activeCategory = cat"
+              >
+                <Icon :icon="cat === '全部' ? 'material-symbols:grid-view' : 'material-symbols:folder'" class="h-4 w-4" />
+                <span>{{ cat === '全部' ? '全部资源' : cat }}</span>
+                <span class="sidebar-count">{{ categoryCount[cat] || 0 }}</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 右侧主内容 -->
+        <section class="min-w-0 flex-1">
+
+          <!-- 标题区 -->
+          <div class="mb-5 flex items-start justify-between gap-4">
+            <div>
+              <h1 class="text-[28px] font-black text-[#1E293B] dark:text-[#E5E7EB]">学习资源</h1>
+              <p class="mt-1 text-sm text-[#64748B] dark:text-[#94A3B8]">路径、资料、练习连成一条线</p>
+            </div>
+            <div class="learn-stats-card">
+              <span class="text-2xl font-black text-[#2563EB]">{{ allResources.length }}</span>
+              <span class="text-xs text-[#64748B] dark:text-[#94A3B8]">个学习资源</span>
+            </div>
+          </div>
+
+          <!-- 搜索栏 -->
+          <div class="mb-5 flex items-center gap-3">
+            <div class="learn-search">
+              <Icon icon="material-symbols:search" class="h-5 w-5 text-[#94A3B8]" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="搜索学习资源..."
+                class="learn-search-input"
+              />
+            </div>
+            <button class="ui-btn ui-btn-ghost ui-btn-sm" @click="router.push('/playground')">
+              <Icon icon="material-symbols:code" class="h-4 w-4" />
               去编辑器练习
             </button>
           </div>
-        </div>
-      </section>
 
-      <section class="learn-path-section mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div class="paths-panel rounded-[2rem] border border-slate-200 bg-white/85 p-8 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-800/85 dark:shadow-black/20 lg:p-10">
-          <div class="section-heading mb-8">
-            <h2 class="text-2xl font-black tracking-tight">学习路径建议</h2>
-            <p class="mt-2 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              如果还没确定从哪里开始，可以先按下面的路径走。
-            </p>
-          </div>
-
-          <div class="path-grid grid gap-6 lg:grid-cols-3">
-            <article
-              v-for="path in learningPaths"
-              :key="path.title"
-              class="path-card"
-            >
-              <div class="path-card-topline">
-                <span class="path-index">PATH</span>
-                <span class="path-status">START HERE</span>
-              </div>
-              <h3 class="mt-0 text-2xl font-black tracking-tight">{{ path.title }}</h3>
-              <p class="mt-5 text-sm leading-7 text-slate-600 dark:text-slate-300">
-                {{ cardInfoMap[path.id]?.description || '' }}
-              </p>
-              <button
-                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
-                @click="openResource(path)"
-              >
-                <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
-                查看路径
-              </button>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="courses-section mx-auto max-w-7xl px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24">
-        <div class="section-heading mb-6 flex items-center justify-between">
-          <div>
-            <h2 class="text-2xl font-black tracking-tight">推荐课程</h2>
-            <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">当前共展示 {{ filteredCourses.length }} 个学习项。</p>
-          </div>
-        </div>
-
-        <div class="course-grid grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          <article v-for="(course, index) in filteredCourses" :key="course.id" class="course-card">
-            <div class="course-card-topline flex items-center gap-2">
-              <span class="course-index">{{ String(index + 1).padStart(2, '0') }}</span>
-              <span class="pill cyan">{{ course.language }}</span>
-            </div>
-            <h3 class="mt-5 text-2xl font-black tracking-tight">{{ course.title }}</h3>
-            <p class="mt-5 mb-5 text-sm leading-7 text-slate-600 dark:text-slate-300">
-              {{ cardInfoMap[course.id]?.description || '' }}
-            </p>
+          <!-- 分类横向导航 -->
+          <div class="mb-6 flex gap-2 overflow-x-auto pb-1">
             <button
-              class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
-              @click="openResource(course)"
+              v-for="cat in categories"
+              :key="cat"
+              class="learn-cat-chip"
+              :class="{ active: activeCategory === cat }"
+              @click="activeCategory = cat"
             >
-              <Icon icon="material-symbols:arrow-forward" class="h-4 w-4" />
-              查看课程
+              {{ cat === '全部' ? '全部' : cat }}
+              <span class="learn-cat-count">{{ categoryCount[cat] || 0 }}</span>
             </button>
-          </article>
-        </div>
-      </section>
+          </div>
+
+          <!-- 精选学习路径 -->
+          <div v-if="displayedPaths.length" class="mb-8">
+            <div class="mb-4 flex items-center gap-2">
+              <Icon icon="material-symbols:route" class="h-5 w-5 text-[#2563EB]" />
+              <h2 class="text-lg font-black text-[#1E293B] dark:text-[#E5E7EB]">学习路径</h2>
+              <span class="ui-badge ui-badge-blue text-[10px]">推荐</span>
+            </div>
+            <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <article
+                v-for="(path, idx) in displayedPaths"
+                :key="path.id"
+                class="learn-path-card"
+              >
+                <div class="learn-path-cover" :class="['bg-gradient-to-br', path.accent]">
+                  <span class="learn-path-badge">PATH {{ String(idx + 1).padStart(2, '0') }}</span>
+                </div>
+                <div class="learn-path-body">
+                  <h3 class="text-base font-black text-[#1E293B] dark:text-[#E5E7EB]">{{ path.title }}</h3>
+                  <p class="mt-2 line-clamp-2 text-sm text-[#64748B] dark:text-[#94A3B8]">
+                    {{ cardInfoMap[path.id]?.description || '暂无简介' }}
+                  </p>
+                  <button class="learn-path-btn" @click="openResource(path)">
+                    <Icon icon="material-symbols:open-in-new" class="h-3.5 w-3.5" />
+                    查看路径
+                  </button>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <!-- 全部资源网格 -->
+          <div>
+            <div class="mb-4 flex items-center gap-2">
+              <Icon icon="material-symbols:library-books" class="h-5 w-5 text-[#2563EB]" />
+              <h2 class="text-lg font-black text-[#1E293B] dark:text-[#E5E7EB]">全部资源</h2>
+              <span class="text-sm text-[#94A3B8]">（{{ displayedCourses.length }}）</span>
+            </div>
+            <div v-if="displayedCourses.length" class="learn-grid">
+              <article
+                v-for="(course, index) in displayedCourses"
+                :key="course.id"
+                class="learn-resource-card"
+                @click="openResource(course)"
+              >
+                <div class="learn-card-top">
+                  <span class="learn-card-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                  <span class="learn-card-lang" :class="getLanguageColor(course.language)">{{ course.language }}</span>
+                </div>
+                <h3 class="learn-card-title">{{ course.title }}</h3>
+                <p class="learn-card-desc">
+                  {{ cardInfoMap[course.id]?.description || '暂无简介' }}
+                </p>
+                <div class="learn-card-footer">
+                  <span v-if="course.chapters" class="learn-card-meta">
+                    <Icon icon="material-symbols:menu-book" class="h-3.5 w-3.5" />
+                    {{ course.chapters.length }} 章节
+                  </span>
+                  <span class="learn-card-meta">
+                    <Icon icon="material-symbols:arrow-forward" class="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </article>
+            </div>
+            <div v-else class="ui-empty mt-4">
+              <Icon icon="material-symbols:search-off" class="mb-2 h-10 w-10 text-[#CBD5E1] dark:text-[#475569]" />
+              <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">没有找到匹配的资源</p>
+              <p class="text-sm text-[#94A3B8]">试试其他关键词或分类</p>
+            </div>
+          </div>
+        </section>
+      </div>
     </template>
 
+    <!-- ===== 详情页 ===== -->
     <template v-else>
-      <section class="learn-detail mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-        <div class="detail-toolbar mb-6 flex flex-wrap items-center justify-between gap-4">
-          <button
-            class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-            @click="goBackFromDetail"
-          >
+      <div class="app-container py-6 lg:py-10">
+
+        <!-- 工具栏 -->
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <button class="learn-back-btn" @click="goBackFromDetail">
             <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
             {{ currentChapter ? '返回课程目录' : '返回学习资源' }}
           </button>
 
-          <button
-            v-if="!isChapterDirectory"
-            class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="isLoadingDoc || !selectedResource"
-            @click="downloadCurrentMarkdown"
-          >
-            <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
-            导出 Markdown
-          </button>
-
-          <button
-            class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
-            @click="router.push('/playground')"
-          >
-            <Icon icon="material-symbols:code" class="h-4 w-4" />
-            去编辑器练习
-          </button>
+          <div class="flex items-center gap-3">
+            <button
+              v-if="!isChapterDirectory"
+              class="learn-back-btn"
+              :disabled="isLoadingDoc || !selectedResource"
+              @click="downloadCurrentMarkdown"
+            >
+              <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
+              导出 Markdown
+            </button>
+            <button class="ui-btn-primary-sm" @click="router.push('/playground')">
+              <Icon icon="material-symbols:code" class="h-4 w-4" />
+              去编辑器练习
+            </button>
+          </div>
         </div>
 
-        <div v-if="isChapterDirectory" class="chapter-directory">
-          <header class="chapter-directory-header">
+        <!-- 章节目录模式 -->
+        <div v-if="isChapterDirectory" class="learn-chapter-directory">
+          <header class="mb-8">
             <p class="chapter-kicker">C LANGUAGE · {{ currentResource?.chapters?.length }} CHAPTERS</p>
-            <h1>C 语言知识点总结</h1>
-            <p>按章节逐步学习 C 语言核心知识，每章内容在独立页面中阅读。</p>
+            <h1 class="text-[28px] font-black text-[#1E293B] dark:text-[#E5E7EB]">C 语言知识点总结</h1>
+            <p class="mt-2 text-sm text-[#64748B] dark:text-[#94A3B8]">按章节逐步学习 C 语言核心知识，每章内容在独立页面中阅读。</p>
           </header>
 
           <div class="chapter-grid">
@@ -464,27 +603,29 @@ watch(
               <span class="chapter-label">{{ chapter.label }}</span>
               <h2>{{ chapter.title }}</h2>
               <p>{{ chapter.summary }}</p>
-              <span class="chapter-open-icon" aria-hidden="true">
+              <span class="chapter-open-icon">
                 <Icon icon="material-symbols:arrow-forward-rounded" class="h-5 w-5" />
               </span>
             </button>
           </div>
         </div>
 
+        <!-- Markdown 内容模式 -->
         <template v-else>
-          <div class="detail-document overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-800/85 dark:shadow-black/20">
-            <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
+          <div class="learn-document">
+            <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-[#94A3B8]">
               正在加载资料内容...
             </div>
             <div v-else-if="docError" class="flex min-h-[320px] items-center justify-center p-8 text-center text-rose-500">
               {{ docError }}
             </div>
-            <MarkdownComponent v-else :content="selectedResource" :show-nav="false" :show-heading-links="false" />
+            <MarkdownComponent v-else :content="selectedResource" :show-nav="true" :show-heading-links="true" />
           </div>
 
+          <!-- 章节导航 -->
           <nav v-if="currentChapter" class="chapter-pagination" aria-label="章节导航">
             <button
-              class="chapter-nav-button"
+              class="chapter-nav-btn"
               :disabled="!previousChapter"
               @click="previousChapter && openChapter(previousChapter)"
             >
@@ -492,13 +633,13 @@ watch(
               <span>{{ previousChapter?.title || '已经是第一章' }}</span>
             </button>
 
-            <button class="chapter-directory-button" title="返回课程目录" @click="goBackFromDetail">
+            <button class="chapter-directory-btn" title="返回课程目录" @click="goBackFromDetail">
               <Icon icon="material-symbols:format-list-bulleted-rounded" class="h-5 w-5" />
               <span>课程目录</span>
             </button>
 
             <button
-              class="chapter-nav-button chapter-nav-next"
+              class="chapter-nav-btn chapter-nav-next"
               :disabled="!nextChapter"
               @click="nextChapter && openChapter(nextChapter)"
             >
@@ -507,16 +648,7 @@ watch(
             </button>
           </nav>
         </template>
-      </section>
-    </template>
-
-    <div v-if="isDetailMode" class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-    </div><template v-if="!isDetailMode">
-      <footer class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-        <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-4000">
-          Let Coding — Learn
-        </div>
-      </footer>
+      </div>
     </template>
   </div>
 </template>
@@ -524,570 +656,573 @@ watch(
 <style scoped>
 @reference 'tailwindcss';
 
-.course-card {
-  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-white p-8 shadow-lg shadow-slate-200/60 transition hover:-translate-y-1 hover:shadow-xl;
+/* ===== 左侧导航 ===== */
+.learn-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-
-.path-card {
-  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-8 transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg;
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
 }
-
-.pill {
-  @apply inline-flex rounded-full px-3 py-1 text-xs font-black;
+.sidebar-section + .sidebar-section {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #E2E8F0;
 }
-
-.pill.cyan {
-  @apply bg-blue-50 text-blue-700;
+:global(html.dark) .sidebar-section + .sidebar-section {
+  border-color: #1E293B;
 }
-
-.pill.slate {
-  @apply bg-slate-100 text-slate-600;
-}
-
-.chapter-directory-header {
-  max-width: 46rem;
-  margin-bottom: 2rem;
-}
-
-.chapter-kicker,
-.chapter-label {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+.sidebar-section-title {
+  padding: 0 0.75rem;
+  margin-bottom: 0.375rem;
+  font-size: 0.68rem;
   font-weight: 800;
-  letter-spacing: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #94A3B8;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+  text-align: left;
+  transition: all 0.15s;
+}
+.sidebar-item:hover {
+  background: #F1F5F9;
+  color: #1E293B;
+}
+.sidebar-item.active {
+  background: #EFF6FF;
+  color: #2563EB;
+  font-weight: 700;
+}
+:global(html.dark) .sidebar-item {
+  color: #94A3B8;
+}
+:global(html.dark) .sidebar-item:hover {
+  background: #1E293B;
+  color: #E5E7EB;
+}
+:global(html.dark) .sidebar-item.active {
+  background: #172554;
+  color: #60A5FA;
+}
+.sidebar-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94A3B8;
 }
 
-.chapter-kicker {
+/* ===== 标题区 ===== */
+.learn-stats-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+}
+:global(html.dark) .learn-stats-card {
+  border-color: #1E293B;
+  background: #111827;
+}
+
+/* ===== 搜索栏 ===== */
+.learn-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  max-width: 680px;
+  height: 48px;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+  transition: border-color 0.15s;
+}
+.learn-search:focus-within {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+:global(html.dark) .learn-search {
+  border-color: #1E293B;
+  background: #0F172A;
+}
+.learn-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: #1E293B;
+}
+:global(html.dark) .learn-search-input {
+  color: #E5E7EB;
+}
+
+/* ===== 分类横向导航 ===== */
+.learn-cat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 40px;
+  padding: 0 1rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  background: white;
+  transition: all 0.15s;
+}
+.learn-cat-chip:hover {
+  border-color: #2563EB;
+  color: #2563EB;
+}
+.learn-cat-chip.active {
+  background: #2563EB;
+  color: white;
+  border-color: #2563EB;
+}
+:global(html.dark) .learn-cat-chip {
+  border-color: #1E293B;
+  background: #0F172A;
+  color: #94A3B8;
+}
+:global(html.dark) .learn-cat-chip:hover {
+  border-color: #3B82F6;
+  color: #60A5FA;
+}
+:global(html.dark) .learn-cat-chip.active {
+  background: #2563EB;
+  color: white;
+  border-color: #2563EB;
+}
+.learn-cat-count {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+/* ===== 学习路径卡片 ===== */
+.learn-path-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 1rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+.learn-path-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: #93C5FD;
+}
+:global(html.dark) .learn-path-card {
+  border-color: #1E293B;
+  background: #111827;
+}
+:global(html.dark) .learn-path-card:hover {
+  border-color: #3B82F6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.learn-path-cover {
+  height: 72px;
+  padding: 0.75rem;
+}
+.learn-path-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: white;
+  letter-spacing: 0.1em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.learn-path-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1rem;
+}
+.learn-path-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2563EB;
+  background: #EFF6FF;
+  transition: all 0.15s;
+}
+.learn-path-btn:hover {
+  background: #DBEAFE;
+}
+:global(html.dark) .learn-path-btn {
+  color: #60A5FA;
+  background: #172554;
+}
+:global(html.dark) .learn-path-btn:hover {
+  background: #1E3A8A;
+}
+
+/* ===== 资源网格 ===== */
+.learn-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+@media (max-width: 1280px) {
+  .learn-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 1024px) {
+  .learn-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 768px) {
+  .learn-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 资源卡片 ===== */
+.learn-resource-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 200px;
+}
+.learn-resource-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: #93C5FD;
+}
+:global(html.dark) .learn-resource-card {
+  border-color: #1E293B;
+  background: #111827;
+}
+:global(html.dark) .learn-resource-card:hover {
+  border-color: #3B82F6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.learn-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.75rem;
-  color: #0e7490;
-  font-size: 0.75rem;
 }
-
-.chapter-directory-header h1 {
-  font-size: 2.25rem;
-  font-weight: 900;
-  line-height: 1.15;
+.learn-card-index {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #94A3B8;
 }
-
-.chapter-directory-header > p:last-child {
+.learn-card-lang {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+}
+.learn-card-title {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #1E293B;
+}
+:global(html.dark) .learn-card-title {
+  color: #E5E7EB;
+}
+.learn-card-desc {
+  margin-top: 0.5rem;
+  flex: 1;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #64748B;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+:global(html.dark) .learn-card-desc {
+  color: #94A3B8;
+}
+.learn-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-top: 0.75rem;
-  color: var(--learn-muted);
-  line-height: 1.75;
+  padding-top: 0.75rem;
+  border-top: 1px solid #F1F5F9;
+}
+:global(html.dark) .learn-card-footer {
+  border-color: #1E293B;
+}
+.learn-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94A3B8;
 }
 
+/* ===== 详情页 ===== */
+.learn-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+  border: 1px solid #E2E8F0;
+  background: white;
+  transition: all 0.15s;
+}
+.learn-back-btn:hover {
+  border-color: #2563EB;
+  color: #2563EB;
+}
+.learn-back-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:global(html.dark) .learn-back-btn {
+  border-color: #1E293B;
+  background: #0F172A;
+  color: #94A3B8;
+}
+.ui-btn-primary-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: white;
+  background: #2563EB;
+  transition: background 0.15s;
+}
+.ui-btn-primary-sm:hover {
+  background: #1D4ED8;
+}
+
+/* ===== 章节目录 ===== */
+.learn-chapter-directory {
+  max-width: 800px;
+}
 .chapter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
-
 .chapter-card {
   position: relative;
   display: flex;
-  min-height: 13rem;
   flex-direction: column;
   align-items: flex-start;
-  padding: 1.5rem 4rem 1.5rem 1.5rem;
-  overflow: hidden;
-  color: inherit;
+  padding: 1.25rem 3.5rem 1.25rem 1.25rem;
+  min-height: 8rem;
+  border-radius: 0.75rem;
+  border: 1px solid #E2E8F0;
+  background: white;
   text-align: left;
-  border: 1px solid var(--learn-border);
-  border-radius: 0.5rem;
-  background: #f7f9fa;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
 }
-
+.chapter-card:hover {
+  border-color: #93C5FD;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+:global(html.dark) .chapter-card {
+  border-color: #1E293B;
+  background: #111827;
+}
+:global(html.dark) .chapter-card:hover {
+  border-color: #3B82F6;
+}
 .chapter-card::before {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   width: 3px;
+  border-radius: 3px 0 0 3px;
   content: "";
-  background: #06b6d4;
+  background: #2563EB;
   transform: scaleY(0.3);
   transform-origin: top;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s;
 }
-
-.chapter-card:hover {
-  border-color: #67e8f9;
-  box-shadow: 0 14px 30px rgba(51, 65, 85, 0.12);
-  transform: translateY(-2px);
-}
-
 .chapter-card:hover::before {
   transform: scaleY(1);
 }
-
 .chapter-label {
-  color: #0e7490;
-  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #2563EB;
 }
-
 .chapter-card h2 {
-  margin-top: 1rem;
-  font-size: 1.15rem;
-  font-weight: 900;
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 800;
   line-height: 1.4;
+  color: #1E293B;
 }
-
+:global(html.dark) .chapter-card h2 {
+  color: #E5E7EB;
+}
 .chapter-card p {
-  margin-top: 0.75rem;
-  color: var(--learn-muted);
-  font-size: 0.875rem;
-  line-height: 1.75;
+  margin-top: 0.375rem;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #64748B;
 }
-
+:global(html.dark) .chapter-card p {
+  color: #94A3B8;
+}
 .chapter-open-icon {
   position: absolute;
-  top: 1.25rem;
-  right: 1.25rem;
+  top: 1rem;
+  right: 1rem;
   display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
-  color: #0e7490;
-  border: 1px solid #bae6fd;
-  border-radius: 50%;
-  background: #ecfeff;
   place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  color: #2563EB;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+}
+:global(html.dark) .chapter-open-icon {
+  color: #60A5FA;
+  background: #172554;
+  border-color: #1E3A8A;
 }
 
+/* ===== Markdown 文档 ===== */
+.learn-document {
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+}
+:global(html.dark) .learn-document {
+  border-color: #1E293B;
+  background: #111827;
+}
+
+/* ===== 章节导航 ===== */
 .chapter-pagination {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   gap: 0.75rem;
   margin-top: 1.25rem;
 }
-
-.chapter-nav-button,
-.chapter-directory-button {
+.chapter-nav-btn {
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
   min-height: 3.5rem;
-  align-items: center;
-  gap: 0.625rem;
   padding: 0.75rem 1rem;
-  color: #334155;
-  font-size: 0.8rem;
-  font-weight: 800;
-  border: 1px solid var(--learn-border);
   border-radius: 0.5rem;
-  background: #f7f9fa;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  border: 1px solid #E2E8F0;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #334155;
+  transition: all 0.15s;
 }
-
-.chapter-nav-button span {
+.chapter-nav-btn span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
+.chapter-nav-btn:hover:not(:disabled) {
+  border-color: #93C5FD;
+  background: #EFF6FF;
+}
+.chapter-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 .chapter-nav-next {
   justify-content: flex-end;
   text-align: right;
 }
-
-.chapter-directory-button {
-  justify-content: center;
-  color: #0e7490;
-}
-
-.chapter-nav-button:hover:not(:disabled),
-.chapter-directory-button:hover {
-  border-color: #67e8f9;
-  background: #ecfeff;
-}
-
-.chapter-nav-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-</style>
-
-<style>
-html.dark .course-card {
-  border-color: #1e293b !important;
-  background-color: #0f172a !important;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
-}
-
-html.dark .path-card {
-  border-color: #1e293b !important;
-  background-color: #020617 !important;
-}
-
-html.dark .path-card:hover {
-  border-color: #155e75 !important;
-}
-
-html.dark .pill.cyan {
-  background-color: #083344 !important;
-  color: #67e8f9 !important;
-}
-
-html.dark .pill.slate {
-  background-color: #1e293b !important;
-  color: #cbd5e1 !important;
-}
-
-html:not(.dark) .path-card {
-  background-color: #f8fafc !important;
-  border-color: #e2e8f0 !important;
-  color: #0f172a !important;
-}
-
-html:not(.dark) .course-card {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #0f172a !important;
-}
-
-.min-h-screen {
-  --learn-border: #c7d2da;
-  --learn-muted: #60717d;
-  --learn-accent: #0e7490;
-  background: #e8ecef !important;
-}
-
-.learn-hero {
-  position: relative;
-  overflow: hidden;
-  background: #f1f4f6 !important;
-}
-
-.learn-hero::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  opacity: 0.42;
-  background-image:
-    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(90deg, #000, transparent 78%);
-}
-
-.learn-hero > div {
-  position: relative;
-  z-index: 1;
-}
-
-.learn-eyebrow {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.28em;
-}
-
-.learn-hero-title {
-  max-width: 48rem;
-  font-size: clamp(2.25rem, 5vw, 4.5rem) !important;
-  line-height: 1.05;
-}
-
-.learn-primary-button {
-  box-shadow: 0 12px 24px rgba(8, 145, 178, 0.22);
-}
-
-.learn-path-section,
-.courses-section {
-  padding-top: 3.5rem !important;
-}
-
-.paths-panel {
-  border-radius: 0.75rem !important;
-  border-color: var(--learn-border) !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
-}
-
-.section-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.section-heading > div:first-child {
-  position: relative;
-  padding-left: 1rem;
-}
-
-.section-heading > div:first-child::before {
-  position: absolute;
-  top: 0.25rem;
-  bottom: 0.25rem;
-  left: 0;
-  width: 3px;
-  content: "";
-  background: #06b6d4;
-}
-
-.path-card,
-.course-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: 0.75rem !important;
-  border-color: var(--learn-border) !important;
-  transition:
-    transform 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-
-.path-card {
-  min-height: 19rem !important;
-  background: #eef3f6 !important;
-  padding: 1.5rem !important;
-}
-
-.course-card {
-  min-height: 18rem !important;
-  background: #f7f9fa !important;
-  padding: 1.5rem !important;
-}
-
-.path-card::before,
-.course-card::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 2px;
-  content: "";
-  background: #22d3ee;
-  transform: scaleX(0.22);
-  transform-origin: left;
-  transition: transform 0.25s ease;
-}
-
-.path-card:nth-child(2)::before {
-  background: #34d399;
-}
-
-.path-card:nth-child(3)::before {
-  background: #f59e0b;
-}
-
-.path-card:hover,
-.course-card:hover {
-  transform: translateY(-4px);
-  border-color: #67e8f9 !important;
-  box-shadow: 0 18px 35px rgba(51, 65, 85, 0.14) !important;
-}
-
-.path-card:hover::before,
-.course-card:hover::before {
-  transform: scaleX(1);
-}
-
-.path-card-topline,
-.course-card-topline {
+.chapter-directory-btn {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #E2E8F0;
+  background: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #2563EB;
+  transition: all 0.15s;
+}
+.chapter-directory-btn:hover {
+  border-color: #93C5FD;
+  background: #EFF6FF;
+}
+:global(html.dark) .chapter-nav-btn,
+:global(html.dark) .chapter-directory-btn {
+  border-color: #1E293B;
+  background: #0F172A;
+  color: #94A3B8;
+}
+:global(html.dark) .chapter-nav-btn:hover:not(:disabled),
+:global(html.dark) .chapter-directory-btn:hover {
+  border-color: #3B82F6;
+  background: #172554;
 }
 
-.path-index,
-.course-index,
-.path-status {
-  color: #0e7490;
-  font: 800 0.68rem/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.path-status {
-  color: #7a8b96;
-  font-size: 0.6rem;
-}
-
-.course-index {
-  color: #7a8b96;
-}
-
-.path-card h3,
-.course-card h3 {
-  line-height: 1.2;
-}
-
-.path-card p,
-.course-card p {
-  color: var(--learn-muted) !important;
-}
-
-.pill.cyan {
-  border: 1px solid #9bd9e7;
-  background: #e4f8fb !important;
-  color: #0e7490 !important;
-}
-
-.learn-detail {
-  min-height: calc(100vh - var(--header-h, 5rem));
-}
-
-.detail-toolbar {
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--learn-border);
-}
-
-.detail-document {
-  border-radius: 0.75rem !important;
-  border-color: var(--learn-border) !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
-}
-
-html.dark .min-h-screen {
-  --learn-border: #35414a;
-  --learn-muted: #9aa9b3;
-  --learn-accent: #67e8f9;
-  background: #101418 !important;
-}
-
-html.dark .learn-hero {
-  background: #151b20 !important;
-}
-
-html.dark .learn-hero::after {
-  opacity: 0.3;
-  background-image:
-    linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
-}
-
-html.dark .paths-panel {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
-}
-
-html.dark .path-card {
-  border-color: #35414a !important;
-  background: #0f161c !important;
-}
-
-html.dark .course-card {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: none !important;
-}
-
-html.dark .path-card:hover,
-html.dark .course-card:hover {
-  border-color: #0891b2 !important;
-  box-shadow: 0 18px 35px rgba(0, 0, 0, 0.28) !important;
-}
-
-html.dark .pill.cyan {
-  border-color: #155e75;
-  background: #083344 !important;
-  color: #67e8f9 !important;
-}
-
-html.dark .detail-toolbar {
-  border-color: #35414a;
-}
-
-html.dark .detail-document {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
-}
-
-html.dark .chapter-card,
-html.dark .chapter-nav-button,
-html.dark .chapter-directory-button {
-  color: #f8fafc;
-  border-color: #35414a;
-  background: #151b20;
-}
-
-html.dark .chapter-card:hover,
-html.dark .chapter-nav-button:hover:not(:disabled),
-html.dark .chapter-directory-button:hover {
-  border-color: #0891b2;
-  background: #0f161c;
-}
-
-html.dark .chapter-open-icon {
-  color: #67e8f9;
-  border-color: #155e75;
-  background: #083344;
-}
-
-html.dark .chapter-kicker,
-html.dark .chapter-label,
-html.dark .chapter-directory-button {
-  color: #67e8f9;
-}
-
+/* ===== 移动端适配 ===== */
 @media (max-width: 640px) {
-  .learn-hero-title {
-    font-size: clamp(2.2rem, 12vw, 3.4rem) !important;
-  }
-
-  .section-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .paths-panel {
-    padding: 1.25rem !important;
-  }
-
-  .path-card,
-  .course-card {
-    min-height: 16rem !important;
-  }
-
-  .chapter-directory-header h1 {
-    font-size: 1.875rem;
-  }
-
   .chapter-grid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
-
-  .chapter-card {
-    min-height: 11.5rem;
-    padding: 1.25rem 3.75rem 1.25rem 1.25rem;
-  }
-
   .chapter-pagination {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .chapter-directory-button {
+  .chapter-directory-btn {
     grid-column: 1 / -1;
     grid-row: 1;
   }
-}
-
-html:not(.dark) .path-card p,
-html:not(.dark) .course-card p {
-  color: #475569 !important;
-}
-
-html:not(.dark) .path-card li,
-html:not(.dark) .course-card .mt-6 {
-  color: #334155 !important;
-}
-
-html:not(.dark) .path-card button,
-html:not(.dark) .course-card button {
-  background-color: #0ea5e9 !important;
-  color: #ffffff !important;
-}
-
-html:not(.dark) .course-card button,
-html:not(.dark) .course-card button * {
-  color: #ffffff !important;
-}
-
-html.dark .path-card button,
-html.dark .course-card button {
-  background-color: #0ea5e9 !important;
-  color: #ffffff !important;
 }
 </style>
