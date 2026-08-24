@@ -26,12 +26,12 @@ announcement_input = api.model('AnnouncementInput', {
 })
 
 
-# 允许编辑/管理公告的角色集合（manager 与 staff 均可）
-ANNOUNCEMENT_EDITOR_ROLES = {'manager', 'staff'}
+# 允许编辑/管理公告的角色集合（仅 manager）
+ANNOUNCEMENT_EDITOR_ROLES = {'manager'}
 
 
 def _require_editor() -> (dict | tuple):
-    """验证请求携带的 JWT 令牌，确保用户具有公告编辑权限（manager / staff）"""
+    """验证请求携带的 JWT 令牌，确保用户具有公告编辑权限（仅 manager）"""
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('Bearer '):
         return {'error': '请先登录'}, 401
@@ -52,7 +52,7 @@ def _require_editor() -> (dict | tuple):
         pass
 
     if user_info.get('role', 'member') not in ANNOUNCEMENT_EDITOR_ROLES:
-        return {'error': '权限不足，仅管理员/副部长/部长/社长/干事等可管理公告'}, 403
+        return {'error': '权限不足，仅管理员可管理公告'}, 403
 
     return user_info
 

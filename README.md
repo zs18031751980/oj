@@ -76,12 +76,12 @@ iOS Club 代码综合平台是一个集**在线编程、代码评测、学习资
 | 部员 | `staff` | 部员、干事 |
 | 成员 | `member` | 社员、普通用户 |
 
-多身份用户自动取最高权限角色。公告写入、草稿读取和管理后台路由均要求 `manager`，后端权限校验是最终边界。
+多身份用户自动取最高权限角色。管理后台路由（`/admin` 下）以及公告的写入、草稿读取允许 `manager` 与 `staff` 进入（见 `announcement-access.ts` 与 `announcement_controller._require_editor`）；其中用户删除、启用/停用等敏感操作仅 `manager` 可执行（见 `admin_controller._require_manager`）。后端权限校验是最终边界。
 
 ### 公告工作流
 
 - 公开公告页通过数据库 API 加载内容，匿名用户只能查看已发布公告，草稿不会通过公开列表或详情泄露。
-- `manager` 可进入 `/admin/announcements` 创建、编辑、删除公告，并在已发布与草稿状态之间切换。
+- `manager` 与 `staff` 可进入 `/admin/announcements` 创建、编辑、删除公告，并在已发布与草稿状态之间切换。
 - 编辑器在桌面端左侧显示原始 Markdown、右侧显示与公告详情一致的渲染结果；移动端自动改为上下排列。
 - 修改公告时在原 ORM 记录上保存，公告主键保持不变；保存或删除失败时保留当前编辑内容和页面状态。
 

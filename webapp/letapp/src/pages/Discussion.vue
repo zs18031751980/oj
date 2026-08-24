@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import {
   listDiscussions, getDiscussion, createDiscussion,
   likeDiscussion, replyToDiscussion, likeDiscussionReply,
+  deleteDiscussion, deleteDiscussionReply,
   type DiscussionData, type DiscussionReplyData,
 } from '../services/api';
 
@@ -14,6 +15,12 @@ const MarkdownComponent = defineAsyncComponent(
 
 const authStore = useAuthStore();
 const router = useRouter();
+
+const currentUserId = computed(() => Number(authStore.userInfo?.id) || 0);
+const isManager = computed(() => authStore.userRole === 'manager');
+// 当前用户是否能删除某条内容：作者本人或管理员（manager）
+const canDeleteDiscussion = (authorId?: number) =>
+  isManager.value || (authorId !== undefined && authorId === currentUserId.value);
 
 const discussions = ref<DiscussionData[]>([]);
 const isLoading = ref(false);
@@ -143,6 +150,38 @@ const toggleReplyLike = async (r: DiscussionReplyData) => {
   } catch {};
 };
 
+// ===== 删除（管理员可删除任意内容，作者可删除自己的） =====
+const deleteDiscussionById = async (discussionId: number) => {
+  if (!window.confirm('确定删除该讨论吗？此操作不可撤销。')) return;
+  try {
+    await deleteDiscussion(discussionId);
+    discussions.value = discussions.value.filter((d) => d.id !== discussionId);
+    if (currentDiscussion.value?.id === discussionId) closeDetail();
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '删除失败');
+  }
+};
+
+const deleteReplyById = async (reply: DiscussionReplyData) => {
+  if (!window.confirm('确定删除该回复吗？此操作不可撤销。')) return;
+  try {
+    await deleteDiscussionReply(reply.id);
+    const replies = currentDiscussion.value?.replies;
+    if (replies) {
+      const idx = replies.findIndex((x) => x.id === reply.id);
+      if (idx >= 0) replies.splice(idx, 1);
+    }
+    if (currentDiscussion.value) {
+      currentDiscussion.value.reply_count = Math.max(
+        0,
+        (currentDiscussion.value.reply_count || 0) - 1,
+      );
+    }
+  } catch (e) {
+    alert(e instanceof Error ? e.message : '删除失败');
+  }
+};
+
 // ===== 回复 =====
 const submitReply = async () => {
   if (!authStore.isAuthenticated) { router.push('/login'); return; }
@@ -262,6 +301,13 @@ onMounted(loadData);
               </button>
               <span class="text-xs font-bold">💬 {{ d.reply_count || 0 }}</span>
               <span class="text-[10px] text-[#94A3B8]">👁 {{ d.view_count || 0 }}</span>
+              <button
+                v-if="canDeleteDiscussion(d.author_id)"
+                class="text-xs font-bold text-[#EF4444] transition hover:text-[#DC2626]"
+                @click.stop="deleteDiscussionById(d.id)"
+              >
+                🗑 删除
+              </button>
             </div>
           </div>
         </div>
@@ -318,6 +364,13 @@ onMounted(loadData);
                   </button>
                   <span class="text-sm text-[#94A3B8]">💬 回复 {{ currentDiscussion.reply_count || 0 }}</span>
                   <span class="text-sm text-[#94A3B8]">👁 浏览 {{ currentDiscussion.view_count || 0 }}</span>
+                  <button
+                    v-if="canDeleteDiscussion(currentDiscussion.author_id)"
+                    class="ml-auto flex items-center gap-1 text-sm font-bold text-[#EF4444] transition hover:text-[#DC2626]"
+                    @click="deleteDiscussionById(currentDiscussion.id)"
+                  >
+                    🗑 删除讨论
+                  </button>
                 </div>
 
                 <!-- 回复列表 -->
@@ -335,16 +388,23 @@ onMounted(loadData);
                       <div class="text-sm text-[#374151] dark:text-[#D1D5DB]">
                         <MarkdownComponent :content="{ content: r.content }" :show-nav="false" :show-heading-links="false" />
                       </div>
-                      <div class="mt-2 flex items-center gap-3">
-                        <button
-                          class="flex items-center gap-1 text-xs font-bold transition"
-                          :class="r.is_liked ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#94A3B8] hover:text-[#2563EB]'"
-                          @click="toggleReplyLike(r)"
-                        >
-                          <span>{{ r.is_liked ? '❤️' : '🤍' }}</span>
-                          {{ r.like_count || 0 }}
-                        </button>
-                      </div>
+                       <div class="mt-2 flex items-center gap-3">
+                         <button
+                           class="flex items-center gap-1 text-xs font-bold transition"
+                           :class="r.is_liked ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#94A3B8] hover:text-[#2563EB]'"
+                           @click="toggleReplyLike(r)"
+                         >
+                           <span>{{ r.is_liked ? '❤️' : '🤍' }}</span>
+                           {{ r.like_count || 0 }}
+                         </button>
+                         <button
+                           v-if="canDeleteDiscussion(r.author_id)"
+                           class="ml-auto flex items-center gap-1 text-xs font-bold text-[#EF4444] transition hover:text-[#DC2626]"
+                           @click="deleteReplyById(r)"
+                         >
+                           🗑 删除
+                         </button>
+                       </div>
                     </div>
                   </div>
                   <p v-else class="text-sm text-[#94A3B8] text-center py-4">暂无回复</p>

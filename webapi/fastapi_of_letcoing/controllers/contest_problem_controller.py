@@ -148,6 +148,87 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5) -> str | N
                 os.unlink(exe_path)
                 if result.returncode == 0:
                     return result.stdout
+        elif language == 'java':
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
+                f.write(code)
+                f.flush()
+                java_src = f.name
+            try:
+                class_dir = os.path.dirname(java_src)
+                compile_result = subprocess.run(
+                    ['javac', java_src],
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                if compile_result.returncode != 0:
+                    return None
+                result = subprocess.run(
+                    ['java', '-cp', class_dir, 'Main'],
+                    input=stdin,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except (subprocess.TimeoutExpired, Exception):
+                return None
+            finally:
+                try:
+                    if os.path.exists(java_src):
+                        os.unlink(java_src)
+                    class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
+                    if os.path.exists(class_file):
+                        os.unlink(class_file)
+                except Exception:
+                    pass
+        elif language == 'go':
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
+                f.write(code)
+                f.flush()
+                go_src = f.name
+            try:
+                result = subprocess.run(
+                    ['go', 'run', go_src],
+                    input=stdin,
+                    capture_output=True,
+                    text=True,
+                    timeout=max(timeout, 15),
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except (subprocess.TimeoutExpired, Exception):
+                return None
+            finally:
+                try:
+                    if os.path.exists(go_src):
+                        os.unlink(go_src)
+                except Exception:
+                    pass
+        elif language in ('javascript', 'js', 'node'):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
+                f.write(code)
+                f.flush()
+                js_src = f.name
+            try:
+                result = subprocess.run(
+                    ['node', js_src],
+                    input=stdin,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except (subprocess.TimeoutExpired, Exception):
+                return None
+            finally:
+                try:
+                    if os.path.exists(js_src):
+                        os.unlink(js_src)
+                except Exception:
+                    pass
     except (subprocess.TimeoutExpired, Exception):
         pass
     return None

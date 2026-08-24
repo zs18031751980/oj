@@ -41,7 +41,7 @@ const authStore = useAuthStore();
 const dialog = useDialog();
 const message = useMessage();
 const isManager = computed(
-  () => authStore.userRole === 'manager' || authStore.userRole === 'staff',
+  () => authStore.userRole === 'manager',
 );
 const loading = ref(true);
 const loadError = ref('');

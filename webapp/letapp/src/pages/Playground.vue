@@ -80,7 +80,7 @@ func main() {
 print("Hello, Let Coding!")`,
   kotlin: `fun main() {
     println("Hello, Let Coding!")
-  `,
+  }`,
 });
 
 const languages: LanguageOption[] = markRaw([
@@ -109,6 +109,14 @@ const expectedOutput = ref<string>("");
 const testVerdict = ref<"pass" | "failed" | null>(null);
 const outputKind = ref<"info" | "error">("info");
 const isExecuting = ref(false);
+const isSubmitting = ref(false);
+const submitResult = ref<{
+  status: string;
+  passed?: number;
+  total?: number;
+  details?: Array<{ passed: boolean; status: string; expected?: string; actual?: string | null }>;
+  message?: string;
+} | null>(null);
 
 // Contest problem state
 const contestProblem = ref<ContestProblemData | null>(null);
@@ -207,6 +215,85 @@ const runCode = async () => {
   }
 };
 
+const submitCode = async () => {
+  activeBottomTab.value = "submit";
+  const source = code.value;
+  if (!source.trim()) {
+    submitResult.value = { status: "Empty", message: "代码不能为空，无法提交。" };
+    return;
+  }
+  if (!authStore.isAuthenticated) {
+    submitResult.value = { status: "Unauthorized", message: "请先登录后再提交代码。" };
+    return;
+  }
+  if (contestId.value != null && problemId.value != null) {
+    // 比赛题目：异步入队判题，轮询结果
+    isSubmitting.value = true;
+    submitResult.value = { status: "Judging", message: "判题中..." };
+    try {
+      const created = await apiRequest<{ submission_id: number; status: string }>(
+        `/contests/${contestId.value}/problems/${problemId.value}/submit`,
+        {
+          method: "POST",
+          body: JSON.stringify({ code: source, language: selectedLanguage.value }),
+        },
+      );
+      let detail: any = null;
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        detail = await apiRequest<any>(
+          `/contests/${contestId.value}/problems/${problemId.value}/submission/${created.submission_id}`,
+        );
+        if (detail && detail.status && detail.status !== "Pending" && detail.status !== "Judging") {
+          break;
+        }
+      }
+      submitResult.value = {
+        status: detail?.status || "Pending",
+        passed: detail?.passed,
+        total: detail?.total,
+        details: detail?.details,
+      };
+    } catch (error) {
+      submitResult.value = { status: "Error", message: `提交失败: ${error instanceof Error ? error.message : "未知错误"}` };
+    } finally {
+      isSubmitting.value = false;
+    }
+    return;
+  }
+  if (problemId.value != null) {
+    // 题库题目：走通用判题提交（异步 Worker，轮询结果）
+    isSubmitting.value = true;
+    submitResult.value = { status: "Judging", message: "判题中..." };
+    try {
+      const created = await apiRequest<{ id: number }>("/submissions", {
+        method: "POST",
+        body: JSON.stringify({ problem_id: problemId.value, code: source, language: selectedLanguage.value }),
+      });
+      let detail: any = null;
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 800));
+        detail = await apiRequest<any>(`/submissions/${created.id}`);
+        if (detail && detail.status && detail.status !== "Pending") break;
+      }
+      submitResult.value = {
+        status: detail?.status || "Pending",
+        passed: detail?.testcase_results
+          ? (Array.isArray(detail.testcase_results) ? detail.testcase_results.filter((t: any) => t.passed).length : undefined)
+          : undefined,
+        total: Array.isArray(detail?.testcase_results) ? detail.testcase_results.length : undefined,
+        details: Array.isArray(detail?.testcase_results) ? detail.testcase_results : undefined,
+      };
+    } catch (error) {
+      submitResult.value = { status: "Error", message: `提交失败: ${error instanceof Error ? error.message : "未知错误"}` };
+    } finally {
+      isSubmitting.value = false;
+    }
+    return;
+  }
+  submitResult.value = { status: "NoProblem", message: "请先在左侧选择一个题目再提交。" };
+};
+
 const updateLanguage = (language: string) => {
   languageCodeMap.value[selectedLanguage.value] = code.value;
   selectedLanguage.value = language;
@@ -284,7 +371,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
   }
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === "Enter" && !isExecuting.value) {
     event.preventDefault();
-    void runCode();
+    void submitCode();
   }
 };
 
@@ -338,6 +425,7 @@ const openProblemSelector = async () => {
 };
 
 const selectProblemFromList = (p: ProblemOption) => {
+  contestId.value = null;
   problemId.value = p.id;
   // Load as contest problem fallback — for now show basic info
   contestProblem.value = {
@@ -584,8 +672,31 @@ watch(selectedLanguage, (lang) => {
           </div>
 
           <!-- 提交结果 Tab -->
-          <div v-show="activeBottomTab === 'submit'" class="ide-submit-panel">
-            <div class="ide-empty-hint">提交代码后在此查看评测结果</div>
+          <div v-show="activeBottomTab === 'submit'" class="ide-submit-panel ide-submit-result">
+            <div v-if="!submitResult" class="ide-empty-hint">提交代码后在此查看评测结果</div>
+            <template v-else>
+              <div v-if="submitResult.status === 'Judging'" class="ide-empty-hint">{{ submitResult.message || '判题中...' }}</div>
+              <div v-else-if="submitResult.status === 'Empty' || submitResult.status === 'NoProblem' || submitResult.status === 'Unauthorized'" class="ide-submit-msg">
+                {{ submitResult.message }}
+              </div>
+              <div v-else-if="submitResult.status === 'Error'" class="ide-submit-msg text-red">
+                {{ submitResult.message }}
+              </div>
+              <div v-else class="ide-submit-summary">
+                <div class="ide-submit-verdict" :class="submitResult.status === 'AC' ? 'pass' : (submitResult.status === 'Partial' ? 'partial' : 'failed')">
+                  {{ submitResult.status === 'AC' ? '✓ 全部通过' : submitResult.status === 'Partial' ? '◑ 部分通过' : '✗ 未通过' }}
+                </div>
+                <p v-if="submitResult.total != null" class="ide-submit-count">
+                  通过 {{ submitResult.passed }} / {{ submitResult.total }} 组测试用例
+                </p>
+                <ul v-if="submitResult.details && submitResult.details.length" class="ide-submit-details">
+                  <li v-for="(d, i) in submitResult.details" :key="i" :class="{ pass: d.passed, fail: !d.passed }">
+                    <span class="ide-submit-detail-idx">#{{ i + 1 }}</span>
+                    <span class="ide-submit-detail-status">{{ d.status }}</span>
+                  </li>
+                </ul>
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -601,9 +712,9 @@ watch(selectedLanguage, (lang) => {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             {{ isExecuting ? '运行中...' : '运行代码' }}
           </button>
-          <button class="ide-btn-submit" :disabled="isExecuting">
+          <button class="ide-btn-submit" :disabled="isExecuting || isSubmitting" @click="submitCode">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            提交代码
+            {{ isSubmitting ? '提交中...' : '提交代码' }}
           </button>
         </div>
       </footer>
@@ -1025,6 +1136,28 @@ html.dark .ide-io-textarea { border-color: #374151; background: #1F2937; color: 
 .ide-result-output pre { margin: 0; white-space: pre-wrap; }
 
 .ide-submit-panel { display: flex; align-items: center; justify-content: center; height: 100%; }
+
+.ide-submit-result { align-items: flex-start; justify-content: flex-start; padding: 16px; overflow-y: auto; }
+.ide-submit-msg { font-size: 13px; color: #64748B; text-align: center; width: 100%; }
+.ide-submit-msg.text-red { color: #DC2626; }
+.ide-submit-summary { width: 100%; }
+.ide-submit-verdict {
+  display: inline-block; padding: 4px 12px; border-radius: 6px;
+  font-size: 14px; font-weight: 800; margin-bottom: 8px;
+}
+.ide-submit-verdict.pass { background: #D1FAE5; color: #059669; }
+.ide-submit-verdict.partial { background: #FEF3C7; color: #D97706; }
+.ide-submit-verdict.failed { background: #FEE2E2; color: #DC2626; }
+.ide-submit-count { font-size: 13px; color: #475569; margin-bottom: 10px; }
+.ide-submit-details { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ide-submit-details li {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;
+}
+.ide-submit-details li.pass { background: #D1FAE5; color: #059669; }
+.ide-submit-details li.fail { background: #FEE2E2; color: #DC2626; }
+.ide-submit-detail-idx { opacity: 0.7; }
+.ide-submit-detail-status { font-family: 'JetBrains Mono', monospace; }
 
 /* ===== 底部操作栏 ===== */
 .ide-action-bar {

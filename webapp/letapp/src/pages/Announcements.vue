@@ -39,7 +39,7 @@ const sortedAnnouncements = computed(() =>
 const currentAnnouncementId = computed(() => parseAnnouncementId(route.query.id));
 const isDetailMode = computed(() => route.query.id !== undefined);
 const canManageAnnouncements = computed(
-  () => authStore.userRole === 'manager' || authStore.userRole === 'staff',
+  () => authStore.userRole === 'manager',
 );
 
 // 分类推断（后端暂无 category 字段，用关键词启发）

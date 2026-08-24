@@ -86,7 +86,11 @@ const loadProblems = async (contestId: number) => {
 // 创建/更新比赛
 const saveContest = async () => {
   if (!contestForm.value.title.trim()) {
-    message.warning('请输入比赛标题');
+    message.warning('请输入比赛名称');
+    return;
+  }
+  if (!contestForm.value.description.trim()) {
+    message.warning('请填写比赛简介');
     return;
   }
   try {
@@ -219,8 +223,8 @@ onMounted(loadContests);
             <input v-model="contestForm.title" class="ui-input w-full" placeholder="例：2026 春季算法竞赛" />
           </div>
           <div>
-            <label class="mb-1 block text-sm font-bold">比赛描述</label>
-            <textarea v-model="contestForm.description" class="ui-input w-full" rows="3" placeholder="比赛简介..."></textarea>
+            <label class="mb-1 block text-sm font-bold">比赛简介 *</label>
+            <textarea v-model="contestForm.description" class="ui-input w-full" rows="4" placeholder="介绍比赛背景、规则、奖励等..."></textarea>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>

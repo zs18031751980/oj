@@ -48,6 +48,7 @@
           <button
             class="ui-icon-btn xl:hidden"
             aria-label="搜索"
+            @click="router.push('/problems')"
           >
             <Icon icon="material-symbols:search-rounded" class="h-5 w-5" />
           </button>

@@ -152,8 +152,11 @@ const resetFilters = () => {
 
 onMounted(() => {
   const q = route.query.q;
+  const tag = route.query.tag;
   if (typeof q === 'string' && q.trim()) {
     searchQuery.value = q.trim();
+  } else if (typeof tag === 'string' && tag.trim()) {
+    searchQuery.value = tag.trim();
   }
   loadProblems();
   loadFavorites();
@@ -175,8 +178,7 @@ onMounted(() => {
             v-model="searchQuery"
             type="text"
             class="ui-input pl-9"
-            placeholder="搜索题号、名称或标签，回车搜索"
-            @keyup.enter="() => {}"
+            placeholder="搜索题号、名称或标签"
           />
         </div>
       </div>

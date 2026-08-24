@@ -60,6 +60,7 @@ const loadSubmissions = async () => {
 
 const handlePageChange = (page: number) => {
   currentPage.value = Math.min(Math.max(page, 1), totalPages.value);
+  loadSubmissions();
 };
 
 const openProblem = (problemId: number) => {

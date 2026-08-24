@@ -18,6 +18,7 @@ from core.di_container import get_container
 from interfaces.service_interfaces import ICodeExecutionService, ILoggerService, IRedisService
 from models.db_models import Submission, Testcase
 from models.glot_models import CodeExecutionRequest
+from controllers.contest_problem_controller import _run_code
 
 
 class JudgeWorker:
@@ -57,7 +58,12 @@ class JudgeWorker:
                         task = json.loads(raw) if isinstance(raw, str) else raw
                         self._process_task(task)
                     else:
-                        time.sleep(0.5)
+                        raw_contest = self.redis.list_pop("contest_judge_queue")
+                        if raw_contest:
+                            task = json.loads(raw_contest) if isinstance(raw_contest, str) else raw_contest
+                            self._process_contest_task(task)
+                        else:
+                            time.sleep(0.5)
                 except Exception as e:
                     self.logger.error("JudgeWorker loop error", e)
                     time.sleep(1)
@@ -196,6 +202,85 @@ class JudgeWorker:
         self.logger.info(
             f"Submission {submission_id} done: {final_status} "
             f"(passed {sum(1 for r in results if r['passed'])}/{len(results)})"
+        )
+
+    def _save_contest_result(self, submission_id, data):
+        """将比赛判题结果写入 Redis 缓存（与通用提交共用键前缀风格）"""
+        try:
+            self.redis.set(f"contest_submission:{submission_id}", data, 3600)
+        except Exception:
+            pass
+
+    def _process_contest_task(self, task: dict):
+        """处理比赛题目判题任务（本地执行，对比题目存储的测试用例）"""
+        from models.db_models import ContestProblem, ContestTestcase
+
+        submission_id = task.get("submission_id")
+        contest_id = task.get("contest_id")
+        problem_id = task.get("problem_id")
+        code = task.get("code", "")
+        language = task.get("language", "cpp")
+
+        if submission_id is None:
+            return
+
+        try:
+            problem = ContestProblem.get_by_id(problem_id)
+        except Exception:
+            self._save_contest_result(submission_id, {
+                "status": "Error", "passed": 0, "total": 0, "details": [],
+            })
+            return
+
+        testcases = list(
+            ContestTestcase.select()
+            .where(ContestTestcase.contest_problem == problem)
+            .order_by(ContestTestcase.sort_order)
+        )
+
+        if not testcases:
+            self._save_contest_result(submission_id, {
+                "problem_id": problem_id,
+                "contest_id": contest_id,
+                "status": "NoTestcases",
+                "passed": 0,
+                "total": 0,
+                "details": [],
+            })
+            return
+
+        def _judge_one(tc):
+            expected = (tc.expected_output or "").strip()
+            output = _run_code(code, language, tc.input_data, timeout=3)
+            if output is None:
+                return {"passed": False, "status": "RE", "expected": expected, "actual": None}
+            actual = output.strip()
+            passed = actual == expected
+            return {
+                "passed": passed,
+                "status": "AC" if passed else "WA",
+                "expected": expected,
+                "actual": actual,
+            }
+
+        # 并行判题，避免用例过多导致任务执行过久
+        with ThreadPoolExecutor(max_workers=min(8, len(testcases))) as executor:
+            details = list(executor.map(_judge_one, testcases))
+
+        passed = sum(1 for d in details if d["passed"])
+        total = len(details)
+        status = "AC" if passed == total else ("Partial" if passed > 0 else "WA")
+
+        self._save_contest_result(submission_id, {
+            "problem_id": problem_id,
+            "contest_id": contest_id,
+            "status": status,
+            "passed": passed,
+            "total": total,
+            "details": details,
+        })
+        self.logger.info(
+            f"Contest submission {submission_id} done: {status} (passed {passed}/{total})"
         )
 
     def _judge_single(self, code: str, language: str, stdin: str, expected: str) -> dict:

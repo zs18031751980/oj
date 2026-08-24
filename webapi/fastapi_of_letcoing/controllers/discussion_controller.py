@@ -172,7 +172,7 @@ class DiscussionDetailController(Resource):
 
         try:
             d = Discussion.get_by_id(discussion_id)
-            if d.author_id != user.id and user.role not in ('manager', 'staff'):
+            if d.author_id != user.id and user.role != 'manager':
                 return {'error': '无权删除'}, 403
             d.delete_instance()
             return {'success': True}, 200
@@ -269,3 +269,27 @@ class DiscussionReplyLikeController(Resource):
             r.like_count = (r.like_count or 0) + 1
             r.save()
             return {'liked': True, 'like_count': r.like_count}, 200
+
+
+@api.route('/replies/<int:reply_id>')
+class DiscussionReplyDetailController(Resource):
+    def delete(self, reply_id):
+        """删除回复（作者或管理员）"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
+
+        try:
+            r = DiscussionReply.get_by_id(reply_id)
+        except DiscussionReply.DoesNotExist:
+            return {'error': '回复不存在'}, 404
+
+        if r.author_id != user.id and user.role != 'manager':
+            return {'error': '无权删除'}, 403
+
+        discussion = r.discussion
+        r.delete_instance()
+        if discussion:
+            discussion.reply_count = max(0, (discussion.reply_count or 0) - 1)
+            discussion.save()
+        return {'success': True}, 200

@@ -457,6 +457,16 @@ export const likeDiscussionReply = (replyId: number) =>
     method: 'POST',
   });
 
+export const deleteDiscussion = (discussionId: number) =>
+  apiRequest<{ success: boolean }>(`/discussions/${discussionId}`, {
+    method: 'DELETE',
+  });
+
+export const deleteDiscussionReply = (replyId: number) =>
+  apiRequest<{ success: boolean }>(`/discussions/replies/${replyId}`, {
+    method: 'DELETE',
+  });
+
 // ---------- 排行榜 ----------
 
 export interface RankingData {
@@ -489,10 +499,10 @@ export interface ContestProblemData {
 }
 
 export const listContestProblems = (contestId: number) =>
-  apiRequest<ContestProblemData[]>(`/admin/contests/?contest_id=${contestId}`);
+  apiRequest<ContestProblemData[]>(`/contests/${contestId}/problems`);
 
 export const getContestProblem = (id: number) =>
-  apiRequest<ContestProblemData & { testcases: any[] }>(`/admin/contests/${id}`);
+  apiRequest<ContestProblemData>(`/contests/problems/${id}`);
 
 export const createContestProblem = (contestId: number, data: {
   problem_index: string;
