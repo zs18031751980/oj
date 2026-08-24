@@ -4,6 +4,12 @@ const resolveApiBaseUrl = () => {
     return envBaseUrl;
   }
 
+  // 生产环境：自动使用当前页面的 host，端口改为 6173
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:6173`;
+  }
+
   return 'http://localhost:6173';
 };
 
