@@ -265,12 +265,11 @@ app.config['PUBLIC_BACKEND_URL'] = os.environ.get('PUBLIC_BACKEND_URL', '')
 
 # ---------- CORS 跨域配置 ----------
 # 允许跨域访问的前端域名列表（逗号分隔），默认允许本地开发服务器
+# 服务器部署时需设置 ALLOWED_ORIGINS 环境变量（如 http://your-domain:5173）
+_default_origins = 'http://localhost:5173,http://127.0.0.1:5173'
 app.config['ALLOWED_ORIGINS'] = [
     origin.strip()
-    for origin in os.environ.get(
-        'ALLOWED_ORIGINS',
-        'http://localhost:5173,http://127.0.0.1:5173',
-    ).split(',')
+    for origin in os.environ.get('ALLOWED_ORIGINS', _default_origins).split(',')
     if origin.strip()
 ]
 

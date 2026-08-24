@@ -94,6 +94,18 @@ providers_response_model = api.model('ProvidersResponse', {
 # 2. 辅助函数（工具方法）
 # ============================================================
 
+def _get_frontend_url() -> str:
+    """获取前端 URL，优先读配置，未配置时自动从请求 Host 推断"""
+    config_service = inject(IConfigService)
+    url = config_service.get_config('FRONTEND_URL', '').rstrip('/')
+    if url:
+        return url
+    from flask import request as _req
+    host = _req.host.split(':')[0] if _req.host else 'localhost'
+    scheme = _req.scheme or 'http'
+    return f'{scheme}://{host}:5173'
+
+
 def _frontend_callback_url(tokens: TokenResponse, user_info: UserInfo, next_path: str = '/') -> str:
     """
     构建 OAuth 登录成功后重定向到前端的回调 URL
@@ -109,8 +121,7 @@ def _frontend_callback_url(tokens: TokenResponse, user_info: UserInfo, next_path
     Returns:
         完整的前端回调 URL
     """
-    config_service = inject(IConfigService)
-    frontend_url = config_service.get_config('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+    frontend_url = _get_frontend_url()
     safe_next = next_path if next_path.startswith('/') else '/'
     query = urlencode({
         'access_token': tokens.access_token,
@@ -144,8 +155,7 @@ def _frontend_error_callback_url(
     Returns:
         包含错误信息的前端回调 URL
     """
-    config_service = inject(IConfigService)
-    frontend_url = config_service.get_config('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
+    frontend_url = _get_frontend_url()
     safe_next = next_path if next_path.startswith('/') else '/'
     query = {
         'error': error,
