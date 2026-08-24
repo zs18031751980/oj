@@ -1,17 +1,13 @@
 """
-代码执行服务模块（Judge0 后端）
+代码执行服务模块（Judge0 CE 免费公共实例）
 
-通过 Judge0 API 实现远程代码执行功能。
-支持 60+ 种编程语言的代码运行。
-
-Judge0 是一个开源的代码运行平台，提供沙箱化的代码执行环境。
-免费层：RapidAPI 免费注册后每日 2000 次提交。
+通过 Judge0 CE (ce.judge0.com) 公共 API 实现远程代码执行功能。
+完全免费，无需 API Key，支持 60+ 种编程语言。
 """
 
 import aiohttp
 import asyncio
 import json
-import os
 from typing import Dict, Optional
 
 from core.di_container import Injectable
@@ -20,7 +16,6 @@ from models.glot_models import RunResult, CodeExecutionRequest, CodeExecutionRes
 
 
 # Judge0 语言 ID 映射（常用语言）
-# 参考：https://judge0.com/languages
 JUDGE0_LANGUAGES: Dict[str, int] = {
     "bash": 46,
     "c": 50,
@@ -44,12 +39,15 @@ JUDGE0_LANGUAGES: Dict[str, int] = {
     "typescript-node": 75,
 }
 
+# Judge0 CE 公共实例地址（无需 API Key）
+JUDGE0_BASE_URL = "https://ce.judge0.com"
+
 
 class GlotService(ICodeExecutionService, Injectable):
     """
-    Judge0 远程代码执行服务
+    Judge0 CE 免费代码执行服务
 
-    通过 Judge0 (RapidAPI) 执行代码，支持多种编程语言。
+    通过 ce.judge0.com 公共实例执行代码，完全免费，无需注册。
     """
 
     def __init__(self, config_service: IConfigService, logger_service: ILoggerService):
@@ -89,15 +87,7 @@ class GlotService(ICodeExecutionService, Injectable):
         try:
             self._logger_service.info(f"开始执行代码，语言: {request.language}")
 
-            api_token = self._config_service.get_api_token()
-            if not api_token:
-                return CodeExecutionResponse(
-                    stdout="",
-                    stderr="API Token 未配置（Judge0 RapidAPI Key）",
-                    success=False,
-                )
-
-            result = await self._run_judge0_async(api_token, request.code, request.language, request.stdin)
+            result = await self._run_judge0_async(request.code, request.language, request.stdin)
 
             if result["ok"]:
                 return CodeExecutionResponse(
@@ -121,15 +111,14 @@ class GlotService(ICodeExecutionService, Injectable):
 
     async def _run_judge0_async(
         self,
-        api_token: str,
         code: str,
         language: str = "python",
         stdin: Optional[str] = None,
     ) -> Dict[str, str | bool]:
         """
-        异步调用 Judge0 API 执行代码
+        异步调用 Judge0 CE 公共 API 执行代码
 
-        使用 ?wait=true 参数实现同步执行（提交后等待结果）。
+        使用 ?wait=true 参数实现同步执行（提交后等待结果返回）。
         """
         if not code or code.strip() == "":
             return {"ok": False, "stdout": "", "stderr": "请输入代码"}
@@ -140,11 +129,11 @@ class GlotService(ICodeExecutionService, Injectable):
             supported = ", ".join(sorted(JUDGE0_LANGUAGES.keys()))
             return {"ok": False, "stdout": "", "stderr": f"不支持的语言: {language}。支持: {supported}"}
 
-        url = "https://judge0-ce.p.rapidapi.com/submissions"
+        url = f"{JUDGE0_BASE_URL}/submissions"
         params = {
             "base64_encoded": "false",
             "wait": "true",
-            "fields": "stdout,stderr,status,compile_output,time,memory",
+            "fields": "stdout,stderr,status,compile_output",
         }
         payload = {
             "source_code": code,
@@ -153,18 +142,12 @@ class GlotService(ICodeExecutionService, Injectable):
         if stdin:
             payload["stdin"] = stdin
 
-        headers = {
-            "X-RapidAPI-Key": api_token,
-            "X-RapidAPI-Host": "judge0-ce.p.rapidapi.com",
-            "Content-Type": "application/json",
-        }
-
         try:
-            async with self._get_session().post(url, json=payload, params=params, headers=headers) as response:
+            async with self._get_session().post(url, json=payload, params=params) as response:
                 resp_text = await response.text()
 
                 if response.status == 429:
-                    return {"ok": False, "stdout": "", "stderr": "API 请求过于频繁，请稍后再试"}
+                    return {"ok": False, "stdout": "", "stderr": "请求过于频繁，请稍后再试"}
 
                 if not response.ok:
                     return {
@@ -183,9 +166,9 @@ class GlotService(ICodeExecutionService, Injectable):
                 if compile_output:
                     stderr = compile_output
 
-                is_success = status.get("id") in (3, None)
                 # status.id: 1=in queue, 2=processing, 3=accepted, 4=wrong answer,
                 # 5=time limit, 6=runtime error, 7=compilation error, etc.
+                is_success = status.get("id") in (3, None)
                 if not is_success and not stderr:
                     stderr = f"执行状态: {status.get('description', '未知')}"
 
