@@ -126,11 +126,12 @@ const closeDetail = () => {
 };
 
 // ===== 点赞 =====
+const goLogin = () => {
+  authStore.startOAuthLogin('iOSClub', router.currentRoute.value.fullPath, true);
+};
+
 const toggleLike = async (d: DiscussionData) => {
-  if (!authStore.isAuthenticated) {
-    router.push('/login');
-    return;
-  }
+  if (!authStore.isAuthenticated) { goLogin(); return; }
   try {
     const res = await likeDiscussion(d.id);
     d.like_count = res.like_count;
@@ -139,10 +140,7 @@ const toggleLike = async (d: DiscussionData) => {
 };
 
 const toggleReplyLike = async (r: DiscussionReplyData) => {
-  if (!authStore.isAuthenticated) {
-    router.push('/login');
-    return;
-  }
+  if (!authStore.isAuthenticated) { goLogin(); return; }
   try {
     const res = await likeDiscussionReply(r.id);
     r.like_count = res.like_count;
@@ -184,7 +182,7 @@ const deleteReplyById = async (reply: DiscussionReplyData) => {
 
 // ===== 回复 =====
 const submitReply = async () => {
-  if (!authStore.isAuthenticated) { router.push('/login'); return; }
+  if (!authStore.isAuthenticated) { goLogin(); return; }
   if (!currentDiscussion.value || !newReply.value.trim()) return;
   submittingReply.value = true;
   try {
@@ -202,7 +200,7 @@ const submitReply = async () => {
 
 // ===== 发布 =====
 const openCreate = () => {
-  if (!authStore.isAuthenticated) { router.push('/login'); return; }
+  if (!authStore.isAuthenticated) { goLogin(); return; }
   createForm.value = { title: '', content: '', category: '问答', tags: '' };
   showCreate.value = true;
 };
@@ -429,7 +427,7 @@ onMounted(loadData);
                   </div>
                 </div>
                 <p v-else class="text-center text-sm text-[#94A3B8] py-4 border-t border-[#E2E8F0] dark:border-[#1E293B] mt-4">
-                  <button class="font-bold text-[#2563EB] dark:text-[#60A5FA]" @click="router.push('/login')">登录</button> 后参与讨论
+                  <button class="font-bold text-[#2563EB] dark:text-[#60A5FA]" @click="goLogin">登录</button> 后参与讨论
                 </p>
               </template>
             </div>
