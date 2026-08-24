@@ -34,7 +34,7 @@ onMounted(loadData);
     <div class="app-container max-w-[1200px] py-6">
       <div class="mb-6">
         <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">排行榜</h1>
-        <p class="ui-section-sub mt-1">全站用户实力排名 · 简单10分 · 中等20分 · 困难30分</p>
+
       </div>
 
       <!-- 加载中 -->
