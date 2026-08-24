@@ -275,7 +275,7 @@ onUnmounted(() => {
 <template>
   <div v-if="content" class="flex flex-col md:flex-row">
     <div class="w-full p-4 md:p-8" :class="[showNav && headings.length > 0 ? 'md:w-4/5' : 'md:w-full']">
-      <article class="markdown-article prose prose-slate max-w-none dark:prose-invert">
+      <article class="markdown-article prose max-w-none">
         <header v-if="hasHeaderMeta" class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
           <h1 class="mb-4 text-3xl font-black text-slate-950 dark:text-white md:text-4xl">
             {{ content.title }}

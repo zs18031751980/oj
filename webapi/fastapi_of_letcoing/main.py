@@ -22,7 +22,7 @@ import gzip
 import io
 from werkzeug.middleware.proxy_fix import ProxyFix  # 用于解决反向代理下的请求头问题
 
-from models.db_models import create_tables, migrate_add_role_column, run_schema_migrations
+from models.db_models import create_tables, migrate_add_role_column, run_schema_migrations, seed_problem_catalog
 from core.db_robust import DatabaseUnavailableError, sanitize_db_error
 
 # 导入 API 命名空间
@@ -32,6 +32,12 @@ from controllers.submission_controller import api as submission_api
 from controllers.user_code_controller import api as user_code_api
 from controllers.announcement_controller import api as announcement_api
 from controllers.problem_controller import api as problem_api
+from controllers.admin_controller import api as admin_api
+from controllers.favorite_controller import api as favorite_api
+from controllers.contest_controller import api as contest_api
+from controllers.discussion_controller import api as discussion_api
+from controllers.rankings_controller import api as rankings_api
+from controllers.contest_problem_controller import api as contest_problem_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
 from core.service_config import setup_services
@@ -413,6 +419,12 @@ try:
 except Exception as e:
     app.logger.warning(f"Database migration failed (app will still start): {sanitize_db_error(str(e))}")
 
+# 将内存题库同步到 PostgreSQL（供提交记录/收藏的外键引用；幂等）
+try:
+    seed_problem_catalog()
+except Exception as e:
+    app.logger.warning(f"Problem catalog seeding failed (app will still start): {sanitize_db_error(str(e))}")
+
 # 获取依赖注入容器
 container = get_container()
 
@@ -457,6 +469,12 @@ api.add_namespace(submission_api, path='/submissions')
 api.add_namespace(user_code_api, path='/user')
 api.add_namespace(announcement_api, path='/announcement')
 api.add_namespace(problem_api, path='/problems')
+api.add_namespace(admin_api, path='/admin')
+api.add_namespace(favorite_api, path='/favorites')
+api.add_namespace(contest_api, path='/contests')
+api.add_namespace(discussion_api, path='/discussions')
+api.add_namespace(rankings_api, path='/rankings')
+api.add_namespace(contest_problem_api, path='/admin/contests')
 
 
 # ============================================================

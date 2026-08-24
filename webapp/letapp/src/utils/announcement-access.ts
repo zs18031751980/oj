@@ -3,12 +3,15 @@ import type { AnnouncementData, AnnouncementForm } from '../services/api';
 
 export type ManagerRouteDecision = 'allow' | 'login' | 'forbidden';
 
+// 允许进入管理后台的角色（与公告编辑权限保持一致：manager 与 staff）
+const ADMIN_PANEL_ROLES = new Set(['manager', 'staff']);
+
 export const resolveManagerRoute = (
   isAuthenticated: boolean,
   role?: string,
 ): ManagerRouteDecision => {
   if (!isAuthenticated) return 'login';
-  return role === 'manager' ? 'allow' : 'forbidden';
+  return ADMIN_PANEL_ROLES.has(role ?? '') ? 'allow' : 'forbidden';
 };
 
 export const announcementToForm = (

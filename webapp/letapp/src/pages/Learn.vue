@@ -46,7 +46,7 @@ const route = useRoute();
 const router = useRouter();
 
 const learningPaths: LearningPath[] = markRaw([
-  { id: 'web-path', title: 'Web 开发路径', accent: 'from-cyan-500 to-sky-500', markdownFile: 'Web 开发路径.md' },
+  { id: 'web-path', title: 'Web 开发路径', accent: 'from-blue-500 to-sky-500', markdownFile: 'Web 开发路径.md' },
   { id: 'data-path', title: '数据科学路径', accent: 'from-emerald-500 to-lime-500', markdownFile: '数据科学路径.md' },
   { id: 'algorithm-path', title: '算法与竞赛路径', accent: 'from-amber-500 to-orange-500', markdownFile: '算法与竞赛路径.md' },
 ]);
@@ -334,17 +334,17 @@ watch(
 </script>
 
 <template>
-  <div class="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
+  <div class="min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E5E7EB]">
     <template v-if="!isDetailMode">
       <section v-once class="learn-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
         <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="max-w-3xl">
-              <p class="learn-eyebrow text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Learning Hub</p>
+              <p class="learn-eyebrow text-sm font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">Learning Hub</p>
               <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">路径、资料、练习连成一条线。</h1>
             </div>
 
-            <button class="learn-primary-button inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300" @click="router.push('/playground')">
+            <button class="learn-primary-button inline-flex w-fit self-center items-center gap-2 rounded-full bg-slate-950 px-6 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300" @click="router.push('/playground')">
               <Icon icon="material-symbols:code" class="h-5 w-5" />
               去编辑器练习
             </button>
@@ -376,7 +376,7 @@ watch(
                 {{ cardInfoMap[path.id]?.description || '' }}
               </p>
               <button
-                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
                 @click="openResource(path)"
               >
                 <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
@@ -406,7 +406,7 @@ watch(
               {{ cardInfoMap[course.id]?.description || '' }}
             </p>
             <button
-              class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+              class="mt-auto inline-flex self-start items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
               @click="openResource(course)"
             >
               <Icon icon="material-symbols:arrow-forward" class="h-4 w-4" />
@@ -439,7 +439,7 @@ watch(
           </button>
 
           <button
-            class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+            class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 dark:bg-blue-600 dark:text-slate-950 dark:hover:bg-blue-300"
             @click="router.push('/playground')"
           >
             <Icon icon="material-symbols:code" class="h-4 w-4" />
@@ -513,7 +513,7 @@ watch(
     <div v-if="isDetailMode" class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
     </div><template v-if="!isDetailMode">
       <footer class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-        <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+        <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-4000">
           Let Coding — Learn
         </div>
       </footer>
@@ -529,7 +529,7 @@ watch(
 }
 
 .path-card {
-  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-8 transition hover:-translate-y-1 hover:border-cyan-300 hover:shadow-lg;
+  @apply flex min-h-[20rem] flex-col rounded-[1.75rem] border border-slate-200 bg-slate-50 p-8 transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg;
 }
 
 .pill {
@@ -537,7 +537,7 @@ watch(
 }
 
 .pill.cyan {
-  @apply bg-cyan-100 text-cyan-700;
+  @apply bg-blue-50 text-blue-700;
 }
 
 .pill.slate {

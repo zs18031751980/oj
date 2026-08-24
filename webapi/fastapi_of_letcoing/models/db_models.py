@@ -292,12 +292,146 @@ class Announcement(BaseModel):
                 data[fk] = getattr(val, 'id', None)
         return data
 
+class Favorite(BaseModel):
+    """题目收藏模型（每个用户每道题最多收藏一次）"""
+    id = AutoField(primary_key=True)
+    user = ForeignKeyField(User, backref="favorites", verbose_name="用户")
+    problem_id = IntegerField(verbose_name="题目ID")
+
+    class Meta:
+        table_name = "favorites"
+        indexes = (
+            (('user', 'problem_id'), True),
+        )
+
+
+class Contest(BaseModel):
+    """比赛 ORM 模型"""
+    id = AutoField(primary_key=True, verbose_name="比赛ID")
+    title = CharField(max_length=200, verbose_name="比赛标题")
+    description = TextField(default="", verbose_name="比赛描述")
+    contest_type = CharField(max_length=50, default="ACM", verbose_name="比赛类型(ACM/周赛/决赛)")
+    status = CharField(max_length=20, default="upcoming", verbose_name="状态(upcoming/ongoing/past)")
+    start_time = DateTimeField(null=True, verbose_name="开始时间")
+    end_time = DateTimeField(null=True, verbose_name="结束时间")
+    created_by = IntegerField(null=True, verbose_name="创建者ID")
+    is_public = BooleanField(default=True, verbose_name="是否公开")
+
+    class Meta:
+        table_name = "contests"
+
+
+class ContestParticipant(BaseModel):
+    """比赛参与记录"""
+    id = AutoField(primary_key=True)
+    contest = ForeignKeyField(Contest, backref="participants", verbose_name="所属比赛")
+    user = ForeignKeyField(User, backref="contest_participations", verbose_name="参与用户")
+    score = IntegerField(default=0, verbose_name="得分")
+    rank = IntegerField(null=True, verbose_name="排名")
+
+    class Meta:
+        table_name = "contest_participants"
+        indexes = (
+            (('contest', 'user'), True),
+        )
+
+
+class Discussion(BaseModel):
+    """讨论区 ORM 模型"""
+    id = AutoField(primary_key=True, verbose_name="讨论ID")
+    title = CharField(max_length=200, verbose_name="讨论标题")
+    content = TextField(verbose_name="讨论内容(Markdown)")
+    author = ForeignKeyField(User, backref="discussions", verbose_name="作者")
+    category = CharField(max_length=50, default="全部", verbose_name="分类(全部/问答/分享/闲聊)")
+    tags = CharField(max_length=500, null=True, verbose_name="标签(逗号分隔)")
+    reply_count = IntegerField(default=0, verbose_name="回复数")
+    like_count = IntegerField(default=0, verbose_name="点赞数")
+    view_count = IntegerField(default=0, verbose_name="浏览数")
+    is_pinned = BooleanField(default=False, verbose_name="是否置顶")
+    is_closed = BooleanField(default=False, verbose_name="是否关闭")
+
+    class Meta:
+        table_name = "discussions"
+
+
+class DiscussionLike(BaseModel):
+    """讨论点赞记录"""
+    id = AutoField(primary_key=True)
+    discussion = ForeignKeyField(Discussion, backref="likes", verbose_name="所属讨论")
+    user = ForeignKeyField(User, backref="discussion_likes", verbose_name="点赞用户")
+
+    class Meta:
+        table_name = "discussion_likes"
+        indexes = (
+            (('discussion', 'user'), True),
+        )
+
+
+class DiscussionReply(BaseModel):
+    """讨论回复"""
+    id = AutoField(primary_key=True)
+    discussion = ForeignKeyField(Discussion, backref="replies", verbose_name="所属讨论")
+    author = ForeignKeyField(User, backref="discussion_replies", verbose_name="回复者")
+    content = TextField(verbose_name="回复内容(Markdown)")
+    like_count = IntegerField(default=0, verbose_name="点赞数")
+
+    class Meta:
+        table_name = "discussion_replies"
+
+
+class DiscussionReplyLike(BaseModel):
+    """讨论回复点赞记录"""
+    id = AutoField(primary_key=True)
+    reply = ForeignKeyField(DiscussionReply, backref="likes", verbose_name="所属回复")
+    user = ForeignKeyField(User, backref="reply_likes", verbose_name="点赞用户")
+
+    class Meta:
+        table_name = "discussion_reply_likes"
+        indexes = (
+            (('reply', 'user'), True),
+        )
+
+
+class ContestProblem(BaseModel):
+    """比赛题目"""
+    id = AutoField(primary_key=True, verbose_name="比赛题目ID")
+    contest = ForeignKeyField(Contest, backref="contest_problems", verbose_name="所属比赛")
+    problem_index = CharField(max_length=10, verbose_name="题目编号(A/B/C...)")
+    title = CharField(max_length=200, verbose_name="题目标题")
+    description = TextField(verbose_name="题目描述(Markdown)")
+    input_desc = TextField(default="", verbose_name="输入格式")
+    output_desc = TextField(default="", verbose_name="输出格式")
+    correct_answer = TextField(verbose_name="正确答案(参考代码)")
+    time_limit = IntegerField(default=1000, verbose_name="时间限制(ms)")
+    memory_limit = IntegerField(default=256, verbose_name="内存限制(MB)")
+    difficulty = CharField(max_length=20, default="中等", verbose_name="难度")
+    sort_order = IntegerField(default=0, verbose_name="排序序号")
+
+    class Meta:
+        table_name = "contest_problems"
+
+
+class ContestTestcase(BaseModel):
+    """比赛题目测试用例"""
+    id = AutoField(primary_key=True)
+    contest_problem = ForeignKeyField(ContestProblem, backref="testcases", verbose_name="所属比赛题目")
+    input_data = TextField(verbose_name="输入数据")
+    expected_output = TextField(verbose_name="期望输出")
+    is_sample = BooleanField(default=False, verbose_name="是否为样例")
+    sort_order = IntegerField(default=0, verbose_name="排序序号")
+
+    class Meta:
+        table_name = "contest_testcases"
+
+
 # ============================================================
 # 4. 表管理与数据库维护方法
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User, Problem, Testcase, Submission, UserCode, Announcement]
+MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
+          Contest, ContestParticipant, Discussion, DiscussionReply,
+          ContestProblem, ContestTestcase]
 
 
 def create_tables():
@@ -343,6 +477,110 @@ _SCHEMA_MIGRATIONS = [
             "ALTER TABLE users ALTER COLUMN is_active SET DEFAULT true;",
             "ALTER TABLE users ALTER COLUMN created_at SET DEFAULT now();",
             "ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT now();",
+        ],
+    ),
+    (
+        "0002_contests_discussions_tables",
+        [
+            # contests 表
+            "CREATE TABLE IF NOT EXISTS contests ("
+            "id SERIAL PRIMARY KEY, "
+            "title VARCHAR(200) NOT NULL, "
+            "description TEXT DEFAULT '', "
+            "contest_type VARCHAR(50) DEFAULT 'ACM', "
+            "status VARCHAR(20) DEFAULT 'upcoming', "
+            "start_time TIMESTAMP, "
+            "end_time TIMESTAMP, "
+            "created_by INTEGER, "
+            "is_public BOOLEAN DEFAULT true, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now());",
+            # contest_participants 表
+            "CREATE TABLE IF NOT EXISTS contest_participants ("
+            "id SERIAL PRIMARY KEY, "
+            "contest_id INTEGER REFERENCES contests(id) ON DELETE CASCADE, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "score INTEGER DEFAULT 0, "
+            "rank INTEGER, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now(), "
+            "UNIQUE(contest_id, user_id));",
+            # discussions 表
+            "CREATE TABLE IF NOT EXISTS discussions ("
+            "id SERIAL PRIMARY KEY, "
+            "title VARCHAR(200) NOT NULL, "
+            "content TEXT NOT NULL, "
+            "author_id INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+            "category VARCHAR(50) DEFAULT '全部', "
+            "tags VARCHAR(500), "
+            "reply_count INTEGER DEFAULT 0, "
+            "is_pinned BOOLEAN DEFAULT false, "
+            "is_closed BOOLEAN DEFAULT false, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now());",
+            # discussion_replies 表
+            "CREATE TABLE IF NOT EXISTS discussion_replies ("
+            "id SERIAL PRIMARY KEY, "
+            "discussion_id INTEGER REFERENCES discussions(id) ON DELETE CASCADE, "
+            "author_id INTEGER REFERENCES users(id) ON DELETE SET NULL, "
+            "content TEXT NOT NULL, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now());",
+        ],
+    ),
+    (
+        "0003_contest_problems_testcases",
+        [
+            # contest_problems 表
+            "CREATE TABLE IF NOT EXISTS contest_problems ("
+            "id SERIAL PRIMARY KEY, "
+            "contest_id INTEGER REFERENCES contests(id) ON DELETE CASCADE, "
+            "problem_index VARCHAR(10) NOT NULL, "
+            "title VARCHAR(200) NOT NULL, "
+            "description TEXT NOT NULL, "
+            "input_desc TEXT DEFAULT '', "
+            "output_desc TEXT DEFAULT '', "
+            "correct_answer TEXT NOT NULL, "
+            "time_limit INTEGER DEFAULT 1000, "
+            "memory_limit INTEGER DEFAULT 256, "
+            "difficulty VARCHAR(20) DEFAULT '中等', "
+            "sort_order INTEGER DEFAULT 0, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now());",
+            # contest_testcases 表
+            "CREATE TABLE IF NOT EXISTS contest_testcases ("
+            "id SERIAL PRIMARY KEY, "
+            "contest_problem_id INTEGER REFERENCES contest_problems(id) ON DELETE CASCADE, "
+            "input_data TEXT NOT NULL, "
+            "expected_output TEXT NOT NULL, "
+            "is_sample BOOLEAN DEFAULT false, "
+            "sort_order INTEGER DEFAULT 0, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "updated_at TIMESTAMP DEFAULT now());",
+        ],
+    ),
+    (
+        "0004_discussion_likes_and_hotness",
+        [
+            # discussions 表新增 like_count, view_count 字段
+            "ALTER TABLE discussions ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0;",
+            "ALTER TABLE discussions ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0;",
+            # discussion_replies 表新增 like_count 字段
+            "ALTER TABLE discussion_replies ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0;",
+            # discussion_likes 表（点赞记录）
+            "CREATE TABLE IF NOT EXISTS discussion_likes ("
+            "id SERIAL PRIMARY KEY, "
+            "discussion_id INTEGER REFERENCES discussions(id) ON DELETE CASCADE, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "UNIQUE(discussion_id, user_id));",
+            # discussion_reply_likes 表（回复点赞记录）
+            "CREATE TABLE IF NOT EXISTS discussion_reply_likes ("
+            "id SERIAL PRIMARY KEY, "
+            "reply_id INTEGER REFERENCES discussion_replies(id) ON DELETE CASCADE, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "created_at TIMESTAMP DEFAULT now(), "
+            "UNIQUE(reply_id, user_id));",
         ],
     ),
 ]
@@ -412,3 +650,42 @@ def migrate_add_role_column():
     迁移入口（保留旧名以兼容既有调用）：执行全部数据库迁移。
     """
     run_schema_migrations()
+
+
+def seed_problem_catalog():
+    """
+    将内存题库（pages.problem_data.PROBLEMS）同步到 PostgreSQL 的 problems 表。
+
+    启动时调用，幂等：只插入缺失的题目，不更新已有记录。
+    这样 submissions / favorites 等外键引用 problems 表时不会违约。
+    数据库不可用时安全跳过。
+    """
+    from pages.problem_data import PROBLEMS
+
+    db = get_database()
+    inserted = 0
+    try:
+        with ensure_connected(db):
+            for problem_id, pdata in PROBLEMS.items():
+                try:
+                    exists = Problem.select().where(Problem.id == problem_id).exists()
+                    if exists:
+                        continue
+                    Problem.create(
+                        id=problem_id,
+                        title=pdata.get('title', f'题目 {problem_id}'),
+                        description=pdata.get('description', ''),
+                        input_desc=pdata.get('inputFormat', ''),
+                        output_desc=pdata.get('outputFormat', ''),
+                        difficulty=pdata.get('difficulty', '简单'),
+                        time_limit=pdata.get('timeLimit', 1000),
+                        memory_limit=pdata.get('memoryLimit', 256),
+                        is_public=True,
+                    )
+                    inserted += 1
+                except Exception as e:
+                    print(f"[DB] 题目 {problem_id} 同步失败(已跳过): {sanitize_db_error(str(e))}")
+        if inserted:
+            print(f"[DB] 题库同步完成: 新增 {inserted} 道题目")
+    except DatabaseUnavailableError as e:
+        print(f"[DB] 题库同步跳过(数据库不可用): {sanitize_db_error(str(e))}")

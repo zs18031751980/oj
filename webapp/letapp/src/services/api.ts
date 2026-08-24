@@ -170,6 +170,31 @@ export const updateUserTheme = (themePreference: 'light' | 'dark' | 'system') =>
     body: JSON.stringify({ theme_preference: themePreference }),
   });
 
+export interface UserProfileUpdate {
+  name?: string;
+  email?: string;
+  bio?: string;
+}
+
+export const updateUserProfile = (data: UserProfileUpdate) =>
+  apiRequest<{ success: boolean; user_info: UserInfo }>('/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+
+export const uploadAvatar = (file: File) => {
+  const formData = new FormData();
+  formData.append('avatar', file);
+  return apiRequest<{ success: boolean; avatar_url: string }>('/users/me/avatar', {
+    method: 'POST',
+    body: formData,
+    headers: {},
+  });
+};
+
+export const getUserProfile = () =>
+  apiRequest<UserInfo>('/users/me');
+
 export interface AnnouncementData {
   id: number;
   title: string;
@@ -216,3 +241,295 @@ export const updateAnnouncement = (id: number, data: Partial<AnnouncementInput>)
 
 export const deleteAnnouncement = (id: number) =>
   apiRequest<{ success: boolean }>(`/announcement/${id}`, { method: 'DELETE' });
+
+export interface AdminRecentUser {
+  id: number;
+  username: string | null;
+  email: string | null;
+  role: string;
+  is_active: boolean;
+  created_at: string | null;
+}
+
+export interface AdminRecentAnnouncement {
+  id: number;
+  title: string;
+  is_published: boolean;
+  created_at: string | null;
+}
+
+export interface AdminStats {
+  total_users: number;
+  active_users: number;
+  total_submissions: number;
+  total_announcements: number;
+  recent_users: AdminRecentUser[];
+  recent_announcements: AdminRecentAnnouncement[];
+}
+
+export const getAdminStats = () => apiRequest<AdminStats>('/admin/stats');
+
+export interface AdminUserData {
+  id: number;
+  username: string | null;
+  email: string | null;
+  role: string;
+  is_active: boolean;
+  provider: string | null;
+  created_at: string | null;
+  last_login: string | null;
+}
+
+export interface AdminUserListParams {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  role?: string;
+  status?: string;
+}
+
+export interface AdminUserListResult {
+  total: number;
+  page: number;
+  per_page: number;
+  data: AdminUserData[];
+}
+
+export const listAdminUsers = (params: AdminUserListParams = {}) => {
+  const query = new URLSearchParams();
+  if (params.page != null) query.set('page', String(params.page));
+  if (params.per_page != null) query.set('per_page', String(params.per_page));
+  if (params.search?.trim()) query.set('search', params.search.trim());
+  if (params.role && params.role !== 'all') query.set('role', params.role);
+  if (params.status && params.status !== 'all') query.set('status', params.status);
+  const qs = query.toString();
+  return apiRequest<AdminUserListResult>(`/admin/users${qs ? `?${qs}` : ''}`);
+};
+
+export const updateAdminUserStatus = (userId: number, isActive: boolean) =>
+  apiRequest<{ success: boolean; id: number; is_active: boolean }>(
+    `/admin/users/${userId}/status`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ is_active: isActive }),
+    },
+  );
+
+export const deleteAdminUser = (userId: number) =>
+  apiRequest<{ success: boolean; id: number }>(`/admin/users/${userId}`, {
+    method: 'DELETE',
+  });
+
+// ---------- 提交记录 ----------
+
+export interface SubmissionHistoryItem {
+  id: number;
+  problem_id: number;
+  problem_title: string;
+  difficulty: string | null;
+  language: string;
+  status: string;
+  time_used: number | null;
+  created_at: string | null;
+}
+
+export interface SubmissionHistoryResult {
+  total: number;
+  page: number;
+  per_page: number;
+  data: SubmissionHistoryItem[];
+}
+
+export const listMySubmissions = (page = 1, perPage = 20) =>
+  apiRequest<SubmissionHistoryResult>(
+    `/submissions?page=${page}&per_page=${perPage}`,
+  );
+
+// ---------- 题目收藏 ----------
+
+export interface FavoriteItem {
+  problem_id: number;
+  problem_title: string;
+  difficulty: string | null;
+  tags: string[];
+  favorited_at: string | null;
+}
+
+export const listFavorites = () =>
+  apiRequest<{ data: FavoriteItem[]; total: number }>('/favorites');
+
+export const addFavorite = (problemId: number) =>
+  apiRequest<{ success: boolean; favorited: boolean }>(`/favorites/${problemId}`, {
+    method: 'POST',
+  });
+
+export const removeFavorite = (problemId: number) =>
+  apiRequest<{ success: boolean; favorited: boolean }>(`/favorites/${problemId}`, {
+    method: 'DELETE',
+  });
+
+export const getFavoriteStatus = (problemId: number) =>
+  apiRequest<{ favorited: boolean }>(`/favorites/${problemId}/status`);
+
+// ---------- 比赛 ----------
+
+export interface ContestData {
+  id: number;
+  title: string;
+  description: string;
+  contest_type: string;
+  status: string;
+  start_time: string | null;
+  end_time: string | null;
+  participants_count: number;
+  created_at: string;
+}
+
+export const listContests = (status?: string) =>
+  apiRequest<ContestData[]>(`/contests/${status ? `?status=${status}` : ''}`);
+
+export const getContest = (id: number) =>
+  apiRequest<ContestData>(`/contests/${id}`);
+
+export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string }) =>
+  apiRequest<ContestData>('/contests/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const joinContest = (id: number) =>
+  apiRequest<{ success: boolean }>(`/contests/${id}/join`, { method: 'POST' });
+
+// ---------- 讨论 ----------
+
+export interface DiscussionData {
+  id: number;
+  title: string;
+  content: string;
+  author_id: number;
+  author_name: string;
+  category: string;
+  tags: string;
+  reply_count: number;
+  like_count: number;
+  view_count: number;
+  is_pinned: boolean;
+  is_liked: boolean;
+  created_at: string;
+  replies?: DiscussionReplyData[];
+}
+
+export interface DiscussionReplyData {
+  id: number;
+  content: string;
+  author_id: number;
+  author_name: string;
+  like_count: number;
+  is_liked: boolean;
+  created_at: string;
+}
+
+export const listDiscussions = (category?: string) =>
+  apiRequest<DiscussionData[]>(`/discussions/${category ? `?category=${encodeURIComponent(category)}` : ''}`);
+
+export const getDiscussion = (id: number) =>
+  apiRequest<DiscussionData>(`/discussions/${id}`);
+
+export const createDiscussion = (data: { title: string; content: string; category?: string; tags?: string }) =>
+  apiRequest<DiscussionData>('/discussions/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const likeDiscussion = (discussionId: number) =>
+  apiRequest<{ liked: boolean; like_count: number }>(`/discussions/${discussionId}/like`, {
+    method: 'POST',
+  });
+
+export const replyToDiscussion = (discussionId: number, content: string) =>
+  apiRequest<DiscussionReplyData>(`/discussions/${discussionId}/replies`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+
+export const likeDiscussionReply = (replyId: number) =>
+  apiRequest<{ liked: boolean; like_count: number }>(`/discussions/replies/${replyId}/like`, {
+    method: 'POST',
+  });
+
+// ---------- 排行榜 ----------
+
+export interface RankingData {
+  rank: number;
+  user_id: number;
+  username: string;
+  avatar_url: string;
+  solved_count: number;
+  rating: number;
+}
+
+export const listRankings = () =>
+  apiRequest<RankingData[]>('/rankings/');
+
+// ---------- 比赛题目管理 ----------
+
+export interface ContestProblemData {
+  id: number;
+  contest_id: number;
+  problem_index: string;
+  title: string;
+  description: string;
+  input_desc: string;
+  output_desc: string;
+  correct_answer: string;
+  time_limit: number;
+  memory_limit: number;
+  difficulty: string;
+  testcase_count: number;
+}
+
+export const listContestProblems = (contestId: number) =>
+  apiRequest<ContestProblemData[]>(`/admin/contests/?contest_id=${contestId}`);
+
+export const getContestProblem = (id: number) =>
+  apiRequest<ContestProblemData & { testcases: any[] }>(`/admin/contests/${id}`);
+
+export const createContestProblem = (contestId: number, data: {
+  problem_index: string;
+  title: string;
+  description: string;
+  input_desc?: string;
+  output_desc?: string;
+  correct_answer: string;
+  time_limit?: number;
+  memory_limit?: number;
+  difficulty?: string;
+}) =>
+  apiRequest<ContestProblemData>(`/admin/contests/?contest_id=${contestId}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updateContestProblem = (id: number, data: Partial<{
+  problem_index: string;
+  title: string;
+  description: string;
+  input_desc: string;
+  output_desc: string;
+  correct_answer: string;
+  time_limit: number;
+  memory_limit: number;
+  difficulty: string;
+}>) =>
+  apiRequest<ContestProblemData>(`/admin/contests/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const deleteContestProblem = (id: number) =>
+  apiRequest<{ success: boolean }>(`/admin/contests/${id}`, { method: 'DELETE' });
+
+export const regenerateTestcases = (problemId: number) =>
+  apiRequest<{ success: boolean; count: number }>(`/admin/contests/${problemId}/regenerate-testcases`, {
+    method: 'POST',
+  });

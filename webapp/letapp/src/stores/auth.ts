@@ -360,6 +360,12 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession();
   };
 
+  const updateUserInfo = (info: UserInfo) => {
+    userInfo.value = info;
+    const storage = getAuthStorage(storageMode.value);
+    storage.setItem(USER_INFO_KEY, JSON.stringify(info));
+  };
+
   return {
     accessToken,
     refreshToken,
@@ -382,5 +388,6 @@ export const useAuthStore = defineStore('auth', () => {
     refresh,
     restoreSession,
     logout,
+    updateUserInfo,
   };
 });

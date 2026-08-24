@@ -2,6 +2,8 @@
 import { computed, markRaw, onMounted, onUnmounted, ref } from "vue";
 import { Icon } from "@iconify/vue";
 import { useRouter } from "vue-router";
+import { apiRequest, listMySubmissions, listFavorites } from "../services/api";
+import { useAuthStore } from "../stores/auth";
 
 const router = useRouter();
 const terminalRef = ref<HTMLElement | null>(null);
@@ -228,6 +230,118 @@ const handleTerminalKeydown = (event: KeyboardEvent) => {
   }
 };
 
+// ===== 首页 Dashboard 数据 =====
+const authStore = useAuthStore();
+const dashboardLoading = ref(true);
+const recentProblems = ref<any[]>([]);
+const recentSubmissions = ref<any[]>([]);
+const favoriteCount = ref(0);
+const totalProblems = ref(0);
+const submissionTotal = ref(0);
+const acceptedCount = ref(0);
+const solvedCount = ref(0);
+const difficultyDist = ref({ easy: 0, mid: 0, hard: 0 });
+
+const statusMeta: Record<string, { label: string; cls: string }> = {
+  AC: { label: "通过", cls: "ui-badge-green" },
+  WA: { label: "答案错误", cls: "ui-badge-red" },
+  CE: { label: "编译错误", cls: "ui-badge-amber" },
+  TLE: { label: "超时", cls: "ui-badge-amber" },
+  RE: { label: "运行错误", cls: "ui-badge-red" },
+  Running: { label: "判题中", cls: "ui-badge-blue" },
+  Pending: { label: "排队中", cls: "ui-badge-slate" },
+};
+const statusLabel = (s: string) =>
+  (statusMeta[s] ?? { label: s || "未知", cls: "ui-badge-slate" }).label;
+const statusClass = (s: string) =>
+  (statusMeta[s] ?? { label: "", cls: "ui-badge-slate" }).cls;
+
+const formatRate = (accepted: number, submission: number) => {
+  const a = Number(accepted) || 0;
+  const b = Number(submission) || 0;
+  if (!b) return "—";
+  return `${Math.round((a / b) * 100)}%`;
+};
+const formatDateShort = (dateString: string | null) => {
+  if (!dateString) return "—";
+  return new Date(dateString).toLocaleDateString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+const goProblem = (id: number) => void router.push(`/problems/${id}`);
+
+const difficultyRows = computed(() => {
+  const { easy, mid, hard } = difficultyDist.value;
+  const total = easy + mid + hard || 1;
+  return [
+    { key: "easy", label: "简单", value: easy, pct: Math.round((easy / total) * 100), textClass: "text-emerald-600 dark:text-emerald-400", barClass: "bg-emerald-500" },
+    { key: "mid", label: "中等", value: mid, pct: Math.round((mid / total) * 100), textClass: "text-amber-600 dark:text-amber-400", barClass: "bg-amber-500" },
+    { key: "hard", label: "困难", value: hard, pct: Math.round((hard / total) * 100), textClass: "text-rose-600 dark:text-rose-400", barClass: "bg-rose-500" },
+  ];
+});
+
+const loadDashboard = async () => {
+  dashboardLoading.value = true;
+  try {
+    const probPromise = apiRequest<any>("/problems", { skipAuth: true }).catch(
+      () => null,
+    );
+    const subPromise = authStore.isAuthenticated
+      ? listMySubmissions(1, 6)
+      : Promise.resolve(null);
+    const favPromise = authStore.isAuthenticated
+      ? listFavorites()
+      : Promise.resolve(null);
+    const [probRes, subRes, favRes] = await Promise.all([
+      probPromise,
+      subPromise,
+      favPromise,
+    ]);
+    if (probRes) {
+      const list = Array.isArray(probRes.data) ? probRes.data : [];
+      totalProblems.value = Number(probRes.total) || list.length;
+      recentProblems.value = list.slice(0, 6);
+      let e = 0,
+        m = 0,
+        h = 0;
+      list.forEach((p: any) => {
+        const d = p.difficulty;
+        if (d === "简单") e += 1;
+        else if (d === "中等") m += 1;
+        else if (d === "困难") h += 1;
+      });
+      difficultyDist.value = { easy: e, mid: m, hard: h };
+    }
+    if (subRes) {
+      const subs = subRes.data ?? [];
+      recentSubmissions.value = subs;
+      submissionTotal.value = Number(subRes.total) || subs.length;
+      const solved = new Set<number>();
+      let ac = 0;
+      subs.forEach((s: any) => {
+        if (s.status === "AC") {
+          ac += 1;
+          if (s.problem_id != null) solved.add(s.problem_id);
+        }
+      });
+      acceptedCount.value = ac;
+      solvedCount.value = solved.size;
+    }
+    if (favRes) {
+      favoriteCount.value = Array.isArray(favRes.data) ? favRes.data.length : 0;
+    }
+  } catch {
+    // 仪表盘数据加载失败不影响主页展示
+  } finally {
+    dashboardLoading.value = false;
+  }
+};
+
+onMounted(loadDashboard);
+
 onMounted(() => {
   resizeParticleCanvas();
   particleResizeObserver = new ResizeObserver(resizeParticleCanvas);
@@ -376,6 +490,127 @@ onUnmounted(() => {
       </div>
     </section>
 
+    <section class="home-dashboard border-t border-[#E2E8F0] py-10 dark:border-[#1E293B]">
+      <div class="app-container">
+        <div class="ui-card mb-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="ui-section-sub">欢迎回来</p>
+            <h2 class="ui-section-title">{{ authStore.isAuthenticated ? (authStore.displayName || '同学') : '开始你的编程之旅' }}</h2>
+            <p class="mt-1 text-sm text-[#64748B] dark:text-[#94A3B8]">今天也要坚持刷题，保持手感。</p>
+          </div>
+          <div class="flex flex-wrap gap-3">
+            <router-link to="/problems" class="hero-dash-btn hero-dash-primary">
+              <Icon icon="material-symbols:play-arrow-rounded" class="h-4 w-4" />
+              开始刷题
+            </router-link>
+            <router-link to="/playground" class="hero-dash-btn hero-dash-secondary">
+              <Icon icon="material-symbols:code-rounded" class="h-4 w-4" />
+              打开编辑器
+            </router-link>
+            <router-link to="/contests" class="hero-dash-btn hero-dash-outline">
+              <Icon icon="material-symbols:trophy-rounded" class="h-4 w-4" />
+              查看比赛
+            </router-link>
+          </div>
+        </div>
+
+        <div class="ui-grid ui-grid-4 mb-6">
+          <div class="ui-card flex items-center gap-3 p-5">
+            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:check-circle-rounded" class="h-5 w-5" /></span>
+            <div>
+              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">已解决题目</p>
+              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : solvedCount }}</p>
+            </div>
+          </div>
+          <div class="ui-card flex items-center gap-3 p-5">
+            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:history-rounded" class="h-5 w-5" /></span>
+            <div>
+              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">提交总数</p>
+              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : submissionTotal }}</p>
+            </div>
+          </div>
+          <div class="ui-card flex items-center gap-3 p-5">
+            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:star-rounded" class="h-5 w-5" /></span>
+            <div>
+              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">收藏题目</p>
+              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : favoriteCount }}</p>
+            </div>
+          </div>
+          <div class="ui-card flex items-center gap-3 p-5">
+            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:library-books-rounded" class="h-5 w-5" /></span>
+            <div>
+              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">题库题量</p>
+              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : totalProblems }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-2">
+          <div class="ui-card p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="ui-section-title">继续学习</h3>
+              <router-link to="/problems" class="text-sm font-bold text-[#2563EB] dark:text-[#60A5FA]">全部题目</router-link>
+            </div>
+            <div v-if="dashboardLoading" class="space-y-2">
+              <div v-for="i in 5" :key="i" class="ui-skeleton h-12 rounded-xl"></div>
+            </div>
+            <div v-else-if="recentProblems.length" class="space-y-2">
+              <router-link
+                v-for="p in recentProblems"
+                :key="p.id"
+                :to="`/problems/${p.id}`"
+                class="flex items-center gap-3 rounded-xl border border-[#E2E8F0] px-3 py-2.5 transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
+              >
+                <span class="min-w-0 flex-1 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
+                <span v-if="p.difficulty" class="ui-diff" :class="p.difficulty === '简单' ? 'ui-diff-easy' : p.difficulty === '中等' ? 'ui-diff-mid' : 'ui-diff-hard'">{{ p.difficulty }}</span>
+                <span class="shrink-0 text-xs text-[#64748B] dark:text-[#94A3B8]">通过率 {{ formatRate(p.accepted_count, p.submission_count) }}</span>
+              </router-link>
+            </div>
+            <p v-else class="ui-empty">暂无题目，去题库探索吧</p>
+          </div>
+
+          <div class="ui-card p-5">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="ui-section-title">最近活动</h3>
+              <router-link to="/submissions" class="text-sm font-bold text-[#2563EB] dark:text-[#60A5FA]">全部记录</router-link>
+            </div>
+            <div v-if="dashboardLoading" class="space-y-2">
+              <div v-for="i in 5" :key="i" class="ui-skeleton h-12 rounded-xl"></div>
+            </div>
+            <div v-else-if="recentSubmissions.length" class="space-y-2">
+              <button
+                v-for="s in recentSubmissions"
+                :key="s.id"
+                type="button"
+                class="flex w-full items-center gap-3 rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-left transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
+                @click="goProblem(s.problem_id)"
+              >
+                <span class="ui-badge" :class="statusClass(s.status)">{{ statusLabel(s.status) }}</span>
+                <span class="min-w-0 flex-1 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ s.problem_title }}</span>
+                <span class="shrink-0 text-xs text-[#64748B] dark:text-[#94A3B8]">{{ formatDateShort(s.created_at) }}</span>
+              </button>
+            </div>
+            <p v-else class="ui-empty">还没有提交记录，去<router-link to="/problems" class="font-bold text-[#2563EB] dark:text-[#60A5FA]">题库</router-link>试试吧</p>
+          </div>
+        </div>
+
+        <div class="ui-card mt-6 p-5">
+          <h3 class="ui-section-title mb-4">题库难度分布</h3>
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div v-for="item in difficultyRows" :key="item.key" class="rounded-xl border border-[#E2E8F0] p-4 dark:border-[#1E293B]">
+              <div class="flex items-center justify-between text-sm font-bold">
+                <span :class="item.textClass">{{ item.label }}</span>
+                <span class="text-[#64748B] dark:text-[#94A3B8]">{{ item.value }} 题</span>
+              </div>
+              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#E2E8F0] dark:bg-[#1E293B]">
+                <div class="h-full rounded-full" :class="item.barClass" :style="{ width: item.pct + '%' }"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </template>
 
@@ -384,6 +619,67 @@ onUnmounted(() => {
   overflow: hidden;
   background: #eef2f5;
   color: #111827;
+}
+.hero-dash-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.hero-dash-primary {
+  background: #2563EB;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+.hero-dash-primary:hover {
+  background: #1D4ED8;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+.hero-dash-secondary {
+  background: #EFF6FF;
+  color: #2563EB;
+  border: 1px solid #BFDBFE;
+}
+.hero-dash-secondary:hover {
+  background: #DBEAFE;
+  border-color: #93C5FD;
+  transform: translateY(-1px);
+}
+.hero-dash-outline {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+.hero-dash-outline:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+  color: #1E293B;
+  transform: translateY(-1px);
+}
+.dark .hero-dash-secondary {
+  background: #172554;
+  color: #60A5FA;
+  border-color: #1E3A5F;
+}
+.dark .hero-dash-secondary:hover {
+  background: #1E3A5F;
+  border-color: #2563EB;
+}
+.dark .hero-dash-outline {
+  color: #94A3B8;
+  border-color: #334155;
+}
+.dark .hero-dash-outline:hover {
+  background: #1E293B;
+  border-color: #475569;
+  color: #E5E7EB;
 }
 .hero-section {
   position: relative;

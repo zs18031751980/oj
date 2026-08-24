@@ -15,6 +15,7 @@ from flask_restx import Namespace, Resource, fields
 from core.di_container import inject
 from interfaces.service_interfaces import IRedisService
 from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
+from models.db_models import Submission
 
 api = Namespace('submissions', description='提交判题相关接口')
 
@@ -74,6 +75,17 @@ def _get_problem_data(problem_id):
     return PROBLEMS.get(problem_id)
 
 
+def _current_user_id():
+    """从认证中间件获取当前登录用户 ID（未登录返回 None）"""
+    current_user = getattr(g, 'current_user', None)
+    if not current_user:
+        return None
+    try:
+        return int(current_user.get('id'))
+    except (TypeError, ValueError):
+        return None
+
+
 @api.route('')
 class SubmissionListCreateController(Resource):
     @api.expect(submission_model)
@@ -99,7 +111,24 @@ class SubmissionListCreateController(Resource):
             return {'error': '题目不存在'}, 404
 
         redis_service = inject(IRedisService)
-        sid = _next_id(redis_service)
+
+        # 优先写入 PostgreSQL 持久化（提交历史可查）；
+        # 数据库不可用时降级为 Redis 计数器 ID（仅支持判题，不留历史）
+        db_submission = None
+        user_id = _current_user_id()
+        if user_id:
+            try:
+                db_submission = Submission.create(
+                    user=user_id,
+                    problem=problem_id,
+                    code=code,
+                    language=language,
+                    status=Submission.PENDING,
+                )
+            except Exception:
+                db_submission = None
+
+        sid = db_submission.id if db_submission else _next_id(redis_service)
         now = datetime.utcnow().isoformat()
 
         submission_data = {
@@ -129,11 +158,40 @@ class SubmissionListCreateController(Resource):
         return submission_data, 201
 
     @api.doc('list_submissions')
-    @api.param('problem_id', '题目ID（可选）')
+    @api.param('page', '页码（默认 1）')
+    @api.param('per_page', '每页数量（默认 20，最大 50）')
     @AuthMiddleware.require_auth
     def get(self):
-        """获取当前用户的提交历史（仅返回最后 50 条 Redis 缓存）"""
-        return {'total': 0, 'page': 1, 'per_page': 50, 'data': []}, 200
+        """获取当前用户的提交历史（来自 PostgreSQL 持久化记录）"""
+        user_id = _current_user_id()
+        if not user_id:
+            return {'error': '请先登录'}, 401
+
+        try:
+            page = max(int(request.args.get('page', 1)), 1)
+            per_page = min(max(int(request.args.get('per_page', 20)), 1), 50)
+        except (TypeError, ValueError):
+            page, per_page = 1, 20
+
+        query = Submission.select().where(Submission.user == user_id)
+        total = query.count()
+        rows = query.order_by(Submission.id.desc()).paginate(page, per_page)
+
+        data = []
+        for s in rows:
+            pdata = _get_problem_data(s.problem_id)
+            data.append({
+                'id': s.id,
+                'problem_id': s.problem_id,
+                'problem_title': pdata.get('title') if pdata else f'题目 {s.problem_id}',
+                'difficulty': pdata.get('difficulty') if pdata else None,
+                'language': s.language,
+                'status': s.status,
+                'time_used': s.time_used,
+                'created_at': s.created_at.isoformat() if s.created_at else None,
+            })
+
+        return {'total': total, 'page': page, 'per_page': per_page, 'data': data}, 200
 
 
 @api.route('/<int:submission_id>')

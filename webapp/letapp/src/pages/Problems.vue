@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, ref, shallowRef } from 'vue';
+import { computed, onMounted, ref, shallowRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
+import { useMessage } from 'naive-ui';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useAuthStore } from '../stores/auth';
-import { apiRequest } from '../services/api';
+import { apiRequest, listFavorites, addFavorite, removeFavorite } from '../services/api';
 
 interface Problem {
   id: number;
@@ -24,15 +25,18 @@ interface ProblemListResponse {
 }
 
 const router = useRouter();
+const message = useMessage();
 const searchQuery = ref('');
 const difficultyFilter = ref<string>('');
 const categoryFilter = ref('');
+const statusFilter = ref<'' | 'solved' | 'unsolved' | 'attempted' | 'favorite'>('');
 const isLoading = ref(true);
 const loadError = ref('');
 const { getStats } = useProblemStats();
 const authStore = useAuthStore();
 
 const problems = shallowRef<Problem[]>([]);
+const favoriteIds = ref<Set<number>>(new Set());
 
 const loadProblems = async () => {
   isLoading.value = true;
@@ -47,341 +51,340 @@ const loadProblems = async () => {
   }
 };
 
-onMounted(loadProblems);
+const loadFavorites = async () => {
+  if (!authStore.isAuthenticated) {
+    favoriteIds.value = new Set();
+    return;
+  }
+  try {
+    const res = await listFavorites();
+    favoriteIds.value = new Set(res.data.map((item) => item.problem_id));
+  } catch {
+    favoriteIds.value = new Set();
+  }
+};
+
+const categoryLabelMap: Record<string, string> = {
+  'general': '练习',
+  'c-language': 'C语言专栏',
+};
+const categoryDisplayName = (key: string) => categoryLabelMap[key] || key;
+
+const categories = computed(() => {
+  const set = new Set<string>();
+  problems.value.forEach((p) => p.category && set.add(p.category));
+  return Array.from(set);
+});
 
 const filteredProblems = computed(() => {
-  let list = problems.value;
-  if (categoryFilter.value) {
-    list = list.filter(p => p.category === categoryFilter.value);
-  }
-  if (difficultyFilter.value) {
-    list = list.filter(p => p.difficulty === difficultyFilter.value);
-  }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    list = list.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      p.tags.some(t => t.toLowerCase().includes(q)) ||
-      String(p.id).includes(q)
-    );
-  }
-  return list.map(p => {
-    const stat = getStats(p.id);
-    return {
-      ...p,
-      stat,
-      isAccepted: authStore.isAuthenticated && stat.accepted > 0,
-    };
-  });
+  const q = searchQuery.value.trim().toLowerCase();
+  return problems.value
+    .filter((p) => {
+      if (categoryFilter.value && p.category !== categoryFilter.value) return false;
+      if (difficultyFilter.value && p.difficulty !== difficultyFilter.value) return false;
+      const stat = getStats(p.id);
+      if (statusFilter.value === 'solved' && !(authStore.isAuthenticated && stat.accepted > 0)) return false;
+      if (statusFilter.value === 'unsolved' && authStore.isAuthenticated && stat.accepted > 0) return false;
+      if (statusFilter.value === 'attempted' && !(authStore.isAuthenticated && stat.attempted)) return false;
+      if (statusFilter.value === 'favorite' && !favoriteIds.value.has(p.id)) return false;
+      if (q) {
+        return (
+          p.title.toLowerCase().includes(q) ||
+          p.tags.some((t) => t.toLowerCase().includes(q)) ||
+          String(p.id).includes(q)
+        );
+      }
+      return true;
+    })
+    .map((p) => {
+      const stat = getStats(p.id);
+      return {
+        ...p,
+        stat,
+        isAccepted: authStore.isAuthenticated && stat.accepted > 0,
+        isAttempted: authStore.isAuthenticated && stat.attempted,
+        acceptRate: stat.submissions > 0 ? Math.round((stat.accepted / stat.submissions) * 100) : null,
+      };
+    });
 });
 
 const openProblem = (id: number) => {
   router.push(`/problems/${id}`);
 };
 
-const difficultyColorMap = markRaw({
-  '简单': 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30',
-  '中等': 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30',
-  '困难': 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30',
-} as const);
+const isFavorited = (id: number) => favoriteIds.value.has(id);
+
+const toggleFavorite = async (problem: Problem, event: MouseEvent) => {
+  event.stopPropagation();
+  if (!authStore.isAuthenticated) {
+    message.warning('请先登录后再收藏题目');
+    router.push('/login');
+    return;
+  }
+  const favorited = favoriteIds.value.has(problem.id);
+  const next = new Set(favoriteIds.value);
+  try {
+    const res = favorited ? await removeFavorite(problem.id) : await addFavorite(problem.id);
+    if (res.favorited) next.add(problem.id);
+    else next.delete(problem.id);
+    favoriteIds.value = next;
+    message.success(res.favorited ? '已加入收藏题目' : '已取消收藏');
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '操作失败，请稍后重试');
+  }
+};
+
+const difficultyClass = (d: string) =>
+  d === '简单'
+    ? 'ui-diff ui-diff-easy'
+    : d === '中等'
+      ? 'ui-diff ui-diff-mid'
+      : 'ui-diff ui-diff-hard';
+
+const resetFilters = () => {
+  searchQuery.value = '';
+  difficultyFilter.value = '';
+  categoryFilter.value = '';
+  statusFilter.value = '';
+};
+
+onMounted(() => {
+  loadProblems();
+  loadFavorites();
+});
 </script>
 
 <template>
-  <div class="problems-page flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
-    <div class="problems-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-      <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div class="max-w-3xl">
-            <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Problem Bank</p>
-            <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">在线题库</h1>
-          </div>
-          <div class="flex items-center gap-3">
-            <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
-              {{ filteredProblems.length }} 道题目
-            </span>
-          </div>
+  <div class="problems-page bg-[#F6F8FC] dark:bg-[#0F172A]">
+    <div class="app-container py-6">
+      <!-- 标题区 -->
+      <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">在线题库</h1>
+          <p class="ui-section-sub mt-1">共 {{ problems.length }} 道题目 · 当前筛选出 {{ filteredProblems.length }} 道</p>
         </div>
-      </div>
-    </div>
-
-    <div class="problems-content mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div class="problems-controls mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="relative flex-1 max-w-md">
-          <Icon icon="material-symbols:search" class="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+        <div class="relative w-full sm:w-80">
+          <Icon icon="material-symbols:search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="搜索题目、标签或编号"
-            class="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-cyan-500"
+            class="ui-input pl-9"
+            placeholder="搜索题号、名称或标签，回车搜索"
+            @keyup.enter="() => {}"
           />
         </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="category in [{ value: '', label: '全部题目' }, { value: 'c-language', label: 'C 语言专区' }]"
-            :key="category.value"
-            class="rounded-xl border px-4 py-2 text-sm font-bold transition"
-            :class="categoryFilter === category.value
-              ? 'border-cyan-400 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-cyan-500 dark:hover:text-slate-950'"
-            @click="categoryFilter = category.value"
-          >
-            {{ category.label }}
-          </button>
-          <button
-            v-for="d in ['', '简单', '中等', '困难']"
-            :key="d"
-            class="rounded-xl border px-4 py-2 text-sm font-bold transition"
-            :class="difficultyFilter === d
-              ? 'border-cyan-400 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-cyan-500 dark:hover:text-slate-950'"
-            @click="difficultyFilter = d"
-          >
-            {{ d || '全部' }}
-          </button>
-        </div>
       </div>
 
-      <div class="problems-list overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white/85 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
-        <div v-if="isLoading" class="flex flex-col items-center justify-center py-20 text-center text-slate-500 dark:text-slate-400">
-          <Icon icon="material-symbols:progress-activity" width="40" height="40" class="mb-4 animate-spin text-cyan-500" />
-          <p class="text-lg font-bold">正在加载题目...</p>
-        </div>
-        <div v-else-if="loadError" class="flex flex-col items-center justify-center py-20 text-center text-rose-500">
-          <Icon icon="material-symbols:error-outline" width="48" height="48" class="mb-4" />
-          <p class="text-lg font-bold">{{ loadError }}</p>
-          <button class="mt-4 rounded-lg border border-rose-300 px-4 py-2 text-sm font-bold" @click="loadProblems">重试</button>
-        </div>
-        <div v-else-if="filteredProblems.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-          <Icon icon="material-symbols:search-off" width="48" height="48" class="mb-4 text-slate-300 dark:text-slate-600" />
-          <p class="text-lg font-bold text-slate-500 dark:text-slate-400">没有找到匹配的题目</p>
-        </div>
-        <div v-else class="divide-y divide-slate-100 dark:divide-slate-800">
-          <div
-            v-for="problem in filteredProblems"
-            :key="problem.id"
-            class="problem-row flex cursor-pointer items-center gap-4 px-6 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
-            @click="openProblem(problem.id)"
-          >
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-3">
-                <span class="w-12 shrink-0 text-sm font-mono text-slate-400 dark:text-slate-500">{{ problem.sourceNumber ?? problem.id }}</span>
-                <span class="text-base font-bold text-slate-900 dark:text-white truncate">{{ problem.title }}</span>
-                <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold" :class="difficultyColorMap[problem.difficulty]">{{ problem.difficulty }}</span>
-                <span v-if="problem.categoryLabel" class="shrink-0 rounded-md bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300">{{ problem.categoryLabel }}</span>
-                <span v-if="problem.interactive" class="shrink-0 rounded-md bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">练习题</span>
-              </div>
-              <div class="mt-1 flex flex-wrap gap-2">
-                <span
-                  v-for="tag in problem.tags"
-                  :key="tag"
-                  class="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                >{{ tag }}</span>
+      <div class="flex items-start gap-6">
+        <!-- 左侧筛选 -->
+        <aside class="hidden w-60 shrink-0 lg:block">
+          <div class="ui-card space-y-6">
+            <div>
+              <div class="ui-section-title mb-2 text-sm">状态</div>
+              <div class="flex flex-col gap-1">
+                <button
+                  v-for="opt in [
+                    { v: '', label: '全部题目' },
+                    { v: 'solved', label: '已解决' },
+                    { v: 'attempted', label: '尝试解决' },
+                    { v: 'unsolved', label: '未解决' },
+                    { v: 'favorite', label: '我的收藏' },
+                  ]"
+                  :key="opt.v"
+                  class="filter-item"
+                  :class="{ active: statusFilter === opt.v }"
+                  @click="statusFilter = opt.v as any"
+                >
+                  {{ opt.label }}
+                </button>
               </div>
             </div>
-            <div class="hidden shrink-0 sm:block">
-              <span
-                class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold"
-                :class="!authStore.isAuthenticated
-                  ? 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'
-                  : problem.isAccepted
-                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30'
-                    : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800'"
-              >
-                <Icon
-                  :icon="authStore.isAuthenticated && problem.isAccepted
-                    ? 'material-symbols:check-circle'
-                    : 'material-symbols:radio-button-unchecked'"
-                  class="h-3.5 w-3.5"
-                />
-                {{ !authStore.isAuthenticated ? '未登录' : problem.isAccepted ? '已通过' : '未通过' }}
-              </span>
+            <div>
+              <div class="ui-section-title mb-2 text-sm">难度</div>
+              <div class="flex flex-col gap-1">
+                <button
+                  class="filter-item"
+                  :class="{ active: difficultyFilter === '' }"
+                  @click="difficultyFilter = ''"
+                >
+                  全部难度
+                </button>
+                <button
+                  v-for="d in ['简单', '中等', '困难']"
+                  :key="d"
+                  class="filter-item"
+                  :class="{ active: difficultyFilter === d }"
+                  @click="difficultyFilter = difficultyFilter === d ? '' : (d as any)"
+                >
+                  <span :class="difficultyClass(d)" class="!px-2 !py-0">{{ d }}</span>
+                </button>
+              </div>
             </div>
-            <Icon icon="material-symbols:chevron-right" class="shrink-0 h-5 w-5 text-slate-300 dark:text-slate-600" />
+            <div>
+              <div class="ui-section-title mb-2 text-sm">分类</div>
+              <div class="filter-scroll flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
+                <button class="filter-item" :class="{ active: categoryFilter === '' }" @click="categoryFilter = ''">全部分类</button>
+                <button
+                  v-for="c in categories"
+                  :key="c"
+                  class="filter-item"
+                  :class="{ active: categoryFilter === c }"
+                  @click="categoryFilter = categoryFilter === c ? '' : c"
+                >
+                  {{ categoryDisplayName(c) }}
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        </aside>
+
+        <!-- 右侧内容 -->
+        <section class="min-w-0 flex-1">
+          <!-- 移动端筛选 -->
+          <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
+            <button
+              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              :class="difficultyFilter === '' ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
+              @click="difficultyFilter = ''"
+            >
+              全部
+            </button>
+            <button
+              v-for="d in ['简单', '中等', '困难']"
+              :key="d"
+              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              :class="difficultyFilter === d ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
+              @click="difficultyFilter = difficultyFilter === d ? '' : (d as any)"
+            >
+              {{ d }}
+            </button>
+            <button
+              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              :class="statusFilter === 'favorite' ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
+              @click="statusFilter = statusFilter === 'favorite' ? '' : 'favorite'"
+            >
+              收藏
+            </button>
+          </div>
+
+          <div class="ui-card overflow-hidden !p-0">
+            <!-- 表头 48px -->
+            <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem] items-center gap-4 border-b border-[#E2E8F0] px-4 text-xs font-bold text-[#64748B] dark:border-[#1E293B] sm:grid" style="height:48px">
+              <span>状态</span>
+              <span>题目</span>
+              <span class="text-center">难度</span>
+              <span class="text-center">通过率</span>
+              <span class="text-center">提交</span>
+            </div>
+
+            <div v-if="isLoading" class="space-y-2 p-4">
+              <div v-for="i in 6" :key="i" class="ui-skeleton h-12 w-full"></div>
+            </div>
+
+            <div v-else-if="loadError" class="ui-empty m-4">
+              <Icon icon="material-symbols:cloud-off-rounded" class="mb-2 h-10 w-10 text-rose-400" />
+              <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
+              <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">{{ loadError }}</p>
+              <button class="ui-btn ui-btn-primary ui-btn-sm mt-2" @click="loadProblems">重新加载</button>
+            </div>
+
+            <div v-else-if="filteredProblems.length === 0" class="ui-empty m-4">
+              <Icon icon="material-symbols:search-off" class="mb-2 h-10 w-10 text-[#94A3B8]" />
+              <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">没有找到匹配的题目</p>
+              <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="resetFilters">清除筛选</button>
+            </div>
+
+            <div v-else class="divide-y divide-[#F1F5F9] dark:divide-[#1E293B]">
+              <button
+                v-for="p in filteredProblems"
+                :key="p.id"
+                class="problem-row grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-left transition hover:bg-[#EFF6FF] dark:hover:bg-[#172554] sm:grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem]"
+                @click="openProblem(p.id)"
+              >
+                <span class="flex justify-center">
+                  <Icon
+                    v-if="p.isAccepted"
+                    icon="material-symbols:check-circle"
+                    class="h-5 w-5 text-emerald-500"
+                  />
+                  <Icon
+                    v-else-if="p.stat.attempted"
+                    icon="material-symbols:pending"
+                    class="h-5 w-5 text-amber-500"
+                  />
+                  <Icon v-else icon="material-symbols:circle" class="h-4 w-4 text-[#CBD5E1] dark:text-[#475569]" />
+                </span>
+                <span class="min-w-0">
+                  <span class="flex items-center gap-2">
+                    <span class="shrink-0 text-xs font-mono text-[#94A3B8]">#{{ p.sourceNumber ?? p.id }}</span>
+                    <span class="truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
+                  </span>
+                  <span class="mt-1 flex flex-wrap gap-1.5">
+                    <span
+                      v-for="tag in p.tags.slice(0, 3)"
+                      :key="tag"
+                      class="rounded-md bg-[#F1F5F9] px-2 py-0.5 text-[11px] font-medium text-[#64748B] dark:bg-[#1E293B] dark:text-[#94A3B8]"
+                    >{{ tag }}</span>
+                  </span>
+                </span>
+                <span class="hidden justify-center sm:flex">
+                  <span :class="difficultyClass(p.difficulty)">{{ p.difficulty }}</span>
+                </span>
+                <span class="hidden text-center text-sm font-semibold text-[#475569] dark:text-[#CBD5E1] sm:block">
+                  {{ p.acceptRate != null ? p.acceptRate + '%' : '—' }}
+                </span>
+                <span class="hidden text-center text-sm text-[#94A3B8] sm:block">{{ p.stat.submissions }}</span>
+                <span class="col-span-2 flex justify-end sm:col-span-1">
+                  <button
+                    class="ui-icon-btn !h-8 !w-8"
+                    :class="isFavorited(p.id) ? 'text-amber-400' : 'text-[#94A3B8]'"
+                    :title="isFavorited(p.id) ? '取消收藏' : '收藏题目'"
+                    @click="toggleFavorite(p, $event)"
+                  >
+                    <Icon :icon="isFavorited(p.id) ? 'material-symbols:star-rounded' : 'material-symbols:star-outline-rounded'" class="h-5 w-5" />
+                  </button>
+                </span>
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
-
-    <footer class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-      <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-        Let Coding — Problems
-      </div>
-    </footer>
   </div>
 </template>
 
-<style>
-.problems-page {
-  --page-border: #c7d2da;
-  background: #e8ecef !important;
+<style scoped>
+@reference 'tailwindcss';
+
+.filter-item {
+  @apply flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors;
+  color: #475569;
 }
-
-.problems-hero {
-  position: relative;
-  overflow: hidden;
-  background: #f1f4f6 !important;
+html:not(.dark) .filter-item:hover {
+  background: #F1F5F9;
 }
-
-.problems-hero::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  opacity: 0.42;
-  background-image:
-    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(90deg, #000, transparent 78%);
+.dark .filter-item {
+  color: #CBD5E1;
 }
-
-.problems-hero > div {
-  position: relative;
-  z-index: 1;
+.dark .filter-item:hover {
+  background: #1E293B;
 }
-
-.problems-content {
-  padding-top: 2rem !important;
+.filter-item.active {
+  background: #EFF6FF;
+  color: #2563EB;
 }
-
-.problems-controls {
-  align-items: stretch;
+.dark .filter-item.active {
+  background: #172554;
+  color: #60A5FA;
 }
-
-.problems-controls input {
-  border-color: #c6cfd5 !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 8px 20px rgba(51, 65, 85, 0.08);
+.filter-scroll::-webkit-scrollbar {
+  width: 6px;
 }
-
-.problems-controls input:focus {
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+.filter-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
 }
-
-.problems-controls > div:last-child {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.problems-controls > div:last-child button {
-  border-color: #c6cfd5 !important;
-  background: #f7f9fa !important;
-  color: #52636e !important;
-}
-
-.problems-controls > div:last-child button:hover,
-.problems-controls > div:last-child button[class*="border-cyan"] {
-  border-color: #06b6d4 !important;
-  background: #e4f8fb !important;
-  color: #0e7490 !important;
-}
-
-.problems-list {
-  border-radius: 0.75rem !important;
-  border-color: #c6cfd5 !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
-}
-
-.problem-row {
-  position: relative;
-  min-height: 5.25rem;
-  border-color: #d8e0e4;
-}
-
-.problem-row::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  content: "";
-  background: #22d3ee;
-  transform: scaleY(0);
-  transition: transform 0.2s ease;
-}
-
-.problem-row:hover {
-  background: #eef7f9 !important;
-}
-
-.problem-row:hover::before {
-  transform: scaleY(1);
-}
-
-.problem-row > div:first-child > div:first-child > span:first-child {
-  color: #71828d;
-  letter-spacing: 0.08em;
-}
-
-.problem-row > div:first-child > div:nth-child(2) span {
-  border-radius: 0.35rem;
-  background: #e8edef;
-}
-
-html.dark .problems-hero {
-  background: #151b20 !important;
-}
-
-html.dark .problems-page {
-  --page-border: #35414a;
-  background: #101418 !important;
-}
-
-html.dark .problems-hero::after {
-  opacity: 0.3;
-  background-image:
-    linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
-}
-
-html.dark .problems-controls input {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: none;
-}
-
-html.dark .problems-controls > div:last-child button {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  color: #aebbc4 !important;
-}
-
-html.dark .problems-controls > div:last-child button:hover,
-html.dark .problems-controls > div:last-child button[class*="border-cyan"] {
-  border-color: #0891b2 !important;
-  background: #083344 !important;
-  color: #67e8f9 !important;
-}
-
-html.dark .problems-list {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
-}
-
-html.dark .problem-row {
-  border-color: #29343c;
-}
-
-html.dark .problem-row:hover {
-  background: #1d2930 !important;
-}
-
-html.dark .problem-row > div:first-child > div:nth-child(2) span {
-  background: #202c34;
-}
-
-@media (max-width: 640px) {
-  .problems-controls > div:last-child {
-    justify-content: flex-start;
-  }
-
-  .problem-row {
-    align-items: flex-start;
-    padding: 1rem !important;
-  }
+.dark .filter-scroll::-webkit-scrollbar-thumb {
+  background: #334155;
 }
 </style>

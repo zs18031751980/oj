@@ -179,7 +179,11 @@ class JudgeWorker:
 
         if submission:
             try:
-                db_status = Submission.AC if final_status == 'AC' else (Submission.WA if final_status == 'WA' else Submission.WA)
+                db_status = {
+                    'AC': Submission.AC,
+                    'WA': Submission.WA,
+                    'CE': Submission.CE,
+                }.get(final_status, Submission.WA)
                 submission.status = db_status
                 submission.time_used = total_time
                 submission.memory_used = 0

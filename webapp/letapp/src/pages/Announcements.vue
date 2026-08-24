@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { Icon } from '@iconify/vue';
-import { NButton } from 'naive-ui';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import MarkdownComponent from '../components/MarkdownComponent.vue';
@@ -39,6 +37,45 @@ const isDetailMode = computed(() => route.query.id !== undefined);
 const canManageAnnouncements = computed(
   () => authStore.userRole === 'manager' || authStore.userRole === 'staff',
 );
+
+// 分类推断（后端暂无 category 字段，用关键词启发）
+const categories = ['全部', '系统公告', '比赛公告', '更新日志', '活动通知'];
+const activeCategory = ref('全部');
+const categoryEmojis: Record<string, string> = {
+  '全部': '📋',
+  '系统公告': '📢',
+  '比赛公告': '🏆',
+  '更新日志': '🔄',
+  '活动通知': '🎉',
+};
+const inferCategory = (title: string): string => {
+  const t = title.toLowerCase();
+  if (t.includes('比赛') || t.includes('contest')) return '比赛公告';
+  if (t.includes('更新') || t.includes('update') || t.includes('日志')) return '更新日志';
+  if (t.includes('活动') || t.includes('event')) return '活动通知';
+  return '系统公告';
+};
+const getCategoryEmoji = (title: string) => categoryEmojis[inferCategory(title)] ?? '📢';
+const getCategoryColor = (title: string): string => {
+  const cat = inferCategory(title);
+  if (cat === '比赛公告') return 'bg-amber-50 dark:bg-amber-950/40';
+  if (cat === '更新日志') return 'bg-emerald-50 dark:bg-emerald-950/40';
+  if (cat === '活动通知') return 'bg-violet-50 dark:bg-violet-950/40';
+  return 'bg-[#EFF6FF] dark:bg-[#172554]';
+};
+const filteredAnnouncements = computed(() => {
+  const list = sortedAnnouncements.value;
+  if (activeCategory.value === '全部') return list;
+  return list.filter((a) => inferCategory(a.title) === activeCategory.value);
+});
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { '全部': sortedAnnouncements.value.length };
+  sortedAnnouncements.value.forEach((a) => {
+    const cat = inferCategory(a.title);
+    counts[cat] = (counts[cat] || 0) + 1;
+  });
+  return counts;
+});
 
 const formatTime = (dateStr?: string) => {
   if (!dateStr) return '时间未提供';
@@ -118,327 +155,125 @@ watch(
 </script>
 
 <template>
-  <div class="announcements-page flex min-h-[calc(100vh-var(--header-h,5rem))] flex-col bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.24),_transparent_34%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.18),_transparent_22%),linear-gradient(180deg,_#ecfeff_0%,_#f8fafc_52%,_#f8fafc_100%)] text-slate-950 transition-colors duration-300 dark:bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.16),_transparent_32%),radial-gradient(circle_at_85%_18%,_rgba(250,204,21,0.08),_transparent_22%),linear-gradient(180deg,_#020617_0%,_#020617_100%)] dark:text-slate-50">
+  <div class="announcements-page min-h-[calc(100vh-var(--header-h,4rem))] bg-[#F6F8FC] dark:bg-[#0F172A]">
+    <!-- ===== 列表视图 ===== -->
     <template v-if="!isDetailMode">
-      <div class="announcements-hero border-b border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="max-w-3xl">
-              <p class="text-sm font-black uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">Announcements</p>
-              <h1 class="mt-3 text-4xl font-black tracking-tight sm:text-5xl">公告</h1>
-            </div>
-            <div class="flex items-center gap-3">
-              <NButton v-if="canManageAnnouncements" secondary @click="openManager">
-                <template #icon>
-                  <Icon icon="material-symbols:settings-outline-rounded" />
-                </template>
-                管理公告
-              </NButton>
-              <span class="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-bold text-cyan-700 dark:bg-cyan-900/60 dark:text-cyan-300">
-                {{ sortedAnnouncements.length }} 条公告
-              </span>
-            </div>
+      <div class="app-container-with-sidebar py-6">
+        <!-- 左侧分类栏 240px -->
+        <aside class="app-sidebar-col">
+          <div class="ui-card space-y-1 p-3">
+            <button
+              v-for="cat in categories"
+              :key="cat"
+              class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition"
+              :class="activeCategory === cat
+                ? 'bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]'
+                : 'text-[#475569] hover:bg-[#F1F5F9] dark:text-[#94A3B8] dark:hover:bg-[#1E293B]'"
+              @click="activeCategory = cat"
+            >
+              <span class="text-lg shrink-0">{{ categoryEmojis[cat] }}</span>
+              <span class="min-w-0 flex-1">{{ cat }}</span>
+              <span class="shrink-0 text-xs font-bold text-[#94A3B8]">{{ categoryCounts[cat] || 0 }}</span>
+            </button>
           </div>
-        </div>
-      </div>
+        </aside>
 
-        <div class="announcements-content flex-1 overflow-y-auto">
-          <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div v-if="isLoadingList" class="flex min-h-72 items-center justify-center text-slate-500 dark:text-slate-400">
-              正在加载公告列表...
+        <!-- 右侧内容区 -->
+        <section class="min-w-0 flex-1">
+          <!-- 标题区 -->
+          <div class="mb-4">
+            <div class="flex items-center gap-3">
+              <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">公告中心</h1>
+              <span class="ui-badge ui-badge-blue">{{ filteredAnnouncements.length }} 条</span>
             </div>
-            <div v-else-if="listError" class="flex min-h-72 flex-col items-center justify-center gap-4 px-4 text-center">
-              <Icon icon="material-symbols:error-outline-rounded" class="h-10 w-10 text-rose-500" />
-              <p class="max-w-xl text-sm text-rose-600 dark:text-rose-400">{{ listError }}</p>
-              <NButton secondary @click="loadAnnouncements">
-                <template #icon>
-                  <Icon icon="material-symbols:refresh-rounded" />
-                </template>
-                重试
-              </NButton>
-            </div>
-            <div v-else-if="sortedAnnouncements.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-              <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-[2rem] border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
-                <Icon icon="material-symbols:campaign-outline" width="32" height="32" class="text-slate-400 dark:text-slate-500" />
-              </div>
-              <p class="text-lg font-bold text-slate-500 dark:text-slate-400">暂无公告</p>
-              <p class="mt-2 text-sm text-slate-400 dark:text-slate-500">请稍后再来看看</p>
-            </div>
-            <div v-else class="announcements-grid grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <button
-                v-for="item in sortedAnnouncements"
-                :key="item.id"
-                type="button"
-                class="announcement-card group"
-                @click="openAnnouncement(item)"
-              >
-                <div class="card-content">
-                  <div class="card-title">{{ item.title }}</div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="card-time">
-                      {{ formatTime(item.updated_at || item.published_at || item.created_at) }}
-                    </span>
-                  </div>
-                </div>
-                <div class="card-arrow">
-                  <Icon icon="material-symbols:open-in-new" class="h-4 w-4" />
-                </div>
+            <p class="ui-section-sub mt-1">平台通知与最新动态</p>
+            <div v-if="canManageAnnouncements" class="mt-3">
+              <button class="ui-btn ui-btn-secondary ui-btn-sm" @click="openManager">
+                ⚙️ 管理公告
               </button>
             </div>
           </div>
-        </div>
-      </template>
 
-      <template v-else>
-        <div class="announcement-detail mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-          <div class="detail-toolbar mb-6 flex flex-wrap items-center justify-between gap-4">
+          <!-- 加载骨架 -->
+          <div v-if="isLoadingList" class="space-y-3">
+            <div v-for="i in 5" :key="i" class="ui-skeleton h-24 w-full rounded-xl"></div>
+          </div>
+
+          <!-- 错误 -->
+          <div v-else-if="listError" class="ui-empty">
+            <span class="mb-2 text-5xl">❌</span>
+            <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
+            <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">{{ listError }}</p>
+            <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadAnnouncements">重试</button>
+          </div>
+
+          <!-- 空态 -->
+          <div v-else-if="filteredAnnouncements.length === 0" class="ui-empty">
+            <span class="mb-2 text-5xl">📭</span>
+            <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无公告</p>
+          </div>
+
+          <!-- 公告列表（条目 92-112px） -->
+          <div v-else class="space-y-2">
             <button
-              class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
-              @click="goBackToList"
+              v-for="item in filteredAnnouncements"
+              :key="item.id"
+              type="button"
+              class="announcement-item group flex w-full items-center gap-4 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:border-[#2563EB]/30 hover:shadow-sm dark:border-[#1E293B] dark:bg-[#111827] dark:hover:border-[#60A5FA]/30"
+              @click="openAnnouncement(item)"
             >
-              <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
-              返回公告列表
+              <!-- 左侧图标 48px -->
+              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl" :class="getCategoryColor(item.title)">
+                {{ getCategoryEmoji(item.title) }}
+              </span>
+              <!-- 中间标题+摘要 -->
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-base font-bold text-[#1E293B] transition group-hover:text-[#2563EB] dark:text-[#E5E7EB] dark:group-hover:text-[#60A5FA]">{{ item.title }}</p>
+                <p class="mt-0.5 line-clamp-1 text-xs text-[#64748B] dark:text-[#94A3B8]">{{ item.content }}</p>
+              </div>
+              <!-- 右侧日期 ~120px -->
+              <span class="shrink-0 text-right text-xs text-[#94A3B8]" style="width:120px">
+                {{ formatTime(item.updated_at || item.published_at || item.created_at) }}
+              </span>
             </button>
           </div>
-
-          <div class="announcement-document overflow-hidden rounded-[2rem] border border-slate-200 bg-white/85 shadow-xl shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20">
-            <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-slate-500 dark:text-slate-400">
-              正在加载公告内容...
-            </div>
-            <div v-else-if="detailError" class="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-              <Icon icon="material-symbols:error-outline-rounded" class="h-10 w-10 text-rose-500" />
-              <p class="text-rose-600 dark:text-rose-400">{{ detailError }}</p>
-              <NButton v-if="currentAnnouncementId" secondary @click="loadSelectedAnnouncement">
-                <template #icon>
-                  <Icon icon="material-symbols:refresh-rounded" />
-                </template>
-                重试
-              </NButton>
-            </div>
-            <MarkdownComponent v-else :content="selectedContent" :show-nav="false" :show-heading-links="false" />
-          </div>
+        </section>
       </div>
     </template>
 
-    <template v-if="!isDetailMode">
-      <footer class="border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl dark:border-slate-800/50 dark:bg-slate-950/50">
-        <div class="mx-auto max-w-7xl px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
-          Let Coding — Announcements
+    <!-- ===== 详情视图 ===== -->
+    <template v-else>
+      <div class="mx-auto max-w-[880px] px-6 py-8">
+        <button class="ui-btn ui-btn-secondary ui-btn-md mb-6" @click="goBackToList">
+          ← 返回公告列表
+        </button>
+
+        <div class="ui-card overflow-hidden !p-0">
+          <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-[#64748B] dark:text-[#94A3B8]">
+            正在加载公告内容...
+          </div>
+          <div v-else-if="detailError" class="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
+            <span class="text-5xl">⚠️</span>
+            <p class="text-rose-600 dark:text-rose-400">{{ detailError }}</p>
+            <button v-if="currentAnnouncementId" class="ui-btn ui-btn-secondary ui-btn-sm" @click="loadSelectedAnnouncement">
+              🔄 重试
+            </button>
+          </div>
+          <div v-else class="px-10 py-10 sm:px-16">
+            <div class="mb-6 border-b border-[#E2E8F0] pb-4 dark:border-[#1E293B]">
+              <h2 class="text-[30px] font-black leading-tight text-[#1E293B] dark:text-[#E5E7EB]">{{ selectedContent?.title }}</h2>
+              <p class="mt-2 text-sm font-medium text-[#64748B] dark:text-[#94A3B8]">
+                {{ formatTime(selectedContent?.date) }}
+              </p>
+            </div>
+            <MarkdownComponent :content="selectedContent" :show-nav="false" :show-heading-links="false" />
+          </div>
         </div>
-      </footer>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 @reference 'tailwindcss';
-
-.announcement-card {
-  @apply relative flex min-h-[7.5rem] items-start justify-between rounded-[1.75rem] border border-slate-200 bg-white/85 p-6 text-left shadow-lg shadow-slate-200/60 backdrop-blur-2xl transition hover:-translate-y-1 hover:shadow-xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20;
-}
-
-.card-content {
-  @apply flex min-w-0 flex-1 flex-col gap-2;
-}
-
-.card-title {
-  @apply text-base font-black leading-snug text-slate-950 transition group-hover:text-cyan-600 dark:text-white dark:group-hover:text-cyan-400 line-clamp-3;
-}
-
-.card-time {
-  @apply text-xs font-medium text-slate-400 dark:text-slate-500;
-}
-
-.card-arrow {
-  @apply ml-3 mt-1 shrink-0 text-slate-300 transition group-hover:text-cyan-500 dark:text-slate-600 dark:group-hover:text-cyan-400;
-}
-</style>
-
-<style>
-.announcements-page {
-  --page-border: #c7d2da;
-  background: #e8ecef !important;
-}
-
-html:not(.dark) .announcement-card {
-  background-color: #ffffff !important;
-  border-color: #e2e8f0 !important;
-  color: #0f172a !important;
-}
-
-html.dark .announcement-card {
-  background-color: #0f172a !important;
-  border-color: #1e293b !important;
-  color: #f8fafc !important;
-}
-
-html:not(.dark) .announcement-card:hover {
-  border-color: #7dd3fc !important;
-}
-
-html.dark .announcement-card:hover {
-  border-color: #155e75 !important;
-}
-
-html:not(.dark) .announcement-card .card-title {
-  color: #0f172a !important;
-}
-
-html.dark .announcement-card .card-title {
-  color: #f8fafc !important;
-}
-
-html:not(.dark) .announcement-card:hover .card-title {
-  color: #0891b2 !important;
-}
-
-html.dark .announcement-card:hover .card-title {
-  color: #67e8f9 !important;
-}
-
-.announcements-hero {
-  position: relative;
-  overflow: hidden;
-  background: #f1f4f6 !important;
-}
-
-.announcements-hero::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  opacity: 0.42;
-  background-image:
-    linear-gradient(rgba(14, 116, 144, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14, 116, 144, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(90deg, #000, transparent 78%);
-}
-
-.announcements-hero > div {
-  position: relative;
-  z-index: 1;
-}
-
-.announcements-content {
-  padding-top: 2rem;
-}
-
-.announcements-grid {
-  align-items: stretch;
-}
-
-.announcement-card {
-  min-height: 10rem;
-  justify-content: space-between;
-  border-radius: 0.75rem !important;
-  border-color: #c6cfd5 !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 16px 35px rgba(51, 65, 85, 0.1) !important;
-}
-
-.announcement-card::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 2px;
-  content: "";
-  background: #22d3ee;
-  transform: scaleX(0.2);
-  transform-origin: left;
-  transition: transform 0.25s ease;
-}
-
-.announcement-card:hover {
-  transform: translateY(-4px);
-  border-color: #06b6d4 !important;
-  background: #eef7f9 !important;
-  box-shadow: 0 20px 42px rgba(14, 116, 144, 0.16) !important;
-}
-
-.announcement-card:hover::before {
-  transform: scaleX(1);
-}
-
-.card-title {
-  max-width: 26rem;
-  line-height: 1.35;
-}
-
-.card-time {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  letter-spacing: 0.04em;
-}
-
-.card-time::before {
-  width: 0.35rem;
-  height: 0.35rem;
-  border-radius: 50%;
-  background: #22d3ee;
-  content: "";
-}
-
-.announcement-detail {
-  padding-top: 2rem;
-}
-
-.announcement-detail > .detail-toolbar {
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #c6cfd5;
-}
-
-.announcement-document {
-  border-radius: 0.75rem !important;
-  border-color: #c6cfd5 !important;
-  background: #f7f9fa !important;
-  box-shadow: 0 20px 50px rgba(51, 65, 85, 0.1) !important;
-}
-
-html.dark .announcements-hero {
-  background: #151b20 !important;
-}
-
-html.dark .announcements-page {
-  --page-border: #35414a;
-  background: #101418 !important;
-}
-
-html.dark .announcements-hero::after {
-  opacity: 0.3;
-  background-image:
-    linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px);
-}
-
-html.dark .announcement-card {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: none !important;
-}
-
-html.dark .announcement-card:hover {
-  border-color: #0891b2 !important;
-  background: #1d2930 !important;
-  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.24) !important;
-}
-
-html.dark .announcement-detail > .detail-toolbar {
-  border-color: #35414a;
-}
-
-html.dark .announcement-document {
-  border-color: #35414a !important;
-  background: #151b20 !important;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22) !important;
-}
-
-@media (max-width: 640px) {
-  .announcement-card {
-    min-height: 8.5rem;
-  }
-}
 </style>

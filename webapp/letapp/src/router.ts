@@ -44,6 +44,54 @@ const routes = [
         meta: { title: '公告 - Let Coding' },
         component: () => import('./pages/Announcements.vue'),
       },
+      {
+        path: '/contests',
+        name: 'Contests',
+        meta: { title: '比赛 - Let Coding' },
+        component: () => import('./pages/Contests.vue'),
+      },
+      {
+        path: '/contests/:id',
+        name: 'ContestDetail',
+        meta: { title: '比赛详情 - Let Coding' },
+        component: () => import('./pages/ContestDetail.vue'),
+      },
+      {
+        path: '/contests/:contestId/problems/:problemId',
+        name: 'ContestProblemDetail',
+        meta: { title: '比赛题目 - Let Coding' },
+        component: () => import('./pages/ContestProblemDetail.vue'),
+      },
+      {
+        path: '/rankings',
+        name: 'Rankings',
+        meta: { title: '排行榜 - Let Coding' },
+        component: () => import('./pages/Rankings.vue'),
+      },
+      {
+        path: '/discussion',
+        name: 'Discussion',
+        meta: { title: '讨论 - Let Coding' },
+        component: () => import('./pages/Discussion.vue'),
+      },
+      {
+        path: '/submissions',
+        name: 'Submissions',
+        meta: { title: '提交记录 - Let Coding', requiresAuth: true },
+        component: () => import('./pages/Submissions.vue'),
+      },
+      {
+        path: '/favorites',
+        name: 'Favorites',
+        meta: { title: '收藏题目 - Let Coding', requiresAuth: true },
+        component: () => import('./pages/Favorites.vue'),
+      },
+      {
+        path: '/profile',
+        name: 'Profile',
+        meta: { title: '个人中心 - Let Coding', requiresAuth: true },
+        component: () => import('./pages/Profile.vue'),
+      },
     ],
   },
   {
@@ -96,11 +144,18 @@ const routes = [
         meta: { title: '公告管理 - Let Coding 管理后台' },
         component: () => import('./pages/admin/Announcements.vue'),
       },
+      {
+        path: 'contests',
+        name: 'AdminContests',
+        meta: { title: '比赛管理 - Let Coding 管理后台' },
+        component: () => import('./pages/admin/Contests.vue'),
+      },
     ],
   },
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/',
+    name: 'not-found',
+    component: () => import('./pages/NotFound.vue'),
   },
 ];
 
