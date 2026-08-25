@@ -13,7 +13,7 @@ const navMenu = markRaw([
   { title: '仪表盘', icon: 'material-symbols:dashboard', route: '/admin/dashboard' },
   { title: '用户管理', icon: 'material-symbols:group', route: '/admin/users' },
   { title: '公告管理', icon: 'material-symbols:campaign-rounded', route: '/admin/announcements' },
-  { title: '比赛管理', icon: 'material-symbols:emoji-events-rounded', route: '/admin/contests' },
+  { title: '比赛管理', icon: 'material-symbols:emoji-events', route: '/admin/contests' },
 ]);
 
 const activePath = computed(() => route.path);

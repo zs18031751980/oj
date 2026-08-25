@@ -7,7 +7,7 @@
       class="fixed inset-x-0 top-0 z-50 h-[var(--header-h,4rem)] border-b border-[#E2E8F0] bg-[#F6F8FC]/90 backdrop-blur-xl transition-colors dark:border-[#1E293B] dark:bg-[#0F172A]/90"
     >
       <div
-        class="mx-auto flex h-full max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8"
+        class="mx-auto flex h-full max-w-[1440px] items-center gap-4 px-4 sm:px-6 lg:px-8"
       >
         <router-link to="/" class="flex shrink-0 items-center gap-2.5">
           <img
@@ -19,7 +19,7 @@
         </router-link>
 
         <nav
-          class="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex"
+          class="hidden shrink items-center gap-1 md:flex"
         >
           <router-link
             v-for="item in navItems"
@@ -34,7 +34,7 @@
           </router-link>
         </nav>
 
-        <div class="flex shrink-0 items-center gap-2">
+        <div class="flex flex-1 items-center justify-end gap-2">
           <div class="relative hidden xl:flex">
             <Icon icon="material-symbols:search-rounded" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
             <input
