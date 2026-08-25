@@ -196,6 +196,22 @@ const regenerateTestcases = async (problemId: number) => {
   }
 };
 
+// 删除比赛
+const deleteContest = async (id: number, title: string) => {
+  if (!confirm(`确定删除比赛「${title}」？此操作不可恢复！`)) return;
+  try {
+    await apiRequest(`/admin/contests/${id}`, { method: 'DELETE' });
+    message.success('比赛已删除');
+    if (selectedContestId.value === id) {
+      selectedContestId.value = null;
+      selectedContest.value = null;
+    }
+    await loadContests();
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '删除失败');
+  }
+};
+
 const difficultyClass = (d: string) =>
   d === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
   : d === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
@@ -284,7 +300,13 @@ onMounted(loadContests);
             </div>
             <p class="mt-1 text-sm text-[#64748B]">{{ c.participants_count || 0 }} 人参与</p>
           </div>
-          <span class="text-[#94A3B8]">→</span>
+          <div class="flex items-center gap-2">
+            <button
+              class="ui-btn ui-btn-ghost ui-btn-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+              @click.stop="deleteContest(c.id, c.title)"
+            >删除</button>
+            <span class="text-[#94A3B8]">→</span>
+          </div>
         </div>
       </div>
     </div>
