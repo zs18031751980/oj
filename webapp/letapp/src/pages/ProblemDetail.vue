@@ -95,16 +95,16 @@ const problemLoadError = ref('');
 const activeTab = ref<'desc' | 'submissions' | 'hints'>('desc');
 
 /* ============ 代码 / 编辑器 ============ */
-const language = ref('cpp');
-const code = ref('');
-const editorRef = ref<any>(null);
-
 const languageTemplates: Record<string, string> = markRaw({
   c: '#include <stdio.h>\n\nint main(void) {\n  // 在此编写代码\n  return 0;\n}',
   cpp: '#include <iostream>\nusing namespace std;\n\nint main() {\n  // 在此编写代码\n  return 0;\n}',
   python: '# 在此编写代码\n',
   java: 'public class Main {\n  public static void main(String[] args) {\n    // 在此编写代码\n  }\n}',
 });
+const language = ref('cpp');
+const code = ref(languageTemplates['cpp'] || '');
+const editorRef = ref<any>(null);
+
 const langOptions = markRaw([
   { value: 'c', label: 'C' },
   { value: 'cpp', label: 'C++' },
@@ -738,6 +738,8 @@ onMounted(async () => {
   MonacoEditorComp.value = monacoMod.default;
   MarkdownComp.value = mdMod.default;
   loadProblem();
+  const saved = await loadCode(problemId.value, language.value);
+  if (saved) code.value = saved;
   window.addEventListener('keydown', handleKeyboard);
   document.addEventListener('fullscreenchange', onFullscreenChange);
 });

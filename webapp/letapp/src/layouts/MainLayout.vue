@@ -9,14 +9,14 @@
       <div
         class="mx-auto flex h-full max-w-[1440px] items-center gap-4 px-4 sm:px-6 lg:px-8"
       >
-        <router-link to="/" class="flex shrink-0 items-center gap-2.5">
+        <a href="https://www.xauat.site/" target="_blank" rel="noopener" class="flex shrink-0 items-center gap-2.5">
           <img
             src="/assets/logo.png"
             alt="Let Coding Logo"
             class="h-9 w-9 rounded-xl object-cover shadow-sm"
           />
           <span class="text-lg font-black tracking-tight">Let Coding</span>
-        </router-link>
+        </a>
 
         <nav
           class="hidden shrink items-center gap-1 md:flex"
