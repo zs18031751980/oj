@@ -911,11 +911,12 @@ onUnmounted(() => {
                       <Icon icon="material-symbols:play-arrow" class="h-4 w-4" />运行此样例
                     </button>
                   </div>
-                  <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="sample-io-row">
                     <div class="sample-io">
                       <div class="sample-io-head">输入<button class="copy-btn" @click="copyText(sample.input)">复制</button></div>
                       <pre class="sample-io-body">{{ sample.input }}</pre>
                     </div>
+                    <div class="sample-io-divider"></div>
                     <div class="sample-io">
                       <div class="sample-io-head">输出<button class="copy-btn" @click="copyText(sample.output)">复制</button></div>
                       <pre class="sample-io-body">{{ sample.output }}</pre>
@@ -1677,6 +1678,37 @@ onUnmounted(() => {
 }
 :global(.dark) .sample-run:hover {
   background: #172554;
+}
+.sample-io-row {
+  display: flex;
+  min-height: 6rem;
+}
+.sample-io-row .sample-io {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sample-io-row .sample-io-body {
+  flex: 1;
+}
+.sample-io-divider {
+  width: 1px;
+  background: #e2e8f0;
+  align-self: stretch;
+}
+:global(.dark) .sample-io-divider {
+  background: #1e293b;
+}
+@media (max-width: 480px) {
+  .sample-io-row {
+    flex-direction: column;
+    min-height: auto;
+  }
+  .sample-io-divider {
+    width: 100%;
+    height: 1px;
+  }
 }
 .sample-io {
   display: flex;
