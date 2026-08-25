@@ -33,9 +33,17 @@ const EMPTY_FORM: AnnouncementForm = {
   id: 0,
   title: '',
   content: '',
+  category: '系统公告',
   permission: 'member',
   is_published: true,
 };
+
+const announcementCategories = [
+  { value: '系统公告', label: '系统公告', emoji: '📢' },
+  { value: '比赛公告', label: '比赛公告', emoji: '🏆' },
+  { value: '更新公告', label: '更新公告', emoji: '🔄' },
+  { value: '活动通知', label: '活动通知', emoji: '🎉' },
+];
 
 const authStore = useAuthStore();
 const dialog = useDialog();
@@ -110,6 +118,7 @@ const save = async () => {
   const input: AnnouncementInput = {
     title: form.value.title.trim(),
     content: form.value.content,
+    category: form.value.category,
     permission: form.value.permission,
     is_published: form.value.is_published,
   };
@@ -154,6 +163,13 @@ const confirmDelete = (item: AnnouncementData) => {
     negativeText: '取消',
     onPositiveClick: () => performDelete(item),
   });
+};
+
+const categoryBadgeClass = (cat?: string) => {
+  if (cat === '比赛公告') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300';
+  if (cat === '更新公告') return 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300';
+  if (cat === '活动通知') return 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300';
+  return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
 };
 
 onMounted(loadList);
@@ -220,6 +236,22 @@ onMounted(loadList);
         show-count
       />
 
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <span class="text-sm font-bold text-slate-600 dark:text-slate-300">分类</span>
+        <button
+          v-for="cat in announcementCategories"
+          :key="cat.value"
+          type="button"
+          class="cat-btn"
+          :class="form.category === cat.value ? 'cat-btn-active' : ''"
+          :disabled="saving"
+          @click="form.category = cat.value"
+        >
+          <span class="cat-btn-emoji">{{ cat.emoji }}</span>
+          {{ cat.label }}
+        </button>
+      </div>
+
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section class="editor-pane" aria-label="原始 Markdown">
           <div class="pane-heading">
@@ -284,6 +316,12 @@ onMounted(loadList);
             <h2 class="min-w-0 truncate text-base font-black text-slate-950 dark:text-white">
               {{ item.title }}
             </h2>
+            <span
+              class="shrink-0 rounded px-2 py-0.5 text-xs font-bold"
+              :class="categoryBadgeClass(item.category)"
+            >
+              {{ item.category || '系统公告' }}
+            </span>
             <span
               class="shrink-0 rounded px-2 py-0.5 text-xs font-bold"
               :class="item.is_published
@@ -427,5 +465,45 @@ onMounted(loadList);
 .admin-btn-icon {
   width: 16px;
   height: 16px;
+}
+.cat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.cat-btn:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+.cat-btn-active {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+:global(.dark) .cat-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #94a3b8;
+}
+:global(.dark) .cat-btn:hover {
+  background: #334155;
+  color: #cbd5e1;
+}
+:global(.dark) .cat-btn-active {
+  color: #60a5fa;
+  background: #172554;
+  border-color: #2563eb;
+}
+.cat-btn-emoji {
+  font-size: 0.875rem;
 }
 </style>

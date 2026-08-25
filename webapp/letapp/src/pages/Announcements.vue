@@ -42,7 +42,7 @@ const canManageAnnouncements = computed(
   () => authStore.userRole === 'manager',
 );
 
-// 分类推断（后端暂无 category 字段，用关键词启发）
+// 分类：优先使用后端存储的 category，兼容旧数据的标题推断
 const categories = ['全部', '系统公告', '比赛公告', '更新日志', '活动通知'];
 const activeCategory = ref('全部');
 const categoryEmojis: Record<string, string> = {
@@ -52,16 +52,17 @@ const categoryEmojis: Record<string, string> = {
   '更新日志': '🔄',
   '活动通知': '🎉',
 };
-const inferCategory = (title: string): string => {
-  const t = title.toLowerCase();
+const inferCategory = (item: { category?: string; title: string }): string => {
+  if (item.category) return item.category;
+  const t = item.title.toLowerCase();
   if (t.includes('比赛') || t.includes('contest')) return '比赛公告';
   if (t.includes('更新') || t.includes('update') || t.includes('日志')) return '更新日志';
   if (t.includes('活动') || t.includes('event')) return '活动通知';
   return '系统公告';
 };
-const getCategoryEmoji = (title: string) => categoryEmojis[inferCategory(title)] ?? '📢';
-const getCategoryColor = (title: string): string => {
-  const cat = inferCategory(title);
+const getCategoryEmoji = (item: { category?: string; title: string }) => categoryEmojis[inferCategory(item)] ?? '📢';
+const getCategoryColor = (item: { category?: string; title: string }): string => {
+  const cat = inferCategory(item);
   if (cat === '比赛公告') return 'bg-amber-50 dark:bg-amber-950/40';
   if (cat === '更新日志') return 'bg-emerald-50 dark:bg-emerald-950/40';
   if (cat === '活动通知') return 'bg-violet-50 dark:bg-violet-950/40';
@@ -70,12 +71,12 @@ const getCategoryColor = (title: string): string => {
 const filteredAnnouncements = computed(() => {
   const list = sortedAnnouncements.value;
   if (activeCategory.value === '全部') return list;
-  return list.filter((a) => inferCategory(a.title) === activeCategory.value);
+  return list.filter((a) => inferCategory(a) === activeCategory.value);
 });
 const categoryCounts = computed(() => {
   const counts: Record<string, number> = { '全部': sortedAnnouncements.value.length };
   sortedAnnouncements.value.forEach((a) => {
-    const cat = inferCategory(a.title);
+    const cat = inferCategory(a);
     counts[cat] = (counts[cat] || 0) + 1;
   });
   return counts;
@@ -227,8 +228,8 @@ watch(
               @click="openAnnouncement(item)"
             >
               <!-- 左侧图标 48px -->
-              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl" :class="getCategoryColor(item.title)">
-                {{ getCategoryEmoji(item.title) }}
+              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl" :class="getCategoryColor(item)">
+                {{ getCategoryEmoji(item) }}
               </span>
               <!-- 中间标题+摘要 -->
               <div class="min-w-0 flex-1">

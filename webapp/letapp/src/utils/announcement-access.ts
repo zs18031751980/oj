@@ -20,6 +20,7 @@ export const announcementToForm = (
   id: item.id,
   title: item.title,
   content: item.content,
+  category: item.category || '系统公告',
   permission: item.permission || 'member',
   is_published: item.is_published,
 });

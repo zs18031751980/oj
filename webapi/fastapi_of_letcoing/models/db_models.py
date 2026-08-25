@@ -641,6 +641,12 @@ _SCHEMA_MIGRATIONS = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS bio VARCHAR(500);",
         ],
     ),
+    (
+        "0006_announcement_category",
+        [
+            "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT '系统公告';",
+        ],
+    ),
 ]
 
 

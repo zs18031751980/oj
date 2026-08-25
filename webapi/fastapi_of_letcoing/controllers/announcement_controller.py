@@ -11,6 +11,7 @@ announcement_model = api.model('Announcement', {
     'id': fields.Integer(description='公告ID'),
     'title': fields.String(required=True, description='公告标题'),
     'content': fields.String(required=True, description='Markdown 内容'),
+    'category': fields.String(default='系统公告', description='分类(系统公告/比赛公告/更新公告/活动通知)'),
     'permission': fields.String(default='member', description='访问权限'),
     'is_published': fields.Boolean(default=True, description='是否发布'),
     'published_at': fields.String(description='发布时间'),
@@ -21,6 +22,7 @@ announcement_model = api.model('Announcement', {
 announcement_input = api.model('AnnouncementInput', {
     'title': fields.String(required=True, description='公告标题'),
     'content': fields.String(required=True, description='Markdown 内容'),
+    'category': fields.String(default='系统公告', description='分类(系统公告/比赛公告/更新公告/活动通知)'),
     'permission': fields.String(default='member', description='访问权限'),
     'is_published': fields.Boolean(default=True, description='是否发布'),
 })
@@ -99,6 +101,7 @@ class AnnouncementListController(Resource):
         announcement = Announcement.create(
             title=title,
             content=content,
+            category=data.get('category', '系统公告'),
             permission=data.get('permission', 'member'),
             is_published=data.get('is_published', True),
             created_by=result.get('id'),
@@ -152,6 +155,8 @@ class AnnouncementDetailController(Resource):
             announcement.content = content
         if 'permission' in data:
             announcement.permission = data['permission']
+        if 'category' in data:
+            announcement.category = data['category']
         if 'is_published' in data:
             if not isinstance(data['is_published'], bool):
                 return {'error': 'is_published 必须是布尔值'}, 400

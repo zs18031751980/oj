@@ -205,6 +205,7 @@ export interface AnnouncementData {
   id: number;
   title: string;
   content: string;
+  category?: string;
   permission?: string;
   is_published: boolean;
   published_at?: string;
@@ -216,6 +217,7 @@ export interface AnnouncementForm {
   id: number;
   title: string;
   content: string;
+  category: string;
   permission: string;
   is_published: boolean;
 }
