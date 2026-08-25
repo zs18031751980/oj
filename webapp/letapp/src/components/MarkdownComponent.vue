@@ -55,6 +55,10 @@ const props = withDefaults(defineProps<{
 const route = useRoute();
 const headings = ref<HeadingItem[]>([]);
 const html = ref('');
+const readingProgress = ref(0);
+const activeHeadingId = ref('');
+const markdownBody = ref<HTMLElement | null>(null);
+const copiedIndex = ref<number | null>(null);
 
 const normalizeLanguage = (language: string) => {
   const aliases: Record<string, string> = {
@@ -109,7 +113,8 @@ const md = new MarkdownIt({
     }
 
     const highlighted = highlightSafe(code, targetLang);
-    return `<pre class="language-${targetLang}"><code class="language-${targetLang}">${highlighted}</code></pre>`;
+    const escapedCode = code.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return `<div class="code-block-wrapper" data-lang="${targetLang}"><div class="code-block-header"><span class="code-lang-label">${targetLang}</span><button class="code-copy-btn" onclick="window.__copyCode(this)" data-code="${escapedCode}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> 复制</button></div><pre class="language-${targetLang}"><code class="language-${targetLang}">${highlighted}</code></pre></div>`;
   },
 });
 
@@ -117,7 +122,7 @@ md.use(markdownItAnchor, {
   permalink: markdownItAnchor.permalink.ariaHidden({
     placement: 'before',
     space: true,
-    class: 'apple-link-no-icon',
+    class: 'heading-anchor',
     renderHref: (href: string) => `${route.path}#${href}`,
   }),
 });
@@ -219,10 +224,45 @@ const render = async (markdown: string) => {
   const renderedHtml = md.render(markdown);
   const finalHtml = props.showHeadingLinks
     ? renderedHtml
-    : renderedHtml.replace(/<a\b[^>]*class="[^"]*apple-link-no-icon[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
+    : renderedHtml.replace(/<a\b[^>]*class="[^"]*heading-anchor[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
   await nextTick();
-  setTimeout(() => Prism.highlightAll(), 50);
+  setTimeout(() => {
+    Prism.highlightAll();
+    processCodeBlocks();
+  }, 50);
   return finalHtml;
+};
+
+const processCodeBlocks = () => {
+  if (!markdownBody.value) return;
+  const blocks = markdownBody.value.querySelectorAll('.code-block-wrapper');
+  blocks.forEach((block) => {
+    const btn = block.querySelector('.code-copy-btn');
+    if (btn && !btn.getAttribute('data-bound')) {
+      btn.setAttribute('data-bound', 'true');
+    }
+  });
+};
+
+const copyCode = async (code: string, index?: number) => {
+  try {
+    await navigator.clipboard.writeText(code);
+    if (typeof index === 'number') {
+      copiedIndex.value = index;
+      setTimeout(() => { copiedIndex.value = null; }, 2000);
+    }
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = code;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    if (typeof index === 'number') {
+      copiedIndex.value = index;
+      setTimeout(() => { copiedIndex.value = null; }, 2000);
+    }
+  }
 };
 
 watch(
@@ -246,68 +286,108 @@ const handleAnchorClick = (event: Event, href: string) => {
   }
 };
 
+let scrollTicking = false;
+
 const handleScroll = () => {
-  const articleHeadings = document.querySelectorAll('.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4, .markdown-content h5, .markdown-content h6');
-  let activeHeadingId = '';
+  if (scrollTicking) return;
+  scrollTicking = true;
 
-  for (let i = articleHeadings.length - 1; i >= 0; i -= 1) {
-    const heading = articleHeadings[i];
-    if (heading && heading.getBoundingClientRect().top <= 120) {
-      activeHeadingId = heading.id;
-      break;
+  requestAnimationFrame(() => {
+    const scrollTop = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+    readingProgress.value = docHeight > 0 ? Math.min((scrollTop / docHeight) * 100, 100) : 0;
+
+    const articleHeadings = document.querySelectorAll('.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4, .markdown-content h5, .markdown-content h6');
+    let foundId = '';
+
+    for (let i = articleHeadings.length - 1; i >= 0; i -= 1) {
+      const heading = articleHeadings[i];
+      if (heading && heading.getBoundingClientRect().top <= 120) {
+        foundId = heading.id;
+        break;
+      }
     }
-  }
 
-  document.querySelectorAll('.toc-link').forEach((link) => {
-    link.classList.toggle('active', link.getAttribute('href') === `#${activeHeadingId}`);
+    activeHeadingId.value = foundId;
+    scrollTicking = false;
   });
 };
 
 onMounted(() => {
-  window.addEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll, { passive: true });
+  (window as any).__copyCode = (btn: HTMLElement) => {
+    const code = btn.getAttribute('data-code') || '';
+    const decoded = code.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    copyCode(decoded);
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已复制';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+      btn.classList.remove('copied');
+    }, 2000);
+  };
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
+  delete (window as any).__copyCode;
 });
 </script>
 
 <template>
-  <div v-if="content" class="flex flex-col md:flex-row">
-    <div class="w-full p-4 md:p-8" :class="[showNav && headings.length > 0 ? 'md:w-4/5' : 'md:w-full']">
-      <article class="markdown-article prose max-w-none">
-        <header v-if="hasHeaderMeta" class="mb-8 border-b border-slate-200 pb-6 dark:border-slate-800">
-          <h1 class="mb-4 text-3xl font-black text-slate-950 dark:text-white md:text-4xl">
+  <div v-if="content" class="learn-reader-layout">
+    <!-- 阅读进度条 -->
+    <div class="reading-progress-track">
+      <div class="reading-progress-bar" :style="{ width: readingProgress + '%' }"></div>
+    </div>
+
+    <!-- 正文区域 -->
+    <div class="learn-reader-main" :class="[showNav && headings.length > 0 ? 'has-toc' : 'no-toc']">
+      <article class="markdown-article">
+        <header v-if="hasHeaderMeta" class="article-header">
+          <h1 class="article-title">
             {{ content.title }}
           </h1>
-          <div class="flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-            <time class="flex items-center gap-1">
-              <Icon icon="mdi:calendar" width="16" height="16" />
+          <div class="article-meta">
+            <time v-if="date" class="meta-item">
+              <Icon icon="mdi:calendar" width="15" height="15" />
               {{ date }}
             </time>
-            <span class="flex items-center gap-1">
-              <Icon icon="mdi:eye" width="16" height="16" />
+            <span v-if="content?.watch" class="meta-item">
+              <Icon icon="mdi:eye" width="15" height="15" />
+              {{ content.watch }}
             </span>
           </div>
         </header>
 
-        <div class="markdown-content">
-          <div v-html="html"></div>
-        </div>
+        <div ref="markdownBody" class="markdown-content" v-html="html"></div>
       </article>
     </div>
 
-    <aside v-if="showNav && headings.length > 0" class="hidden w-1/5 self-start p-4 md:sticky md:top-24 md:block">
-      <nav class="rounded-3xl border border-slate-200 bg-white p-4 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
-        <h3 class="mb-3 text-sm font-black text-slate-950 dark:text-white">目录</h3>
-        <ul class="space-y-1">
-          <li v-for="link in anchorLinks" :key="link.href">
-            <a :href="link.href" class="toc-link block rounded-lg px-2 py-1 text-sm font-bold" @click="handleAnchorClick($event, link.href)">
+    <!-- 右侧目录 -->
+    <aside v-if="showNav && headings.length > 0" class="learn-reader-toc">
+      <nav class="toc-nav">
+        <h3 class="toc-title">目录</h3>
+        <ul class="toc-list">
+          <li v-for="link in anchorLinks" :key="link.href" class="toc-item">
+            <a
+              :href="link.href"
+              class="toc-link"
+              :class="{ active: activeHeadingId === link.id }"
+              @click="handleAnchorClick($event, link.href)"
+            >
+              <span class="toc-indicator"></span>
               {{ link.text }}
             </a>
-            <ul v-if="link.children.length > 0" class="ml-3 mt-1 space-y-1">
-              <li v-for="subLink in link.children" :key="subLink.href">
-                <a :href="subLink.href" class="toc-link block rounded-lg px-2 py-1 text-xs" @click="handleAnchorClick($event, subLink.href)">
+            <ul v-if="link.children.length > 0" class="toc-sublist">
+              <li v-for="subLink in link.children" :key="subLink.href" class="toc-subitem">
+                <a
+                  :href="subLink.href"
+                  class="toc-sublink"
+                  :class="{ active: activeHeadingId === subLink.id }"
+                  @click="handleAnchorClick($event, subLink.href)"
+                >
                   {{ subLink.text }}
                 </a>
               </li>
@@ -319,7 +399,7 @@ onUnmounted(() => {
   </div>
 
   <div v-else class="flex h-full flex-col items-center justify-center p-8 text-center">
-    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
+    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-900">
       <Icon icon="mdi:file-document-outline" width="32" height="32" class="text-slate-500 dark:text-slate-400" />
     </div>
     <p class="text-lg text-slate-500 dark:text-slate-400">请选择一篇资料开始阅读</p>
@@ -329,175 +409,742 @@ onUnmounted(() => {
 <style scoped>
 @reference 'tailwindcss';
 
-:deep(.custom-block) {
-  @apply my-4 rounded-2xl p-4;
+/* ===== 阅读器双栏布局 ===== */
+.learn-reader-layout {
+  display: flex;
+  gap: 36px;
+  max-width: 1320px;
+  margin: 0 auto;
+  position: relative;
 }
 
-:deep(.custom-block-title) {
-  @apply mb-2 text-base font-black;
+.learn-reader-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 900px;
+  padding: 0 8px;
 }
 
-.markdown-content :deep(.warning) {
-  @apply bg-amber-100 dark:bg-amber-950;
+.learn-reader-main.has-toc {
+  flex: 0 0 72%;
+  max-width: 72%;
 }
 
-.markdown-content :deep(.danger) {
-  @apply bg-rose-100 dark:bg-rose-950;
+.learn-reader-main.no-toc {
+  max-width: 900px;
+  margin: 0 auto;
 }
 
-.markdown-content :deep(.tip) {
-  @apply bg-cyan-50 dark:bg-cyan-950;
+/* ===== 阅读进度条 ===== */
+.reading-progress-track {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  z-index: 100;
+}
+
+.reading-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #2563EB, #3B82F6);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.1s ease-out;
+}
+
+/* ===== 右侧目录 ===== */
+.learn-reader-toc {
+  flex: 0 0 250px;
+  width: 250px;
+  align-self: flex-start;
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.learn-reader-toc::-webkit-scrollbar {
+  display: none;
+}
+
+.toc-nav {
+  padding: 20px 20px 24px;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  background: white;
+}
+
+:global(html.dark) .toc-nav {
+  border-color: #1E293B;
+  background: #111827;
+}
+
+.toc-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: #1E293B;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+:global(html.dark) .toc-title {
+  color: #E5E7EB;
+  border-color: #1E293B;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-item {
+  margin-bottom: 2px;
 }
 
 .toc-link {
-  @apply text-slate-500 transition hover:bg-slate-100 hover:text-cyan-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-cyan-300;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+  text-decoration: none;
+  transition: all 0.15s;
+  line-height: 1.5;
+}
+
+.toc-link:hover {
+  background: #F8FAFC;
+  color: #2563EB;
+}
+
+:global(html.dark) .toc-link {
+  color: #94A3B8;
+}
+
+:global(html.dark) .toc-link:hover {
+  background: #1E293B;
+  color: #60A5FA;
+}
+
+.toc-indicator {
+  display: none;
+  width: 2px;
+  height: 16px;
+  border-radius: 1px;
+  background: #2563EB;
+  flex-shrink: 0;
 }
 
 .toc-link.active {
-  @apply bg-cyan-50 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300;
+  background: #EFF6FF;
+  color: #2563EB;
+  font-weight: 600;
 }
 
-.markdown-content :deep(h1),
-.markdown-content :deep(h2),
-.markdown-content :deep(h3),
-.markdown-content :deep(h4),
-.markdown-content :deep(h5),
-.markdown-content :deep(h6) {
-  @apply font-black tracking-tight text-slate-950 dark:text-white;
+.toc-link.active .toc-indicator {
+  display: block;
 }
 
-.markdown-content :deep(p),
+:global(html.dark) .toc-link.active {
+  background: #172554;
+  color: #60A5FA;
+}
+
+.toc-sublist {
+  list-style: none;
+  padding: 0;
+  margin: 2px 0 2px 20px;
+}
+
+.toc-subitem {
+  margin-bottom: 1px;
+}
+
+.toc-sublink {
+  display: block;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #64748B;
+  text-decoration: none;
+  transition: all 0.15s;
+  line-height: 1.5;
+}
+
+.toc-sublink:hover {
+  background: #F8FAFC;
+  color: #2563EB;
+}
+
+.toc-sublink.active {
+  background: #EFF6FF;
+  color: #2563EB;
+  font-weight: 600;
+}
+
+:global(html.dark) .toc-sublink {
+  color: #64748B;
+}
+
+:global(html.dark) .toc-sublink:hover {
+  background: #1E293B;
+  color: #60A5FA;
+}
+
+:global(html.dark) .toc-sublink.active {
+  background: #172554;
+  color: #60A5FA;
+}
+
+/* ===== 文章头部 ===== */
+.article-header {
+  margin-bottom: 36px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+:global(html.dark) .article-header {
+  border-color: #1E293B;
+}
+
+.article-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+}
+
+:global(html.dark) .article-title {
+  color: #F1F5F9;
+}
+
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #94A3B8;
+}
+
+/* ===== 正文 Markdown 内容 ===== */
+.markdown-content :deep(h1) {
+  font-size: 28px;
+  font-weight: 700;
+  margin-top: 52px;
+  margin-bottom: 18px;
+  color: #0F172A;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.markdown-content :deep(h2) {
+  font-size: 22px;
+  font-weight: 650;
+  margin-top: 40px;
+  margin-bottom: 14px;
+  color: #1E293B;
+  line-height: 1.4;
+}
+
+.markdown-content :deep(h3) {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 32px;
+  margin-bottom: 12px;
+  color: #1E293B;
+  line-height: 1.45;
+}
+
+.markdown-content :deep(h4) {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 28px;
+  margin-bottom: 10px;
+  color: #334155;
+}
+
+:global(html.dark) .markdown-content :deep(h1),
+:global(html.dark) .markdown-content :deep(h2),
+:global(html.dark) .markdown-content :deep(h3),
+:global(html.dark) .markdown-content :deep(h4) {
+  color: #F1F5F9;
+}
+
+.markdown-content :deep(p) {
+  font-size: 15.5px;
+  line-height: 1.85;
+  color: #334155;
+  margin-bottom: 16px;
+}
+
+:global(html.dark) .markdown-content :deep(p) {
+  color: #CBD5E1;
+}
+
+.markdown-content :deep(strong) {
+  font-weight: 600;
+  color: #1E293B;
+}
+
+:global(html.dark) .markdown-content :deep(strong) {
+  color: #F1F5F9;
+}
+
+.markdown-content :deep(a) {
+  color: #2563EB;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.markdown-content :deep(a:hover) {
+  border-bottom-color: #2563EB;
+}
+
+:global(html.dark) .markdown-content :deep(a) {
+  color: #60A5FA;
+}
+
+:global(html.dark) .markdown-content :deep(a:hover) {
+  border-bottom-color: #60A5FA;
+}
+
+/* ===== 标题锚点链接 ===== */
+.markdown-content :deep(.heading-anchor) {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  color: #CBD5E1;
+  font-size: 0.8em;
+  opacity: 0;
+  transition: opacity 0.15s;
+  text-decoration: none;
+  border: none;
+}
+
+.markdown-content :deep(h1:hover .heading-anchor),
+.markdown-content :deep(h2:hover .heading-anchor),
+.markdown-content :deep(h3:hover .heading-anchor),
+.markdown-content :deep(h4:hover .heading-anchor) {
+  opacity: 1;
+}
+
+:global(html.dark) .markdown-content :deep(.heading-anchor) {
+  color: #475569;
+}
+
+/* ===== 列表 ===== */
+.markdown-content :deep(ul),
+.markdown-content :deep(ol) {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+
 .markdown-content :deep(li) {
-  @apply leading-8 text-slate-700 dark:text-slate-200;
+  font-size: 15.5px;
+  line-height: 1.85;
+  color: #334155;
+  padding: 3px 0;
 }
 
-.markdown-content :deep(pre) {
-  @apply rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100;
+:global(html.dark) .markdown-content :deep(li) {
+  color: #CBD5E1;
 }
 
-.markdown-content :deep(pre[class*='language-']),
-.markdown-content :deep(code[class*='language-']) {
-  background: transparent !important;
-  color: inherit;
+.markdown-content :deep(ul li) {
+  list-style-type: disc;
 }
 
-:global(html:not(.dark)) .markdown-content :deep(pre),
-:global(html:not(.dark)) .markdown-content :deep(pre[class*='language-']),
-:global(html:not(.dark)) .markdown-content :deep(code[class*='language-']) {
-  background: #f8fafc !important;
-  color: #0f172a !important;
+.markdown-content :deep(ol li) {
+  list-style-type: decimal;
 }
 
-:global(html.dark) .markdown-content :deep(pre[class*='language-']),
-:global(html.dark) .markdown-content :deep(code[class*='language-']) {
-  background: #1e293b !important;
+.markdown-content :deep(ul ul li) {
+  list-style-type: circle;
+}
+
+.markdown-content :deep(ol ol li),
+.markdown-content :deep(ul ol li) {
+  list-style-type: lower-alpha;
+}
+
+/* ===== 引用块 ===== */
+.markdown-content :deep(blockquote) {
+  margin: 24px 0;
+  padding: 20px 24px;
+  border-left: 3px solid #2563EB;
+  background: #F8FAFC;
+  border-radius: 0 10px 10px 0;
+  color: #475569;
+}
+
+.markdown-content :deep(blockquote p) {
+  margin-bottom: 8px;
+}
+
+.markdown-content :deep(blockquote p:last-child) {
+  margin-bottom: 0;
+}
+
+:global(html.dark) .markdown-content :deep(blockquote) {
+  background: #0F172A;
+  border-left-color: #3B82F6;
+  color: #94A3B8;
+}
+
+/* ===== 代码块 ===== */
+.markdown-content :deep(.code-block-wrapper) {
+  margin: 20px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #E2E8F0;
+}
+
+:global(html.dark) .markdown-content :deep(.code-block-wrapper) {
   border-color: #334155;
 }
 
-
-
-.markdown-content :deep(table) {
-  @apply my-4 min-w-full border-collapse;
+.markdown-content :deep(.code-block-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #F1F5F9;
+  border-bottom: 1px solid #E2E8F0;
 }
 
-.markdown-content :deep(th),
-.markdown-content :deep(td) {
-  @apply border border-slate-300 px-4 py-2 dark:border-slate-700;
+:global(html.dark) .markdown-content :deep(.code-block-header) {
+  background: #1E293B;
+  border-color: #334155;
+}
+
+.markdown-content :deep(.code-lang-label) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+:global(html.dark) .markdown-content :deep(.code-lang-label) {
+  color: #94A3B8;
+}
+
+.markdown-content :deep(.code-copy-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.markdown-content :deep(.code-copy-btn:hover) {
+  background: #E2E8F0;
+  color: #334155;
+}
+
+.markdown-content :deep(.code-copy-btn.copied) {
+  color: #16A34A;
+}
+
+:global(html.dark) .markdown-content :deep(.code-copy-btn) {
+  color: #94A3B8;
+}
+
+:global(html.dark) .markdown-content :deep(.code-copy-btn:hover) {
+  background: #334155;
+  color: #E5E7EB;
+}
+
+.markdown-content :deep(pre) {
+  margin: 0;
+  padding: 16px 20px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  border-radius: 0;
+  border: none;
+  overflow-x: auto;
+}
+
+.markdown-content :deep(pre code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+}
+
+/* ===== 行内代码 ===== */
+.markdown-content :deep(code):not(pre code):not(.code-block-wrapper code) {
+  background: #F1F5F9;
+  color: #2563EB;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 500;
+}
+
+:global(html.dark) .markdown-content :deep(code):not(pre code):not(.code-block-wrapper code) {
+  background: #1E293B;
+  color: #60A5FA;
+}
+
+/* ===== 表格 ===== */
+.markdown-content :deep(table) {
+  width: 100%;
+  margin: 24px 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+:global(html.dark) .markdown-content :deep(table) {
+  border-color: #334155;
 }
 
 .markdown-content :deep(th) {
-  @apply bg-slate-100 font-black dark:bg-slate-800;
+  background: #F8FAFC;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-align: left;
+  border-bottom: 1px solid #E2E8F0;
 }
 
+:global(html.dark) .markdown-content :deep(th) {
+  background: #1E293B;
+  color: #94A3B8;
+  border-color: #334155;
+}
+
+.markdown-content :deep(td) {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #334155;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.markdown-content :deep(tr:last-child td) {
+  border-bottom: none;
+}
+
+.markdown-content :deep(tr:hover td) {
+  background: #F8FAFC;
+}
+
+:global(html.dark) .markdown-content :deep(td) {
+  color: #CBD5E1;
+  border-color: #1E293B;
+}
+
+:global(html.dark) .markdown-content :deep(tr:hover td) {
+  background: #0F172A;
+}
+
+/* ===== 图片 ===== */
 .markdown-content :deep(img) {
-  @apply mx-auto my-6 block h-auto max-w-full rounded-lg border border-slate-200 dark:border-slate-700;
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 24px auto;
+  border-radius: 10px;
+  border: 1px solid #E2E8F0;
+}
+
+:global(html.dark) .markdown-content :deep(img) {
+  border-color: #334155;
+}
+
+/* ===== 分割线 ===== */
+.markdown-content :deep(hr) {
+  border: none;
+  height: 1px;
+  background: #E2E8F0;
+  margin: 36px 0;
+}
+
+:global(html.dark) .markdown-content :deep(hr) {
+  background: #334155;
+}
+
+/* ===== 自定义容器 ===== */
+:deep(.custom-block) {
+  margin: 20px 0;
+  padding: 16px 20px;
+  border-radius: 10px;
+}
+
+:deep(.custom-block-title) {
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.markdown-content :deep(.warning) {
+  background: #FFFBEB;
+  border-left: 3px solid #F59E0B;
+}
+
+.markdown-content :deep(.danger) {
+  background: #FFF1F2;
+  border-left: 3px solid #F43F5E;
+}
+
+.markdown-content :deep(.tip) {
+  background: #ECFEFF;
+  border-left: 3px solid #06B6D4;
+}
+
+:global(html.dark) .markdown-content :deep(.warning) {
+  background: #422006;
+}
+
+:global(html.dark) .markdown-content :deep(.danger) {
+  background: #4C0519;
+}
+
+:global(html.dark) .markdown-content :deep(.tip) {
+  background: #083344;
+}
+
+/* ===== 任务列表 ===== */
+.markdown-content :deep(.task-list-item) {
+  list-style: none;
+  position: relative;
+  padding-left: 4px;
+}
+
+.markdown-content :deep(.task-list-item input) {
+  margin-right: 8px;
+  accent-color: #2563EB;
+}
+
+/* ===== 脚注 ===== */
+.markdown-content :deep(.footnotes) {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid #E2E8F0;
+  font-size: 13px;
+}
+
+:global(html.dark) .markdown-content :deep(.footnotes) {
+  border-color: #334155;
+}
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 1024px) {
+  .learn-reader-layout {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .learn-reader-main.has-toc,
+  .learn-reader-main.no-toc {
+    flex: none;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .learn-reader-toc {
+    position: static;
+    width: 100%;
+    flex: none;
+    max-height: none;
+    order: -1;
+    margin-bottom: 24px;
+  }
 }
 </style>
 
 <style>
+/* ===== 全局 Markdown 文章样式（非 scoped，确保渲染内容生效） ===== */
 html:not(.dark) .markdown-article {
-  color: #0f172a;
+  color: #334155;
 }
 
 html.dark .markdown-article {
-  color: #f8fafc;
+  color: #CBD5E1;
 }
 
-html:not(.dark) .markdown-article .markdown-content,
-html.dark .markdown-article .markdown-content {
-  color: inherit;
-}
-
-html:not(.dark) .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span, strong, em),
+html:not(.dark) .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span),
 html:not(.dark) .markdown-article header,
 html:not(.dark) .markdown-article header time,
-html:not(.dark) .markdown-article header span,
-html:not(.dark) .markdown-article .toc-link {
-  color: #0f172a;
+html:not(.dark) .markdown-article header span {
+  color: #334155;
 }
 
-html.dark .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span, strong, em),
+html.dark .markdown-article .markdown-content :is(p, li, blockquote, td, th, dd, dt, figcaption, span),
 html.dark .markdown-article header,
 html.dark .markdown-article header time,
-html.dark .markdown-article header span,
-html.dark .markdown-article .toc-link {
-  color: #f8fafc;
+html.dark .markdown-article header span {
+  color: #CBD5E1;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: #0F172A;
+}
+
+html.dark .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: #F1F5F9;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(a, a:visited) {
+  color: #2563EB;
+}
+
+html.dark .markdown-article .markdown-content :is(a, a:visited) {
+  color: #60A5FA;
+}
+
+html:not(.dark) .markdown-article .markdown-content :is(code):not(pre code):not(.code-block-wrapper code) {
+  color: #2563EB;
+}
+
+html.dark .markdown-article .markdown-content :is(code):not(pre code):not(.code-block-wrapper code) {
+  color: #60A5FA;
 }
 
 html:not(.dark) .markdown-article .markdown-content thead,
 html:not(.dark) .markdown-article .markdown-content thead th {
-  color: #0f172a !important;
-  border-color: #cbd5e1 !important;
-  background-color: #e2e8f0 !important;
+  color: #475569 !important;
+  border-color: #E2E8F0 !important;
+  background-color: #F8FAFC !important;
 }
 
 html.dark .markdown-article .markdown-content thead,
 html.dark .markdown-article .markdown-content thead th {
-  color: #f8fafc !important;
-  border-color: #475569 !important;
-  background-color: #1e293b !important;
+  color: #94A3B8 !important;
+  border-color: #334155 !important;
+  background-color: #1E293B !important;
 }
 
-html:not(.dark) .markdown-article .toc-link {
-  color: #475569;
-}
-
-html.dark .markdown-article .toc-link {
-  color: #cbd5e1;
-}
-
-html:not(.dark) .markdown-article .toc-link.active {
-  color: #0e7490;
-}
-
-html.dark .markdown-article .toc-link.active {
-  color: #67e8f9;
-}
-
-html:not(.dark) .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
-  color: #020617;
-}
-
-html.dark .markdown-article .markdown-content :is(h1, h2, h3, h4, h5, h6) {
-  color: #ffffff;
-}
-
-html:not(.dark) .markdown-article .markdown-content :is(a, a:visited) {
-  color: #0891b2;
-}
-
-html.dark .markdown-article .markdown-content :is(a, a:visited) {
-  color: #67e8f9;
-}
-
-html:not(.dark) .markdown-article .markdown-content :is(code):not(pre code) {
-  color: #0f172a;
-}
-
-html.dark .markdown-article .markdown-content :is(code):not(pre code) {
-  color: #f8fafc;
-}
-
+/* Prism token 色彩覆盖 - 亮色主题 */
 html:not(.dark) .token.comment,
 html:not(.dark) .token.prolog,
 html:not(.dark) .token.doctype,
@@ -551,6 +1198,7 @@ html:not(.dark) .token.variable {
   color: #d97706 !important;
 }
 
+/* Prism token 色彩覆盖 - 暗色主题 */
 html.dark .token.comment,
 html.dark .token.prolog,
 html.dark .token.doctype,
@@ -602,5 +1250,18 @@ html.dark .token.regex,
 html.dark .token.important,
 html.dark .token.variable {
   color: #fbbf24 !important;
+}
+
+/* 暗色主题代码块背景 */
+html.dark .markdown-content pre[class*='language-'],
+html.dark .markdown-content code[class*='language-'] {
+  background: #0F172A !important;
+  color: #E2E8F0 !important;
+}
+
+html:not(.dark) .markdown-content pre[class*='language-'],
+html:not(.dark) .markdown-content code[class*='language-'] {
+  background: #F8FAFC !important;
+  color: #0F172A !important;
 }
 </style>

@@ -180,10 +180,12 @@
     background-color: var(--prose-code-bg);
     padding: 0.125rem 0.375rem;
     border-radius: 0.375rem;
+    font-size: 0.9em;
   }
 
   .prose :where(pre):not(:where([class~="not-prose"] *)) {
     background-color: var(--prose-pre-bg);
+    border-radius: 0.625rem;
   }
 
   .prose :where(a):not(:where([class~="not-prose"] *)):hover {
@@ -195,7 +197,24 @@
     border-left-color: var(--prose-quote-borders);
     background-color: var(--color-muted);
     padding: 1rem 1.25rem;
-    border-radius: 1rem;
+    border-radius: 0 0.625rem 0.625rem 0;
+  }
+
+  .prose :where(strong):not(:where([class~="not-prose"] *)) {
+    font-weight: 600;
+  }
+
+  .prose :where(h1, h2, h3, h4):not(:where([class~="not-prose"] *)) {
+    letter-spacing: -0.01em;
+  }
+
+  .prose :where(table):not(:where([class~="not-prose"] *)) {
+    border-radius: 0.625rem;
+    overflow: hidden;
+  }
+
+  .prose :where(th):not(:where([class~="not-prose"] *)) {
+    font-weight: 700;
   }
 }
 

@@ -43,20 +43,20 @@ const canManageAnnouncements = computed(
 );
 
 // 分类：优先使用后端存储的 category，兼容旧数据的标题推断
-const categories = ['全部', '系统公告', '比赛公告', '更新日志', '活动通知'];
+const categories = ['全部', '系统公告', '比赛公告', '更新公告', '活动通知'];
 const activeCategory = ref('全部');
 const categoryEmojis: Record<string, string> = {
   '全部': '📋',
   '系统公告': '📢',
   '比赛公告': '🏆',
-  '更新日志': '🔄',
+  '更新公告': '🔄',
   '活动通知': '🎉',
 };
 const inferCategory = (item: { category?: string; title: string }): string => {
   if (item.category) return item.category;
   const t = item.title.toLowerCase();
   if (t.includes('比赛') || t.includes('contest')) return '比赛公告';
-  if (t.includes('更新') || t.includes('update') || t.includes('日志')) return '更新日志';
+  if (t.includes('更新') || t.includes('update') || t.includes('日志')) return '更新公告';
   if (t.includes('活动') || t.includes('event')) return '活动通知';
   return '系统公告';
 };
@@ -64,7 +64,7 @@ const getCategoryEmoji = (item: { category?: string; title: string }) => categor
 const getCategoryColor = (item: { category?: string; title: string }): string => {
   const cat = inferCategory(item);
   if (cat === '比赛公告') return 'bg-amber-50 dark:bg-amber-950/40';
-  if (cat === '更新日志') return 'bg-emerald-50 dark:bg-emerald-950/40';
+  if (cat === '更新公告') return 'bg-emerald-50 dark:bg-emerald-950/40';
   if (cat === '活动通知') return 'bg-violet-50 dark:bg-violet-950/40';
   return 'bg-[#EFF6FF] dark:bg-[#172554]';
 };

@@ -71,67 +71,53 @@ const courses: ResourceItem[] = markRaw([
   { id: 'algorithm-basic', title: '算法', duration: '', author: '', language: 'C++', markdownFile: '算法.md' },
   { id: 'vue-components', title: 'Vue 组件化开发', duration: '', author: '', language: 'Vue', markdownFile: 'Vue 组件化开发.md' },
   { id: 'oj-strategy', title: 'Agent 开发', duration: '', author: '', language: '通用', markdownFile: 'agent开发.md' },
-  // 计算机基础 - 操作系统
-  { id: 'os-process-thread', title: '进程和线程的区别', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程和线程的区别.md' },
-  { id: 'os-ipc', title: '进程间通信方式', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程间通信方式.md' },
-  { id: 'os-scheduling', title: '进程调度算法', duration: '', author: '', language: '通用', markdownFile: 'cs/os/进程调度算法.md' },
-  { id: 'os-user-kernel', title: '用户态和内核态', duration: '', author: '', language: '通用', markdownFile: 'cs/os/用户态和内核态.md' },
-  { id: 'os-virtual-memory', title: '虚拟内存', duration: '', author: '', language: '通用', markdownFile: 'cs/os/虚拟内存.md' },
-  { id: 'os-page-replace', title: '页面置换算法', duration: '', author: '', language: '通用', markdownFile: 'cs/os/页面置换算法.md' },
-  { id: 'os-deadlock', title: '死锁', duration: '', author: '', language: '通用', markdownFile: 'cs/os/死锁.md' },
-  { id: 'os-locks', title: '典型的锁', duration: '', author: '', language: '通用', markdownFile: 'cs/os/典型的锁.md' },
-  { id: 'os-io-model', title: 'IO 模型', duration: '', author: '', language: '通用', markdownFile: 'cs/os/IO模型.md' },
-  { id: 'os-epoll', title: 'epoll vs select vs poll', duration: '', author: '', language: '通用', markdownFile: 'cs/os/epoll-select-poll区别.md' },
-  // 计算机基础 - 数据库
-  { id: 'db-transaction', title: '事务四大特性', duration: '', author: '', language: '通用', markdownFile: 'cs/database/事务四大特性.md' },
-  { id: 'db-sql-exec', title: 'SQL 查询执行流程', duration: '', author: '', language: '通用', markdownFile: 'cs/database/SQL查询执行流程.md' },
-  { id: 'db-mvcc', title: 'MVCC 机制', duration: '', author: '', language: '通用', markdownFile: 'cs/database/MVCC机制.md' },
-  { id: 'db-btree', title: 'MySQL 索引 B+ 树', duration: '', author: '', language: '通用', markdownFile: 'cs/database/MySQL索引B+树.md' },
-  { id: 'db-index-types', title: '索引种类', duration: '', author: '', language: '通用', markdownFile: 'cs/database/索引种类.md' },
-  { id: 'redis-data', title: 'Redis 数据结构', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis数据结构.md' },
-  { id: 'redis-persist', title: 'Redis 持久化', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis持久化.md' },
-  { id: 'redis-cache', title: 'Redis 缓存问题', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis缓存问题.md' },
-  { id: 'redis-lock', title: 'Redis 分布式锁', duration: '', author: '', language: '通用', markdownFile: 'cs/database/Redis分布式锁.md' },
-  // 计算机基础 - 网络
-  { id: 'net-tcp-udp', title: 'TCP 与 UDP 区别', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP与UDP区别.md' },
-  { id: 'net-3way', title: 'TCP 三次握手', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP三次握手.md' },
-  { id: 'net-4way', title: 'TCP 四次挥手', duration: '', author: '', language: '通用', markdownFile: 'cs/network/TCP四次挥手.md' },
-  { id: 'net-http-code', title: 'HTTP 状态码', duration: '', author: '', language: '通用', markdownFile: 'cs/network/HTTP状态码.md' },
-  { id: 'net-https', title: 'HTTPS 原理', duration: '', author: '', language: '通用', markdownFile: 'cs/network/HTTPS原理.md' },
-  { id: 'net-url', title: '从输入 URL 到页面展示', duration: '', author: '', language: '通用', markdownFile: 'cs/network/从输入URL到页面展示.md' },
-  // 计算机基础 - 组成原理
-  { id: 'arch-von', title: '冯诺依曼与哈佛体系结构', duration: '', author: '', language: '通用', markdownFile: 'cs/arch/冯诺依曼与哈佛体系结构.md' },
-  { id: 'arch-cpu-gpu', title: 'CPU 与 GPU 区别', duration: '', author: '', language: '通用', markdownFile: 'cs/arch/CPU与GPU区别.md' },
-  // C++
-  { id: 'cpp-3principles', title: 'C++ 三大特性：封装、继承、多态', duration: '', author: '', language: 'C++', markdownFile: 'cpp/C++三大特性.md' },
-  { id: 'cpp-ptr-ref', title: '指针与引用的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/指针与引用.md' },
-  { id: 'cpp-static-const', title: 'static 与 const 的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/static与const.md' },
-  { id: 'cpp-virtual', title: '虚函数的实现机制', duration: '', author: '', language: 'C++', markdownFile: 'cpp/虚函数机制.md' },
-  { id: 'cpp-deep-copy', title: '深拷贝与浅拷贝', duration: '', author: '', language: 'C++', markdownFile: 'cpp/深拷贝与浅拷贝.md' },
-  { id: 'cpp-heap-stack', title: '堆与栈的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/堆与栈.md' },
-  { id: 'cpp-new-malloc', title: 'new 和 malloc 的区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/new与malloc.md' },
-  { id: 'cpp-smart-ptr', title: '智能指针的区别与选型', duration: '', author: '', language: 'C++', markdownFile: 'cpp/智能指针.md' },
-  { id: 'cpp-vector', title: 'vector 底层原理和扩容', duration: '', author: '', language: 'C++', markdownFile: 'cpp/vector底层原理.md' },
-  { id: 'cpp-map', title: 'map 与 unordered_map 区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/map与unordered_map.md' },
-  { id: 'cpp-lambda', title: 'Lambda 表达式', duration: '', author: '', language: 'C++', markdownFile: 'cpp/Lambda表达式.md' },
-  { id: 'cpp-move', title: '移动语义', duration: '', author: '', language: 'C++', markdownFile: 'cpp/移动语义.md' },
-  { id: 'cpp-io-multiplex', title: 'select / poll / epoll 区别', duration: '', author: '', language: 'C++', markdownFile: 'cpp/select-poll-epoll.md' },
-  // Java
-  { id: 'java-oop', title: '面向对象三大特性', duration: '', author: '', language: 'Java', markdownFile: 'java/面向对象三大特性.md' },
-  { id: 'java-hashmap', title: 'HashMap 实现原理', duration: '', author: '', language: 'Java', markdownFile: 'java/HashMap原理.md' },
-  { id: 'java-arraylist', title: 'ArrayList 与 LinkedList 区别', duration: '', author: '', language: 'Java', markdownFile: 'java/ArrayList与LinkedList.md' },
-  { id: 'java-jvm-mem', title: 'JVM 内存结构', duration: '', author: '', language: 'Java', markdownFile: 'java/JVM内存结构.md' },
-  { id: 'java-gc', title: '垃圾回收', duration: '', author: '', language: 'Java', markdownFile: 'java/垃圾回收.md' },
-  { id: 'java-deadlock', title: '死锁', duration: '', author: '', language: 'Java', markdownFile: 'java/死锁.md' },
-  { id: 'java-threadpool', title: '线程池', duration: '', author: '', language: 'Java', markdownFile: 'java/线程池.md' },
-  { id: 'java-spring-ioc', title: 'Spring IOC', duration: '', author: '', language: 'Java', markdownFile: 'java/Spring-IOC.md' },
-  { id: 'java-spring-aop', title: 'Spring AOP', duration: '', author: '', language: 'Java', markdownFile: 'java/Spring-AOP.md' },
-  // Go
-  { id: 'go-interface', title: 'Go 接口', duration: '', author: '', language: 'Go', markdownFile: 'go/Go接口.md' },
-  { id: 'go-goroutine', title: 'Goroutine', duration: '', author: '', language: 'Go', markdownFile: 'go/Goroutine.md' },
-  { id: 'go-channel', title: 'channel 区别', duration: '', author: '', language: 'Go', markdownFile: 'go/channel区别.md' },
-  { id: 'go-gmp', title: 'GMP 调度模型', duration: '', author: '', language: 'Go', markdownFile: 'go/GMP调度模型.md' },
-  { id: 'go-mem', title: 'Go 内存管理', duration: '', author: '', language: 'Go', markdownFile: 'go/Go内存管理.md' },
+  // 编程笔记
+  { id: 'programming-notes', title: '编程笔记', duration: '', author: '', language: '通用', markdownFile: '编程笔记/README.md', chapters: [
+    { id: 'programming-notes-interview', label: '大厂面经', title: '大厂面经', summary: '各大厂面试经验总结', markdownFile: '编程笔记/大厂面经/README.md' },
+    { id: 'programming-notes-ai', label: '大模型', title: '大模型', summary: '大模型相关知识', markdownFile: '编程笔记/大模型/README.md' },
+    { id: 'programming-notes-cpp', label: 'C++', title: 'C++', summary: 'C++ 编程笔记', markdownFile: '编程笔记/C++/README.md' },
+    { id: 'programming-notes-go', label: 'Go', title: 'Go', summary: 'Go 编程笔记', markdownFile: '编程笔记/Go/README.md' },
+    { id: 'programming-notes-java', label: 'Java', title: 'Java', summary: 'Java 编程笔记', markdownFile: '编程笔记/Java/README.md' },
+  ] },
+  // 计算机基础
+  { id: 'cs-fundamentals', title: '计算机基础', duration: '', author: '', language: '通用', markdownFile: '计算机基础/README.md', chapters: [
+    { id: 'cs-os', label: '操作系统', title: '操作系统', summary: '操作系统核心概念', markdownFile: '计算机基础/操作系统/内存管理/内存连续分配管理方式有什么？.md' },
+    { id: 'cs-arch', label: '计算机组成原理', title: '计算机组成原理', summary: '计算机组成原理', markdownFile: '计算机基础/计算机组成原理/README.md' },
+    { id: 'cs-db', label: '数据库', title: '数据库', summary: '数据库相关知识', markdownFile: '计算机基础/数据库/README.md' },
+    { id: 'cs-network', label: '网络', title: '网络', summary: '计算机网络', markdownFile: '计算机基础/网络/README.md' },
+  ] },
+  // 开发资料
+  { id: 'dev-materials', title: '开发资料', duration: '', author: '', language: '通用', markdownFile: '开发资料/README.md', chapters: [
+    { id: 'dev-os', label: '操作系统', title: '操作系统', summary: '操作系统学习资料', markdownFile: '开发资料/操作系统.md' },
+    { id: 'dev-testing', label: '测试-Docker-缓存-系统设计-源码阅读学习资料', title: '测试-Docker-缓存-系统设计-源码阅读学习资料', summary: '测试、Docker、缓存、系统设计、源码阅读', markdownFile: '开发资料/测试-Docker-缓存-系统设计-源码阅读学习资料.md' },
+    { id: 'dev-backend', label: '后端开发学习资料', title: '后端开发学习资料', summary: '后端开发学习资料', markdownFile: '开发资料/后端开发学习资料.md' },
+    { id: 'dev-network', label: '网络', title: '网络', summary: '网络学习资料', markdownFile: '开发资料/网络.md' },
+    { id: 'dev-path', label: '学习路径', title: '学习路径', summary: '学习路径', markdownFile: '开发资料/学习路径.md' },
+    { id: 'dev-frontend', label: 'HTML-CSS-JS学习资料', title: 'HTML-CSS-JS学习资料', summary: '前端学习资料', markdownFile: '开发资料/HTML-CSS-JS学习资料.md' },
+    { id: 'dev-oj', label: 'oj项目', title: 'oj项目', summary: 'oj项目相关资料', markdownFile: '开发资料/oj项目.md' },
+  ] },
+  // 指令
+  { id: 'commands', title: '指令', duration: '', author: '', language: '通用', markdownFile: '指令/README.md', chapters: [
+    { id: 'cmd-gitee', label: 'gitee终端指令', title: 'gitee终端指令', summary: 'gitee终端指令', markdownFile: '指令/gitee终端指令.md' },
+    { id: 'cmd-latex', label: 'latex式子', title: 'latex式子', summary: 'latex式子', markdownFile: '指令/latex式子.md' },
+    { id: 'cmd-linux', label: 'Linux终端指令汇总', title: 'Linux终端指令汇总', summary: 'Linux终端指令汇总', markdownFile: '指令/Linux终端指令汇总.md' },
+    { id: 'cmd-redis', label: 'redis常用指令', title: 'redis常用指令', summary: 'redis常用指令', markdownFile: '指令/redis常用指令.md' },
+    { id: 'cmd-sql', label: 'sql增删改查', title: 'sql增删改查', summary: 'sql增删改查', markdownFile: '指令/sql增删改查.md' },
+  ] },
+  // C++库资料
+  { id: 'cpp-libraries', title: 'C++库资料', duration: '', author: '', language: 'C++', markdownFile: 'C++库资料/00_总览_目录.md', chapters: [
+    { id: 'cpp-lib-eigen', label: 'Eigen', title: 'Eigen', summary: 'Eigen库', markdownFile: 'C++库资料/01_Eigen.md' },
+    { id: 'cpp-lib-armadillo', label: 'Armadillo/Blaze', title: 'Armadillo/Blaze', summary: 'Armadillo和Blaze库', markdownFile: 'C++库资料/02_Armadillo_Blaze.md' },
+    { id: 'cpp-lib-boost', label: 'Boost', title: 'Boost', summary: 'Boost库', markdownFile: 'C++库资料/03_Boost.md' },
+    { id: 'cpp-lib-network', label: '网络通信', title: '网络通信', summary: '网络通信库', markdownFile: 'C++库资料/04_网络通信.md' },
+    { id: 'cpp-lib-json', label: 'JSON 序列化', title: 'JSON 序列化', summary: 'JSON序列化库', markdownFile: 'C++库资料/05_JSON_序列化.md' },
+    { id: 'cpp-lib-opencv', label: 'OpenCV 图像', title: 'OpenCV 图像', summary: 'OpenCV图像处理', markdownFile: 'C++库资料/06_OpenCV_图像.md' },
+    { id: 'cpp-lib-gui', label: 'GUI', title: 'GUI', summary: 'GUI库', markdownFile: 'C++库资料/07_GUI.md' },
+    { id: 'cpp-lib-concurrency', label: '并发多线程', title: '并发多线程', summary: '并发多线程库', markdownFile: 'C++库资料/08_并发多线程.md' },
+    { id: 'cpp-lib-deeplearning', label: '深度学习', title: '深度学习', summary: '深度学习库', markdownFile: 'C++库资料/09_深度学习.md' },
+    { id: 'cpp-lib-game', label: '游戏开发', title: '游戏开发', summary: '游戏开发库', markdownFile: 'C++库资料/10_游戏开发.md' },
+    { id: 'cpp-lib-cmake', label: '编译选项与CMake', title: '编译选项与CMake', summary: '编译选项与CMake', markdownFile: 'C++库资料/11_编译选项与CMake.md' },
+  ] },
 ]);
 
 const selectedTitle = ref('');
@@ -654,59 +640,76 @@ watch(
 
     <!-- ===== 详情页 ===== -->
     <template v-else>
-      <div class="app-container py-6 lg:py-10">
+      <div class="learn-detail-container py-6 lg:py-8">
 
         <!-- 工具栏 -->
-        <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div class="learn-toolbar">
           <button class="learn-back-btn" @click="goBackFromDetail">
             <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
             {{ currentChapter ? '返回课程目录' : '返回学习资源' }}
           </button>
 
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
             <button
               v-if="!isChapterDirectory"
-              class="learn-back-btn"
+              class="learn-toolbar-btn"
               :disabled="isLoadingDoc || !selectedResource"
               @click="downloadCurrentMarkdown"
+              title="导出 Markdown"
             >
               <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
-              导出 Markdown
             </button>
-            <button class="ui-btn-primary-sm" @click="router.push('/playground')">
+            <button class="learn-toolbar-btn" title="去编辑器练习" @click="router.push('/playground')">
               <Icon icon="material-symbols:code" class="h-4 w-4" />
-              去编辑器练习
             </button>
           </div>
         </div>
 
         <!-- 章节目录模式 -->
         <div v-if="isChapterDirectory" class="learn-chapter-directory">
-          <header class="mb-8">
-            <p class="chapter-kicker">C LANGUAGE · {{ currentResource?.chapters?.length }} CHAPTERS</p>
-            <h1 class="text-[28px] font-black text-[#1E293B] dark:text-[#E5E7EB]">C 语言知识点总结</h1>
-            <p class="mt-2 text-sm text-[#64748B] dark:text-[#94A3B8]">按章节逐步学习 C 语言核心知识，每章内容在独立页面中阅读。</p>
+          <header class="chapter-directory-header">
+            <p class="chapter-kicker">{{ currentResource?.title }} · {{ currentResource?.chapters?.length }} 章节</p>
+            <h1 class="chapter-directory-title">{{ currentResource?.title }}</h1>
+            <p class="chapter-directory-desc">按章节逐步学习核心知识，每章内容在独立页面中阅读。</p>
           </header>
 
           <div class="chapter-grid">
             <button
-              v-for="chapter in currentResource?.chapters"
+              v-for="(chapter, idx) in currentResource?.chapters"
               :key="chapter.id"
               class="chapter-card"
               @click="openChapter(chapter)"
             >
-              <span class="chapter-label">{{ chapter.label }}</span>
-              <h2>{{ chapter.title }}</h2>
-              <p>{{ chapter.summary }}</p>
-              <span class="chapter-open-icon">
-                <Icon icon="material-symbols:arrow-forward-rounded" class="h-5 w-5" />
-              </span>
+              <div class="chapter-card-top">
+                <span class="chapter-index">{{ String(idx + 1).padStart(2, '0') }}</span>
+                <span class="chapter-open-icon">
+                  <Icon icon="material-symbols:arrow-forward-rounded" class="h-4 w-4" />
+                </span>
+              </div>
+              <h2 class="chapter-card-title">{{ chapter.title }}</h2>
+              <p class="chapter-card-summary">{{ chapter.summary }}</p>
             </button>
           </div>
         </div>
 
         <!-- Markdown 内容模式 -->
         <template v-else>
+          <!-- 章节标题区 -->
+          <div v-if="currentChapter" class="learn-chapter-header">
+            <p class="chapter-kicker">{{ currentResource?.title }}</p>
+            <h1 class="chapter-main-title">{{ currentChapter.title }}</h1>
+            <div class="chapter-info-row">
+              <span class="chapter-info-item">
+                <Icon icon="material-symbols:menu-book" class="h-3.5 w-3.5" />
+                第 {{ (currentChapterIndex ?? 0) + 1 }} / {{ currentResource?.chapters?.length }} 章
+              </span>
+              <span v-if="currentChapter.summary" class="chapter-info-item">
+                <Icon icon="material-symbols:info-outline" class="h-3.5 w-3.5" />
+                {{ currentChapter.summary }}
+              </span>
+            </div>
+          </div>
+
           <div class="learn-document">
             <div v-if="isLoadingDoc" class="flex min-h-[320px] items-center justify-center p-8 text-[#94A3B8]">
               正在加载资料内容...
@@ -720,17 +723,20 @@ watch(
           <!-- 章节导航 -->
           <nav v-if="currentChapter" class="chapter-pagination" aria-label="章节导航">
             <button
-              class="chapter-nav-btn"
+              class="chapter-nav-btn chapter-nav-prev"
               :disabled="!previousChapter"
               @click="previousChapter && openChapter(previousChapter)"
             >
-              <Icon icon="material-symbols:arrow-back-rounded" class="h-5 w-5" />
-              <span>{{ previousChapter?.title || '已经是第一章' }}</span>
+              <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4 shrink-0" />
+              <div class="chapter-nav-text">
+                <span class="chapter-nav-label">上一章</span>
+                <span class="chapter-nav-title">{{ previousChapter?.title || '已经是第一章' }}</span>
+              </div>
             </button>
 
             <button class="chapter-directory-btn" title="返回课程目录" @click="goBackFromDetail">
-              <Icon icon="material-symbols:format-list-bulleted-rounded" class="h-5 w-5" />
-              <span>课程目录</span>
+              <Icon icon="material-symbols:format-list-bulleted-rounded" class="h-4 w-4" />
+              <span>目录</span>
             </button>
 
             <button
@@ -738,8 +744,11 @@ watch(
               :disabled="!nextChapter"
               @click="nextChapter && openChapter(nextChapter)"
             >
-              <span>{{ nextChapter?.title || '已经是最后一章' }}</span>
-              <Icon icon="material-symbols:arrow-forward-rounded" class="h-5 w-5" />
+              <div class="chapter-nav-text chapter-nav-text-right">
+                <span class="chapter-nav-label">下一章</span>
+                <span class="chapter-nav-title">{{ nextChapter?.title || '已经是最后一章' }}</span>
+              </div>
+              <Icon icon="material-symbols:arrow-forward-rounded" class="h-4 w-4 shrink-0" />
             </button>
           </nav>
         </template>
@@ -1051,15 +1060,30 @@ watch(
   color: #FB7185;
 }
 
-/* ===== 详情页 ===== */
+/* ===== 详情页容器 ===== */
+.learn-detail-container {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+/* ===== 工具栏 ===== */
+.learn-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
 .learn-back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.82rem;
-  font-weight: 700;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
   color: #475569;
   border: 1px solid #E2E8F0;
   background: white;
@@ -1068,6 +1092,7 @@ watch(
 .learn-back-btn:hover {
   border-color: #2563EB;
   color: #2563EB;
+  background: #EFF6FF;
 }
 .learn-back-btn:disabled {
   opacity: 0.5;
@@ -1078,40 +1103,135 @@ watch(
   background: #0F172A;
   color: #94A3B8;
 }
-.ui-btn-primary-sm {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  height: 2rem;
-  padding: 0 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: white;
-  background: #2563EB;
-  transition: background 0.15s;
-}
-.ui-btn-primary-sm:hover {
-  background: #1D4ED8;
+:global(html.dark) .learn-back-btn:hover {
+  border-color: #3B82F6;
+  color: #60A5FA;
+  background: #172554;
 }
 
-/* ===== 章节目录 ===== */
-.learn-chapter-directory {
-  max-width: 800px;
+.learn-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+  background: white;
+  transition: all 0.15s;
 }
+.learn-toolbar-btn:hover {
+  border-color: #2563EB;
+  color: #2563EB;
+  background: #EFF6FF;
+}
+.learn-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:global(html.dark) .learn-toolbar-btn {
+  border-color: #1E293B;
+  background: #0F172A;
+  color: #94A3B8;
+}
+:global(html.dark) .learn-toolbar-btn:hover {
+  border-color: #3B82F6;
+  color: #60A5FA;
+  background: #172554;
+}
+
+/* ===== 章节标题区 ===== */
+.learn-chapter-header {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #F1F5F9;
+}
+:global(html.dark) .learn-chapter-header {
+  border-color: #1E293B;
+}
+
+.chapter-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #2563EB;
+  margin-bottom: 10px;
+}
+:global(html.dark) .chapter-kicker {
+  color: #60A5FA;
+}
+
+.chapter-main-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+}
+:global(html.dark) .chapter-main-title {
+  color: #F1F5F9;
+}
+
+.chapter-info-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.chapter-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: #94A3B8;
+}
+
+/* ===== 章节目录模式 ===== */
+.learn-chapter-directory {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.chapter-directory-header {
+  margin-bottom: 36px;
+}
+
+.chapter-directory-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0F172A;
+  letter-spacing: -0.02em;
+}
+:global(html.dark) .chapter-directory-title {
+  color: #F1F5F9;
+}
+
+.chapter-directory-desc {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #64748B;
+}
+:global(html.dark) .chapter-directory-desc {
+  color: #94A3B8;
+}
+
 .chapter-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
+
 .chapter-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  padding: 1.25rem 3.5rem 1.25rem 1.25rem;
-  min-height: 8rem;
-  border-radius: 0.75rem;
+  padding: 20px;
+  border-radius: 12px;
   border: 1px solid #E2E8F0;
   background: white;
   text-align: left;
@@ -1119,84 +1239,92 @@ watch(
   cursor: pointer;
   transition: all 0.2s;
 }
+
 .chapter-card:hover {
   border-color: #93C5FD;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
 }
+
 :global(html.dark) .chapter-card {
   border-color: #1E293B;
   background: #111827;
 }
 :global(html.dark) .chapter-card:hover {
   border-color: #3B82F6;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
 }
-.chapter-card::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 3px;
-  border-radius: 3px 0 0 3px;
-  content: "";
-  background: #2563EB;
-  transform: scaleY(0.3);
-  transform-origin: top;
-  transition: transform 0.2s;
+
+.chapter-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
-.chapter-card:hover::before {
-  transform: scaleY(1);
-}
-.chapter-label {
+
+.chapter-index {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.65rem;
+  font-size: 12px;
   font-weight: 800;
   color: #2563EB;
 }
-.chapter-card h2 {
-  margin-top: 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 800;
-  line-height: 1.4;
-  color: #1E293B;
+:global(html.dark) .chapter-index {
+  color: #60A5FA;
 }
-:global(html.dark) .chapter-card h2 {
-  color: #E5E7EB;
-}
-.chapter-card p {
-  margin-top: 0.375rem;
-  font-size: 0.8rem;
-  line-height: 1.6;
-  color: #64748B;
-}
-:global(html.dark) .chapter-card p {
-  color: #94A3B8;
-}
-.chapter-open-icon {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
+
+.chapter-card .chapter-open-icon {
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   color: #2563EB;
   background: #EFF6FF;
   border: 1px solid #BFDBFE;
+  transition: all 0.2s;
 }
-:global(html.dark) .chapter-open-icon {
+.chapter-card:hover .chapter-open-icon {
+  background: #2563EB;
+  color: white;
+  border-color: #2563EB;
+}
+:global(html.dark) .chapter-card .chapter-open-icon {
   color: #60A5FA;
   background: #172554;
   border-color: #1E3A8A;
 }
+:global(html.dark) .chapter-card:hover .chapter-open-icon {
+  background: #3B82F6;
+  color: white;
+  border-color: #3B82F6;
+}
 
-/* ===== Markdown 文档 ===== */
+.chapter-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #1E293B;
+}
+:global(html.dark) .chapter-card-title {
+  color: #E5E7EB;
+}
+
+.chapter-card-summary {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748B;
+}
+:global(html.dark) .chapter-card-summary {
+  color: #94A3B8;
+}
+
+/* ===== Markdown 文档容器 ===== */
 .learn-document {
-  overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 12px;
   border: 1px solid #E2E8F0;
   background: white;
+  overflow: hidden;
 }
 :global(html.dark) .learn-document {
   border-color: #1E293B;
@@ -1206,29 +1334,26 @@ watch(
 /* ===== 章节导航 ===== */
 .chapter-pagination {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0.75rem;
-  margin-top: 1.25rem;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  margin-top: 20px;
 }
+
 .chapter-nav-btn {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 12px;
   min-width: 0;
-  min-height: 3.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  min-height: 80px;
+  padding: 16px 20px;
+  border-radius: 10px;
   border: 1px solid #E2E8F0;
   background: white;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #334155;
+  text-align: left;
+  color: inherit;
   transition: all 0.15s;
 }
-.chapter-nav-btn span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
+
 .chapter-nav-btn:hover:not(:disabled) {
   border-color: #93C5FD;
   background: #EFF6FF;
@@ -1237,20 +1362,62 @@ watch(
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+:global(html.dark) .chapter-nav-btn {
+  border-color: #1E293B;
+  background: #0F172A;
+}
+:global(html.dark) .chapter-nav-btn:hover:not(:disabled) {
+  border-color: #3B82F6;
+  background: #172554;
+}
+
+.chapter-nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.chapter-nav-text-right {
+  text-align: right;
+}
+
+.chapter-nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chapter-nav-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(html.dark) .chapter-nav-title {
+  color: #CBD5E1;
+}
+
 .chapter-nav-next {
   justify-content: flex-end;
   text-align: right;
 }
+
 .chapter-directory-btn {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  gap: 6px;
+  padding: 0 16px;
+  border-radius: 8px;
   border: 1px solid #E2E8F0;
   background: white;
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: #2563EB;
   transition: all 0.15s;
 }
@@ -1258,29 +1425,45 @@ watch(
   border-color: #93C5FD;
   background: #EFF6FF;
 }
-:global(html.dark) .chapter-nav-btn,
 :global(html.dark) .chapter-directory-btn {
   border-color: #1E293B;
   background: #0F172A;
-  color: #94A3B8;
+  color: #60A5FA;
 }
-:global(html.dark) .chapter-nav-btn:hover:not(:disabled),
 :global(html.dark) .chapter-directory-btn:hover {
   border-color: #3B82F6;
   background: #172554;
 }
 
 /* ===== 移动端适配 ===== */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
+  .learn-detail-container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
   .chapter-grid {
     grid-template-columns: 1fr;
   }
+  .chapter-main-title,
+  .chapter-directory-title {
+    font-size: 26px;
+  }
+  .learn-document {
+    padding: 20px 16px;
+  }
+}
+
+@media (max-width: 640px) {
   .chapter-pagination {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
+  }
+  .chapter-nav-btn {
+    min-height: auto;
   }
   .chapter-directory-btn {
-    grid-column: 1 / -1;
-    grid-row: 1;
+    order: -1;
+    justify-content: center;
+    padding: 10px;
   }
 }
 </style>

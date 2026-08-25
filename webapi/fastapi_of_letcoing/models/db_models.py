@@ -280,6 +280,7 @@ class Announcement(BaseModel):
     id = AutoField(primary_key=True, verbose_name="公告ID")
     title = CharField(max_length=200, verbose_name="公告标题")
     content = TextField(verbose_name="Markdown 内容")
+    category = CharField(max_length=50, default="系统公告", verbose_name="分类(系统公告/比赛公告/更新公告/活动通知)")
     permission = CharField(max_length=20, default="member", verbose_name="访问权限")
     created_by = CharField(max_length=50, null=True, verbose_name="创建者ID")
     is_published = BooleanField(default=True, verbose_name="是否发布")
