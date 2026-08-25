@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted } from 'vue';
+import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import {
   listContests, createContest, getContest,
