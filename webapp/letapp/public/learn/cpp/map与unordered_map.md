@@ -22,7 +22,7 @@
 
 **怎么选？** 需要按 key 排序遍历、范围查询（`lower_bound`/`upper_bound`）、或者 key 类型没有好的哈希函数时用 `map`。只做点查、插入频繁、元素量大且哈希分布均匀时用 `unordered_map`。 
 
-![map与unordered_map查找路径对比](../images/file1.kamacoder.com/i/web/20260523163658_cpp21.png)
+![map与unordered_map查找路径对比](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260523163658_cpp21.png)
  
 
 ## `# 知识拓展 

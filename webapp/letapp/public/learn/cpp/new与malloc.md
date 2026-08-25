@@ -28,7 +28,7 @@
 
 `new` 不需要手动计算大小（编译器自动算 `sizeof`），`malloc` 必须手动传大小参数。`new` 可以被类重载（自定义内存池），`malloc` 不能重载。`new[]` 分配数组时会额外记录元素个数，`delete[]` 根据这个数字批量调析构；如果用 `delete` 代替 `delete[]`，只会析构第一个元素，剩下的全部泄漏。 
 
-![new与malloc调用链路对比](../images/file1.kamacoder.com/i/web/20260523163713_cpp26.png)
+![new与malloc调用链路对比](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260523163713_cpp26.png)
  
 
 ## `# 知识拓展 

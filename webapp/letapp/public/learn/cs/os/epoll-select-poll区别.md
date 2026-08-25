@@ -151,7 +151,7 @@ fd就绪时持续通知，直到数据被处理完，
 
   - 知识图解
 
-![image](../../images/file1.kamacoder.com/i/bagu/2026012901.png)
+![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/2026012901.png)
 
   - 面试官很能追问
 

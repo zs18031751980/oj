@@ -71,10 +71,10 @@
 ## 知识图解
 
   1. **TCP三次握手的示意图如下**：
- ![image](../../images/file1.kamacoder.com/i/bagu/TCP_connection_three_handshake.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/TCP_connection_three_handshake.jpg)
 
    2. **TCP四次挥手的示意图如下**：
- ![image](../../images/file1.kamacoder.com/i/bagu/TCP_connection_four_termination.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/TCP_connection_four_termination.jpg)
 
 ## 知识拓展
 

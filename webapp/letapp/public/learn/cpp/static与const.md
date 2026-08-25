@@ -47,7 +47,7 @@
 | 修饰类成员变量  所有对象共享一份  必须在初始化列表中初始化 
 | 修饰成员函数  无 this，可用类名调用  不修改成员，const 对象可调用 
 
-![static与const对比](../images/file1.kamacoder.com/i/web/20260525123936_cpp48.png)
+![static与const对比](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260525123936_cpp48.png)
  
 
 ## `# 知识拓展 

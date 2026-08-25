@@ -33,7 +33,7 @@ epoll 的设计完全不同：`epoll_ctl` 注册 fd 时就把它挂到内核的�
 
 水平触发（LT，默认）：只要 fd 处于就绪状态，`epoll_wait` 每次都会返回它。编程简单，但如果不及时处理会反复通知。边缘触发（ET）：只在 fd 状态变化时通知一次，之后不再通知。必须一次性读完所有数据（用非阻塞 IO + 循环读到 `EAGAIN`），否则数据会丢。ET 减少了 `epoll_wait` 的返回次数，高并发场景性能更好，但编程复杂度更高。 
 
-![select poll epoll对比](../images/file1.kamacoder.com/i/web/20260526103832_cpp_se_v2.png)
+![select poll epoll对比](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260526103832_cpp_se_v2.png)
  
 
 ## `# 知识拓展 

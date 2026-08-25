@@ -56,7 +56,7 @@
 | 续期  watchdog / 定时延长 TTL  避免业务未完成锁先过期
   1. Redis分布式锁示意图
 
-![Redis分布式锁加锁和释放流程图](../../images/file1.kamacoder.com/i/bagu/20260412_Redis_E5_88_86_E5_B8_83_E5_BC_8F_E9_94_81.jpg)
+![Redis分布式锁加锁和释放流程图](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/20260412_Redis_E5_88_86_E5_B8_83_E5_BC_8F_E9_94_81.jpg)
 
 ## 代码示例
 

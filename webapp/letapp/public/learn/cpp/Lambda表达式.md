@@ -43,7 +43,7 @@ struct __lambda_1 {
 
 无捕获的 lambda 没有成员变量，等价于一个普通函数。C++ 标准规定它可以隐式转换为对应签名的函数指针。这让 lambda 能直接传给 C 风格的回调接口。有捕获的 lambda 不能转函数指针——因为它有状态（成员变量），需要对象来承载。 
 
-![Lambda 表达式原理](../images/file1.kamacoder.com/i/web/20260523163655_cpp19.png)
+![Lambda 表达式原理](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260523163655_cpp19.png)
  
 
 ## `# 知识拓展 

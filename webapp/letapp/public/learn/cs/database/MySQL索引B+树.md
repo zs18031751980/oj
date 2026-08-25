@@ -29,13 +29,13 @@
 ## 知识拓展
 
   1. **MySQL InnoDB的 B+树索引（主键，聚簇索引）** ， 示意图如下：
- ![image](../../images/file1.kamacoder.com/i/bagu/index_B_Tree_PRIMARYKEY.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/index_B_Tree_PRIMARYKEY.jpg)
 
    2. **MySQL Innodb的 B+树索引（二级索引，非聚簇）** ，示意图如下：
- ![image](../../images/file1.kamacoder.com/i/bagu/index_sorts_B_Tree_innoDB.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/index_sorts_B_Tree_innoDB.jpg)
 
    3. **InnoDB 存储引擎在页面 (Page) 级别实现的 B+ 树索引结构**，示意图如下：
- ![image](../../images/file1.kamacoder.com/i/bagu/index_B_Tree_pageLevel.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/index_B_Tree_pageLevel.jpg)
 
    4. **面试官可能的追问1：B+ 树和 B 树在结构上最主要的区别是什么？**
     - **简答：** 最主要的区别在于**数据存储位置**和**叶子节点连接**。B 树的非叶子节点和叶子节点都存储数据，而 B+ 树只在叶子节点存储数据，非叶子节点只存储索引键。此外，B+ 树的所有叶子节点通过链表连接，而 B 树没有。

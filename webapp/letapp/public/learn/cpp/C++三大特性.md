@@ -38,7 +38,7 @@
 
 vtable 是类级别的（同类所有对象共享一张表），vptr 是对象级别的（每个对象各有一个）。 
 
-![运行时多态 vtable/vptr 动态绑定](../images/file1.kamacoder.com/i/web/20260523163638_cpp6.png)
+![运行时多态 vtable/vptr 动态绑定](/learn/编程笔记/C++/images/file1.kamacoder.com/i/web/20260523163638_cpp6.png)
  
 
 ## `# 知识拓展 

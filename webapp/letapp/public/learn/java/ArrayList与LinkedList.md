@@ -57,7 +57,7 @@
 
 ## `# 知识拓展 
   - **ArrayList 和 LinkedList 的对比图**如下所示：  
- ![image](../images/file1.kamacoder.com/i/bagu/ArrayList_versus_LinkedList.jpg)
+ ![image](/learn/编程笔记/Java/images/file1.kamacoder.com/i/bagu/ArrayList_versus_LinkedList.jpg)
    - **面试官可能的追问1：在实际开发中，你如何根据业务场景选择 `ArrayList` 还是 `LinkedList`？** **简答：** 选择 `ArrayList` 还是 `LinkedList` 主要取决于对集合的操作模式：
 
     - **选择 `ArrayList` 的场景**：- **读多写少**，特别是需要频繁地通过索引进行随机访问（`get(index)`）。

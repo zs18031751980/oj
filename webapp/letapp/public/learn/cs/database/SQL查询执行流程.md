@@ -68,7 +68,7 @@
 ## 知识拓展
 
   1. **MySQL执行一条SQL查询语句的流程示意图（以MySQL8.0为例）**，如下所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/SQL_execution_order.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/SQL_execution_order.jpg)
 
    2. **面试官可能的追问1—为什么 MySQL 8.0 移除了查询缓存？**
     - **答**：缓存失效频繁（表更新即失效），维护成本高且命中率低。现代优化器能生成更高效执行计划，且应用层缓存（如 Redis）更灵活。

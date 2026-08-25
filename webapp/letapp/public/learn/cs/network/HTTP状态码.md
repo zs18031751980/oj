@@ -84,7 +84,7 @@
   -
 
 **高频HTTP状态码详解**，如下图所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/HTTP_Status_Code.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/HTTP_Status_Code.jpg)
 
    -
 

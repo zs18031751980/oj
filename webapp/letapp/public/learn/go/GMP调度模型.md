@@ -36,7 +36,7 @@ P 是 GMP 模型的核心枢纽，数量由 `runtime.GOMAXPROCS()` 控制，默�
 
 ## `# 知识图解 
 
-![Go语言的GMP调度模型是什么示意图](../images/file1.kamacoder.com/i/algo/go_gmp_model.jpg)
+![Go语言的GMP调度模型是什么示意图](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_gmp_model.jpg)
  
 
 ## `# 知识扩展 

@@ -39,7 +39,7 @@ Go 还通过**逃逸分析**优化内存分配，将部分对象分配在栈上�
 
 内存分配机制： 
 
-![image](../images/file1.kamacoder.com/i/algo/go_memory.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_memory.jpg)
  
 
 ## `# 知识扩展 

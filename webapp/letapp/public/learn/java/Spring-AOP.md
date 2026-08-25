@@ -45,7 +45,7 @@ AOP编程实现步骤：
 
 ## `# 知识图解 
   - AOP不同类型通知时机
-![image](../images/file1.kamacoder.com/i/bagu/20251109_springAOP.jpg)
+![image](/learn/编程笔记/Java/images/file1.kamacoder.com/i/bagu/20251109_springAOP.jpg)
  
 
 ## `# 知识扩展 

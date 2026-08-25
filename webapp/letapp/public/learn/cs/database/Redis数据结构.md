@@ -104,7 +104,7 @@ Redis 还支持集合间的交集、并集、差集运算，这也是Set的一�
 | 排行榜、延迟队列  `ZSet`  可排序，可按分值范围查询
 | 消息流、消费者组  `Stream`  支持消息 ID 和消费组
   1. Redis Hash的两种编码方式示意
-![image](../../images/file1.kamacoder.com/i/bagu/20260329_RedisHash.jpg)
+![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/20260329_RedisHash.jpg)
 
 ## 代码示例
 

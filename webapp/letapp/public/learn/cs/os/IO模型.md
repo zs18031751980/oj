@@ -210,7 +210,7 @@ Proactor：**基于异步IO**，通知应用"**操作已完成**"
 
   - 知识图解
 
-![image](../../images/file1.kamacoder.com/i/bagu/2025121401.png)
+![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/2025121401.png)
 
   - 适用场景
 

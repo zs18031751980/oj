@@ -30,12 +30,12 @@ Go语言中接口比较的核心在于其内部结构。每个接口值都由两
 
 go中interface的底层原理： 
 
-![image](../images/file1.kamacoder.com/i/algo/go_interface.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_interface.jpg)
  
 
 interface 的比较情况： 
 
-![image](../images/file1.kamacoder.com/i/algo/go_interfaceCompare.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_interfaceCompare.jpg)
  
 
 ## `# 知识扩展 

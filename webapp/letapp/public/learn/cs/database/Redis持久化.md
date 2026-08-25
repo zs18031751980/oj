@@ -51,7 +51,7 @@
 | `AOF`  追加写命令日志  数据更完整  文件更大，恢复较慢
 | 混合持久化  RDB 快照 + AOF 增量  恢复更快且更完整  配置和机制更复杂
   1. RDB和AOP持久化示意
-![image](../../images/file1.kamacoder.com/i/bagu/20260329_Redis_AOF_RDB.jpg)
+![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/20260329_Redis_AOF_RDB.jpg)
 
 ## 代码示例
 

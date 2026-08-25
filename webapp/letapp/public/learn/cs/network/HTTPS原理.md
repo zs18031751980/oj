@@ -45,7 +45,7 @@
   1.
 
 **HTTPS工作原理示意图如下**：
- ![image](../../images/file1.kamacoder.com/i/bagu/HTTPS_principle.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/HTTPS_principle.jpg)
 
    2.
 

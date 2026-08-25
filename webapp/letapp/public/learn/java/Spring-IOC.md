@@ -26,7 +26,7 @@
 
 ## `# 知识图解 
   - IOC容器功能示意图
-![image](../images/file1.kamacoder.com/i/bagu/20251116_spring_IOC.jpg)
+![image](/learn/编程笔记/Java/images/file1.kamacoder.com/i/bagu/20251116_spring_IOC.jpg)
  
 
 ## `# 知识扩展 

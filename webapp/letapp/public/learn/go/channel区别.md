@@ -21,7 +21,7 @@
 
 ## `# 知识图解 
 
-![image](../images/file1.kamacoder.com/i/algo/go_channel_comparison.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_channel_comparison.jpg)
  
 
 ## `# 知识扩展 

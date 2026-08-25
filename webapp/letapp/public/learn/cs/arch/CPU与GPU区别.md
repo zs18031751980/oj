@@ -15,7 +15,7 @@ CPU和GPU的区别
 
 如下表所示：
 
-![image.png](../../images/cdn.kamacoder.com/6777ceae43c48-phpyjQEw0.png)
+![image.png](/learn/计算机基础/images/cdn.kamacoder.com/6777ceae43c48-phpyjQEw0.png)
 
 ## 【详细回答】
 
@@ -74,4 +74,4 @@ GPU的主要功能包括：
 ## 【知识拓展】
 
   - CPU运算器和控制器的组成结构，如下表所示：
-![image.png](../../images/cdn.kamacoder.com/6777d6c0bafa3-phpWwCFox.png)
+![image.png](/learn/计算机基础/images/cdn.kamacoder.com/6777d6c0bafa3-phpWwCFox.png)

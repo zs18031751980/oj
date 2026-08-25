@@ -51,7 +51,7 @@
 | 缓存击穿  单个热点 key 失效瞬间并发回源  热门商品、热点店铺、活动库存  数据库被热点流量冲垮  互斥锁、逻辑过期、热点预热
 | 缓存雪崩  大量 key 同时失效或 Redis 故障  批量导入缓存、整点统一过期、节点宕机  请求成片压垮数据库和下游  随机 TTL、高可用、多级缓存、限流熔断
   1. 三类问题示意
-![image](../../images/file1.kamacoder.com/i/bagu/20260407_Redis_Penetration_Stampeding_Avalanche.jpg)
+![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/20260407_Redis_Penetration_Stampeding_Avalanche.jpg)
 
 ## 代码示例
 

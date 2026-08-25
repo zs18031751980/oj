@@ -29,7 +29,7 @@
 
 ## `# 知识图解 
   - **HashMap的底层数据结构**，示意图如下：  
- ![image](../images/file1.kamacoder.com/i/bagu/Collection_HashMap_put.jpg)
+ ![image](/learn/编程笔记/Java/images/file1.kamacoder.com/i/bagu/Collection_HashMap_put.jpg)
   
 
 ## `# 知识拓展 

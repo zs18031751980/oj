@@ -31,7 +31,7 @@
 ## `# 知识图解 
 
 jvm运行时数据区组成示意图
-![image](../images/file1.kamacoder.com/i/bagu/20251002_jvm_running_data_area.jpg)
+![image](/learn/编程笔记/Java/images/file1.kamacoder.com/i/bagu/20251002_jvm_running_data_area.jpg)
  
 
 ## `# 知识扩展 

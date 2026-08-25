@@ -28,12 +28,12 @@ Go 语言的协程调度器采用 **GPM 模型**：G 代表 goroutine（协程�
 
 ## `# 知识图解 
 
-![image](../images/file1.kamacoder.com/i/algo/go_goroutine.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_goroutine.jpg)
  
 
 协程VS线程 
 
-![image](../images/file1.kamacoder.com/i/algo/go_goroutine_vs_thread.jpg)
+![image](/learn/编程笔记/Go/images/file1.kamacoder.com/i/algo/go_goroutine_vs_thread.jpg)
  
 
 ## `# 知识扩展 

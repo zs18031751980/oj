@@ -66,14 +66,14 @@
   1.
 
 **TCP 和 UDP 的连接机制对比**，如下图所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/TCP_UDP_connection_difference.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/TCP_UDP_connection_difference.jpg)
 
    2.
 
 **TCP 和 UDP 通信机制对比**，如下图所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/TCP_UDP_transmission_mechanisms.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/TCP_UDP_transmission_mechanisms.jpg)
 
    3.
 
 **TCP 和 UDP 应用层报文处理对比**，如下图所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/TCP_UDP_message_handling.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/TCP_UDP_message_handling.jpg)

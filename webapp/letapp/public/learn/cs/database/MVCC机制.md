@@ -40,12 +40,12 @@
   1.
 
 **MySQL四种隔离级别的分类**，如下表所示：
- ![image](../../images/file1.kamacoder.com/i/bagu/MySQL_isolation_level.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/MySQL_isolation_level.jpg)
 
    2.
 
 **脏读（Dirty Read）** 示意图如下：
- ![image](../../images/file1.kamacoder.com/i/bagu/MySQL_isolation_dirtyRead.jpg)
+ ![image](/learn/计算机基础/images/file1.kamacoder.com/i/bagu/MySQL_isolation_dirtyRead.jpg)
 
    3.
 
