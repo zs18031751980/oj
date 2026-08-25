@@ -1,7 +1,6 @@
-from flask import request
+from flask import request, g
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Submission, User, Problem
-from peewee import fn, SQL
+from models.db_models import Submission, User, Problem, get_database
 
 api = Namespace('rankings', description='排行榜接口')
 
@@ -17,7 +16,6 @@ ranking_model = api.model('Ranking', {
     'hard_count': fields.Integer(description='困难题数'),
 })
 
-# 积分规则：简单10分，中等20分，困难30分
 DIFFICULTY_SCORES = {
     '简单': 10,
     '中等': 20,
@@ -26,42 +24,38 @@ DIFFICULTY_SCORES = {
 
 
 def _get_user_stats():
-    """计算所有用户的解题统计，按难度积分"""
-    # 获取每个用户 AC 的题目及其难度
-    ac_query = (
-        Submission.select(
-            Submission.user,
-            Problem.id.alias('problem_id'),
-            Problem.difficulty.alias('difficulty'),
-            fn.COUNT(fn.DISTINCT(Submission.problem)).alias('count'),
-        )
-        .join(Problem, on=(Submission.problem == Problem.id))
-        .where(Submission.status == 'AC')
-        .group_by(Submission.user, Problem.id, Problem.difficulty)
-    )
+    db = get_database()
+    rows = db.execute_sql("""
+        SELECT
+            u.id AS user_id,
+            COALESCE(u.username, '匿名') AS username,
+            COALESCE(u.avatar_url, '') AS avatar_url,
+            p.difficulty,
+            COUNT(DISTINCT s.problem_id) AS cnt
+        FROM submissions s
+        JOIN users u ON s.user_id = u.id
+        JOIN problems p ON s.problem_id = p.id
+        WHERE s.status = 'AC'
+        GROUP BY u.id, u.username, u.avatar_url, p.difficulty
+    """).fetchall()
 
-    # 按用户聚合
     user_stats: dict[int, dict] = {}
-    for row in ac_query:
-        uid = row.user.id if row.user else None
-        if uid is None:
-            continue
+    for row in rows:
+        uid, username, avatar_url, diff, cnt = row
         if uid not in user_stats:
             user_stats[uid] = {
                 'user_id': uid,
-                'username': row.user.username or '匿名',
-                'avatar_url': row.user.avatar_url or '',
+                'username': username,
+                'avatar_url': avatar_url,
                 'solved_count': 0,
                 'rating': 0,
                 'easy_count': 0,
                 'medium_count': 0,
                 'hard_count': 0,
             }
-        diff = row.difficulty or '简单'
-        cnt = row.count
+        diff = diff or '简单'
         user_stats[uid]['solved_count'] += cnt
-        score = DIFFICULTY_SCORES.get(diff, 10) * cnt
-        user_stats[uid]['rating'] += score
+        user_stats[uid]['rating'] += DIFFICULTY_SCORES.get(diff, 10) * cnt
         if diff == '简单':
             user_stats[uid]['easy_count'] += cnt
         elif diff == '中等':
@@ -96,25 +90,22 @@ class UserRankingController(Resource):
         except User.DoesNotExist:
             return {'error': '用户不存在'}, 404
 
-        # 该用户 AC 的题目按难度统计
-        ac_query = (
-            Submission.select(
-                Problem.difficulty.alias('difficulty'),
-                fn.COUNT(fn.DISTINCT(Submission.problem)).alias('count'),
-            )
-            .join(Problem, on=(Submission.problem == Problem.id))
-            .where(Submission.user == user, Submission.status == 'AC')
-            .group_by(Problem.difficulty)
-        )
+        db = get_database()
+        rows = db.execute_sql("""
+            SELECT p.difficulty, COUNT(DISTINCT s.problem_id) AS cnt
+            FROM submissions s
+            JOIN problems p ON s.problem_id = p.id
+            WHERE s.user_id = %s AND s.status = 'AC'
+            GROUP BY p.difficulty
+        """, (user_id,)).fetchall()
 
         solved_count = 0
         rating = 0
         easy_count = 0
         medium_count = 0
         hard_count = 0
-        for row in ac_query:
-            diff = row.difficulty or '简单'
-            cnt = row.count
+        for diff, cnt in rows:
+            diff = diff or '简单'
             solved_count += cnt
             rating += DIFFICULTY_SCORES.get(diff, 10) * cnt
             if diff == '简单':
