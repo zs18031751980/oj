@@ -31,12 +31,13 @@ def _get_user_stats():
     ac_query = (
         Submission.select(
             Submission.user,
-            Problem.difficulty,
+            Problem.id.alias('problem_id'),
+            Problem.difficulty.alias('difficulty'),
             fn.COUNT(fn.DISTINCT(Submission.problem)).alias('count'),
         )
         .join(Problem, on=(Submission.problem == Problem.id))
         .where(Submission.status == 'AC')
-        .group_by(Submission.user, Problem.difficulty)
+        .group_by(Submission.user, Problem.id, Problem.difficulty)
     )
 
     # 按用户聚合
@@ -98,7 +99,7 @@ class UserRankingController(Resource):
         # 该用户 AC 的题目按难度统计
         ac_query = (
             Submission.select(
-                Problem.difficulty,
+                Problem.difficulty.alias('difficulty'),
                 fn.COUNT(fn.DISTINCT(Submission.problem)).alias('count'),
             )
             .join(Problem, on=(Submission.problem == Problem.id))
