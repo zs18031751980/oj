@@ -222,12 +222,16 @@ onMounted(loadContests);
 
 <template>
   <div class="p-6">
-    <div class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-black">比赛管理</h1>
-      <button class="ui-btn ui-btn-primary" @click="showContestForm = true">
-        ➕ 创建比赛
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <h1 class="admin-header-title">比赛管理</h1>
+        <p class="admin-header-desc">创建与管理所有比赛</p>
+      </div>
+      <button class="admin-btn-primary" @click="showContestForm = true">
+        <Icon icon="material-symbols:add-rounded" class="admin-btn-icon" />
+        创建比赛
       </button>
-    </div>
+    </header>
 
     <!-- 创建比赛弹窗 -->
     <div v-if="showContestForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -441,3 +445,70 @@ onMounted(loadContests);
     </div>
   </div>
 </template>
+
+<style scoped>
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  min-height: 5rem;
+}
+.admin-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.admin-header-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+:global(.dark) .admin-header-title {
+  color: #f1f5f9;
+}
+.admin-header-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+:global(.dark) .admin-header-desc {
+  color: #94a3b8;
+}
+.admin-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 7rem;
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+.admin-btn-primary:hover {
+  background: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+.admin-btn-primary:active {
+  background: #1e40af;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+  transform: translateY(0);
+}
+.admin-btn-primary:disabled {
+  background: #93b4e0;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+.admin-btn-icon {
+  width: 16px;
+  height: 16px;
+}
+</style>

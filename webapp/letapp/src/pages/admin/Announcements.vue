@@ -161,22 +161,20 @@ onMounted(loadList);
 
 <template>
   <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-    <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <h1 class="text-2xl font-black text-slate-950 dark:text-white">公告管理</h1>
-        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">已发布与草稿</p>
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <h1 class="admin-header-title">公告管理</h1>
+        <p class="admin-header-desc">已发布与草稿</p>
       </div>
-      <NButton
+      <button
         v-if="isManager && editingId === null"
-        type="primary"
+        class="admin-btn-primary"
         :disabled="deletingId !== null"
         @click="startCreate"
       >
-        <template #icon>
-          <Icon icon="material-symbols:add-rounded" />
-        </template>
+        <Icon icon="material-symbols:add-rounded" class="admin-btn-icon" />
         新建公告
-      </NButton>
+      </button>
     </header>
 
     <section v-if="!isManager" class="flex min-h-80 flex-col items-center justify-center text-center text-slate-400">
@@ -364,5 +362,70 @@ onMounted(loadList);
     min-height: 30rem;
     max-height: 42rem;
   }
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  min-height: 5rem;
+}
+.admin-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.admin-header-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #0f172a;
+}
+:global(.dark) .admin-header-title {
+  color: #f1f5f9;
+}
+.admin-header-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+:global(.dark) .admin-header-desc {
+  color: #94a3b8;
+}
+.admin-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 7rem;
+  height: 2.75rem;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+.admin-btn-primary:hover {
+  background: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+.admin-btn-primary:active {
+  background: #1e40af;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+  transform: translateY(0);
+}
+.admin-btn-primary:disabled {
+  background: #93b4e0;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+}
+.admin-btn-icon {
+  width: 16px;
+  height: 16px;
 }
 </style>
