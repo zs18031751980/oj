@@ -51,7 +51,7 @@ def _scan_directory(
 
         if os.path.isdir(entry_full):
             # 跳过无用目录
-            if entry.lower() in ('__pycache__', 'node_modules', '.git', 'images', 'assets', '.obsidian'):
+            if entry.lower() in ('__pycache__', 'node_modules', '.git', 'images', 'assets', '.obsidian', 'ai-skills教学', 'runoob', 'w3', 'opencode-skills'):
                 continue
             child = _scan_directory(root_dir, entry_rel, depth + 1, max_depth)
             if child and child.get('children'):
