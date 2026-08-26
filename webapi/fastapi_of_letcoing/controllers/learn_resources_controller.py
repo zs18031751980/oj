@@ -26,43 +26,40 @@ def _resolve_learn_root() -> str:
     """解析学习资料根目录，按优先级尝试：
     1. 环境变量 LEARN_RESOURCES_ROOT
     2. 本地 Obsidian 仓库路径（开发机）
-    3. 多种可能的仓库内 public/learn 回退路径
+    3. 从当前文件位置向上查找 webapp/letapp/public/learn
+    4. 常见部署路径
+    注意：生产环境前端已改为直接以静态文件方式提供 public/learn，
+    后端此接口仅作本地/兼容保留。
     """
     import os, logging
     logger = logging.getLogger('letcoding')
-    logger.info('[learn] __file__ = %s', os.path.abspath(__file__))
 
     # 1. 环境变量优先
     env_path = os.environ.get('LEARN_RESOURCES_ROOT')
     if env_path and os.path.isdir(env_path):
-        logger.info('[learn] 使用环境变量路径: %s', env_path)
         return os.path.normpath(env_path)
 
     # 2. 本地 Obsidian 仓库（开发机）
     local_obsidian = '/home/z/桌面/资料/obsidian-github/dev'
     if os.path.isdir(local_obsidian):
-        logger.info('[learn] 使用 Obsidian 路径: %s', local_obsidian)
         return os.path.normpath(local_obsidian)
 
     # 3. 从当前文件位置向上查找 webapp/letapp/public/learn
     controller_dir = os.path.dirname(os.path.abspath(__file__))
     current = controller_dir
-    for level in range(10):  # 最多向上找10层
+    for _ in range(10):  # 最多向上找10层
         candidate = os.path.join(current, 'webapp', 'letapp', 'public', 'learn')
-        logger.info('[learn] 尝试路径(%d): %s -> %s', level, current, candidate)
         if os.path.isdir(candidate):
-            logger.info('[learn] 找到目录: %s', candidate)
             return os.path.normpath(candidate)
         candidate2 = os.path.join(current, 'public', 'learn')
         if os.path.isdir(candidate2):
-            logger.info('[learn] 找到目录: %s', candidate2)
             return os.path.normpath(candidate2)
         parent = os.path.dirname(current)
         if parent == current:
             break
         current = parent
 
-    # 3.5 尝试常见部署路径（直接绝对路径）
+    # 4. 常见部署路径
     common_paths = [
         '/webapp/letapp/public/learn',
         '/app/webapp/letapp/public/learn',
@@ -71,13 +68,12 @@ def _resolve_learn_root() -> str:
         '/home/z/桌面/code/oj/webapp/letapp/public/learn',
     ]
     for p in common_paths:
-        logger.info('[learn] 尝试常见路径: %s -> %s', p, 'EXISTS' if os.path.isdir(p) else 'missing')
         if os.path.isdir(p):
             return os.path.normpath(p)
 
-    # 4. 返回默认路径（即使不存在，便于报错提示）
+    # 5. 返回默认路径（即使不存在，便于报错提示）
     fallback = os.path.normpath(os.path.join(controller_dir, '..', '..', '..', 'webapp', 'letapp', 'public', 'learn'))
-    logger.error('[learn] 未找到学习资料目录，回退到: %s', fallback)
+    logger.warning('[learn] 未找到学习资料目录，回退到: %s', fallback)
     return fallback
 
 
@@ -178,38 +174,3 @@ class LearnRescan(Resource):
             _tree_cache['data'] = scan_learn_resources(_LEARN_ROOT)
             _tree_cache['ts'] = time.time()
         return {'success': True, 'message': '目录已重新扫描'}
-
-
-@api.route('/debug-fs')
-class LearnDebugFs(Resource):
-    """临时调试端点：揭示远程服务器文件系统布局"""
-    def get(self):
-        import os
-        controller_dir = os.path.dirname(os.path.abspath(__file__))
-        info = {
-            'controller_dir': controller_dir,
-            'cwd': os.getcwd(),
-            'learn_root': _LEARN_ROOT,
-            'candidates_checked': [],
-        }
-        # 从控制器向上查找
-        current = controller_dir
-        for level in range(6):
-            for sub in [os.path.join(current, 'webapp', 'letapp', 'public', 'learn'),
-                        os.path.join(current, 'public', 'learn')]:
-                info['candidates_checked'].append({
-                    'path': sub,
-                    'exists': os.path.isdir(sub),
-                })
-            parent = os.path.dirname(current)
-            if parent == current:
-                break
-            current = parent
-        # 列出常见根目录
-        for root in ['/webapp', '/app', '/var/www', '/root', '/home']:
-            if os.path.isdir(root):
-                try:
-                    info[f'ls_{root}'] = os.listdir(root)[:20]
-                except Exception as e:
-                    info[f'ls_{root}'] = f'error: {e}'
-        return info

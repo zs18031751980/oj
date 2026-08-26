@@ -178,16 +178,7 @@ md.core.ruler.push('resolve_md_links', (state) => {
   }
 });
 
-/** 重写图片路径：将相对路径转为后端 API URL */
-function getApiBase(): string {
-  if (typeof window !== 'undefined') {
-    const h = window.location.hostname;
-    if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:6173';
-    return `https://${h}`;
-  }
-  return '';
-}
-
+/** 重写图片路径：将相对路径转为同源静态资源 URL */
 md.core.ruler.push('resolve_images', (state) => {
   const baseDir = (state.env as any)?.baseDir || '';
   const tokens = state.tokens;
@@ -220,8 +211,8 @@ md.core.ruler.push('resolve_images', (state) => {
         else if (p !== '.' && p !== '') { normalized.push(p); }
       }
       const finalPath = normalized.join('/');
-      // 设置为后端 API URL
-      inlineToken.attrSet('src', `${getApiBase()}/learn-resources/asset/${encodeURIComponent(finalPath).replace(/%2F/g, '/')}`);
+      // 设置为同源静态资源 URL（学习资料由前端 public/learn 托管）
+      inlineToken.attrSet('src', `/learn/${finalPath}`);
     }
   }
 });

@@ -467,6 +467,13 @@ const loadProblem = async () => {
 const learningMarkdown = ref<{ content: string } | undefined>();
 const isLearningLoading = ref(false);
 const learningError = ref('');
+// 学习资料 markdown 内相对图片的基准目录
+const learningBaseDir = computed(() => {
+  const file = problem.value?.learningMaterial || '';
+  const parts = file.split('/');
+  parts.pop();
+  return parts.join('/');
+});
 const loadLearningMaterial = async () => {
   const file = problem.value?.learningMaterial;
   if (!file) {
@@ -970,7 +977,7 @@ onUnmounted(() => {
               <p class="text-rose-500">{{ learningError }}</p>
             </div>
             <div v-else-if="learningMarkdown" class="md-body markdown-body">
-              <component v-if="MarkdownComp" :is="MarkdownComp" :content="learningMarkdown" :show-nav="false" :show-heading-links="false" />
+              <component v-if="MarkdownComp" :is="MarkdownComp" :content="learningMarkdown" :base-dir="learningBaseDir" :show-nav="false" :show-heading-links="false" />
             </div>
           </div>
         </div>

@@ -2,7 +2,6 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
-import { API_BASE_URL } from '../services/api';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
@@ -52,30 +51,29 @@ const searchQuery = ref('');
 const mdHeadings = ref<HeadingItem[]>([]);
 const mdContainer = ref<HTMLElement | null>(null);
 
-/** ====== 安全解析 JSON 响应（检测后端返回 HTML 错误页） ====== */
-async function parseJsonSafe(res: Response): Promise<any> {
-  const text = await res.text();
-  const trimmed = text.trim();
-  // 如果响应以 < 开头，说明是 HTML 页面（通常是 404/500 错误页），不是 JSON
-  if (trimmed.startsWith('<')) {
-    throw new Error('后端返回了非 JSON 响应（可能是服务未启动或接口不存在）');
-  }
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    throw new Error('响应解析失败');
-  }
+/** ====== 路径工具：学习资料以同源静态文件方式提供（public/learn） ====== */
+function encodePath(p: string): string {
+  return p.split('/').map((s) => encodeURIComponent(s)).join('/');
 }
 
-/** ====== 加载目录树 ====== */
+const learnBase = '/learn';
+
+/** 提取 Markdown 标题（首个 # 标题） */
+function extractTitle(content: string, fallback: string): string {
+  const m = content.match(/^#\s+(.+)$/m);
+  if (m && m[1]) return m[1].trim();
+  return fallback.split('/').pop()?.replace(/\.md$/, '') || fallback;
+}
+
+/** ====== 加载目录树（静态 manifest） ====== */
 async function loadTree() {
   isLoadingTree.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${API_BASE_URL}/learn-resources/tree`);
+    const res = await fetch(`${learnBase}/tree.json`, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await parseJsonSafe(res);
-    treeData.value = json.data || null;
+    const json = await res.json();
+    treeData.value = json || null;
   } catch (e: any) {
     error.value = `目录加载失败: ${e.message}`;
   } finally {
@@ -83,15 +81,24 @@ async function loadTree() {
   }
 }
 
-/** ====== 加载 Markdown 文件 ====== */
+/** ====== 加载 Markdown 文件（静态文件） ====== */
+async function fetchMarkdown(filePath: string): Promise<MarkdownData> {
+  const res = await fetch(`${learnBase}/${encodePath(filePath)}`, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return {
+    content: text,
+    title: extractTitle(text, filePath),
+    path: filePath,
+    mtime: 0,
+  };
+}
+
 async function loadFile(filePath: string) {
   isLoadingDoc.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${API_BASE_URL}/learn-resources/file/${encodeURIComponent(filePath)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await parseJsonSafe(res);
-    currentFile.value = json.data;
+    currentFile.value = await fetchMarkdown(filePath);
     // 更新路由
     router.replace({ query: { path: filePath } });
   } catch (e: any) {
@@ -101,13 +108,16 @@ async function loadFile(filePath: string) {
   }
 }
 
-/** ====== 重新扫描 ====== */
+/** ====== 重新扫描（重新拉取 manifest） ====== */
 async function rescanTree() {
   isLoadingTree.value = true;
   try {
-    const res = await fetch(`${API_BASE_URL}/learn-resources/rescan`, { method: 'POST' });
-    if (res.ok) await loadTree();
+    const res = await fetch(`${learnBase}/tree.json?t=${Date.now()}`);
+    if (res.ok) treeData.value = await res.json();
   } catch { /* ignore */ }
+  finally {
+    isLoadingTree.value = false;
+  }
 }
 
 const currentBaseDir = computed(() => {
@@ -122,10 +132,7 @@ const handleMdNavigate = async (filePath: string) => {
   isLoadingDoc.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${API_BASE_URL}/learn-resources/file/${encodeURIComponent(filePath)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    currentFile.value = json.data;
+    currentFile.value = await fetchMarkdown(filePath);
     router.replace({ query: { path: filePath } });
   } catch (e: any) {
     error.value = `加载资料失败：${e.message}`;
