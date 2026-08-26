@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
+import { API_BASE_URL } from '../services/api';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
@@ -51,14 +52,19 @@ const searchQuery = ref('');
 const mdHeadings = ref<HeadingItem[]>([]);
 const mdContainer = ref<HTMLElement | null>(null);
 
-/** ====== API 基础 URL ====== */
-function getApiBase(): string {
-  if (typeof window !== 'undefined') {
-    const h = window.location.hostname;
-    if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:6173';
-    return `https://${h}`;
+/** ====== 安全解析 JSON 响应（检测后端返回 HTML 错误页） ====== */
+async function parseJsonSafe(res: Response): Promise<any> {
+  const text = await res.text();
+  const trimmed = text.trim();
+  // 如果响应以 < 开头，说明是 HTML 页面（通常是 404/500 错误页），不是 JSON
+  if (trimmed.startsWith('<')) {
+    throw new Error('后端返回了非 JSON 响应（可能是服务未启动或接口不存在）');
   }
-  return '';
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    throw new Error('响应解析失败');
+  }
 }
 
 /** ====== 加载目录树 ====== */
@@ -66,9 +72,9 @@ async function loadTree() {
   isLoadingTree.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${getApiBase()}/learn-resources/tree`);
+    const res = await fetch(`${API_BASE_URL}/learn-resources/tree`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    const json = await parseJsonSafe(res);
     treeData.value = json.data || null;
   } catch (e: any) {
     error.value = `目录加载失败: ${e.message}`;
@@ -82,9 +88,9 @@ async function loadFile(filePath: string) {
   isLoadingDoc.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${getApiBase()}/learn-resources/file/${encodeURIComponent(filePath)}`);
+    const res = await fetch(`${API_BASE_URL}/learn-resources/file/${encodeURIComponent(filePath)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    const json = await parseJsonSafe(res);
     currentFile.value = json.data;
     // 更新路由
     router.replace({ query: { path: filePath } });
@@ -99,7 +105,7 @@ async function loadFile(filePath: string) {
 async function rescanTree() {
   isLoadingTree.value = true;
   try {
-    const res = await fetch(`${getApiBase()}/learn-resources/rescan`, { method: 'POST' });
+    const res = await fetch(`${API_BASE_URL}/learn-resources/rescan`, { method: 'POST' });
     if (res.ok) await loadTree();
   } catch { /* ignore */ }
 }
@@ -116,7 +122,7 @@ const handleMdNavigate = async (filePath: string) => {
   isLoadingDoc.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${getApiBase()}/learn-resources/file/${encodeURIComponent(filePath)}`);
+    const res = await fetch(`${API_BASE_URL}/learn-resources/file/${encodeURIComponent(filePath)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     currentFile.value = json.data;
