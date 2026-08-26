@@ -178,6 +178,54 @@ md.core.ruler.push('resolve_md_links', (state) => {
   }
 });
 
+/** 重写图片路径：将相对路径转为后端 API URL */
+function getApiBase(): string {
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') return 'http://localhost:6173';
+    return `https://${h}`;
+  }
+  return '';
+}
+
+md.core.ruler.push('resolve_images', (state) => {
+  const baseDir = (state.env as any)?.baseDir || '';
+  const tokens = state.tokens;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token || token.type !== 'inline') continue;
+    const inlineTokens = token.children || [];
+    for (let j = 0; j < inlineTokens.length; j++) {
+      const inlineToken = inlineTokens[j];
+      if (!inlineToken || inlineToken.type !== 'image') continue;
+      const src = inlineToken.attrGet('src');
+      if (!src) continue;
+      // 跳过已经是绝对 URL 的图片
+      if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) continue;
+      // 解析相对路径
+      const cleanSrc = (src.split('?')[0] || '').split('#')[0] || '';
+      let resolvedPath: string;
+      if (cleanSrc.startsWith('/')) {
+        resolvedPath = cleanSrc.replace(/^\//, '');
+      } else if (baseDir) {
+        resolvedPath = `${baseDir}/${cleanSrc}`;
+      } else {
+        resolvedPath = cleanSrc || '';
+      }
+      // 规范化路径（处理 ../）
+      const parts = resolvedPath.split('/');
+      const normalized: string[] = [];
+      for (const p of parts) {
+        if (p === '..') { normalized.pop(); }
+        else if (p !== '.' && p !== '') { normalized.push(p); }
+      }
+      const finalPath = normalized.join('/');
+      // 设置为后端 API URL
+      inlineToken.attrSet('src', `${getApiBase()}/learn-resources/asset/${encodeURIComponent(finalPath).replace(/%2F/g, '/')}`);
+    }
+  }
+});
+
 [
   { name: 'warning', className: 'warning' },
   { name: 'danger', className: 'danger' },

@@ -10,10 +10,11 @@
 import os
 import time
 import threading
-from flask import send_file
+import mimetypes
+from flask import send_file, make_response
 from flask_restx import Namespace, Resource
 
-from services.learn_scanner_service import scan_learn_resources, read_markdown_file, resolve_asset
+from services.learn_scanner_service import scan_learn_resources, read_markdown_file
 
 api = Namespace('learn-resources', description='学习资料目录与内容')
 
@@ -71,12 +72,24 @@ class LearnFile(Resource):
 class LearnAsset(Resource):
     def get(self, file_path: str):
         """获取静态资源（图片等）"""
-        # 资源路径需要一个基准 Markdown 路径来解析
-        # 简化：直接从根目录解析
-        full = resolve_asset(_LEARN_ROOT, '', file_path)
-        if not full:
+        # 安全检查：不允许跳出根目录
+        normalized = os.path.normpath(file_path)
+        if normalized.startswith('..') or os.path.isabs(normalized):
+            api.abort(400, '非法路径')
+
+        full_path = os.path.join(_LEARN_ROOT, normalized)
+        if not os.path.isfile(full_path):
             api.abort(404, '资源不存在')
-        return send_file(full)
+
+        # 获取 MIME 类型
+        mime_type, _ = mimetypes.guess_type(full_path)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+
+        response = make_response(send_file(full_path))
+        response.headers['Content-Type'] = mime_type
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+        return response
 
 
 @api.route('/rescan')
