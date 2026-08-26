@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Discussion, DiscussionReply, DiscussionLike, User, get_database
+from models.db_models import Discussion, DiscussionReply, DiscussionLike, DiscussionReplyLike, User, get_database
 from core.db_robust import ensure_connected
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService
@@ -191,6 +191,20 @@ class DiscussionDetailController(Resource):
                 d = Discussion.get_by_id(discussion_id)
                 if d.author_id != user.id and user.role != 'manager':
                     return {'error': '无权删除'}, 403
+                # 先清理关联数据（回复及其点赞、讨论点赞），确保即使数据库
+                # 外键未配置级联删除，主帖也能被正常删除
+                reply_ids = DiscussionReply.select(DiscussionReply.id).where(
+                    DiscussionReply.discussion == d
+                )
+                DiscussionReplyLike.delete().where(
+                    DiscussionReplyLike.reply.in_(reply_ids)
+                ).execute()
+                DiscussionLike.delete().where(
+                    DiscussionLike.discussion == d
+                ).execute()
+                DiscussionReply.delete().where(
+                    DiscussionReply.discussion == d
+                ).execute()
                 d.delete_instance()
             return {'success': True}, 200
         except Discussion.DoesNotExist:
@@ -321,6 +335,9 @@ class DiscussionReplyDetailController(Resource):
                     return {'error': '无权删除'}, 403
 
                 discussion = r.discussion
+                DiscussionReplyLike.delete().where(
+                    DiscussionReplyLike.reply == r
+                ).execute()
                 r.delete_instance()
                 if discussion:
                     discussion.reply_count = max(0, (discussion.reply_count or 0) - 1)
