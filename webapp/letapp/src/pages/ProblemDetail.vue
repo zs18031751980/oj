@@ -483,7 +483,7 @@ const loadLearningMaterial = async () => {
   isLearningLoading.value = true;
   learningError.value = '';
   try {
-    const url = `/learn/${file.split('/').map((s) => encodeURIComponent(s)).join('/')}`;
+    const url = `/learn-dist/${file.split('/').map((s) => encodeURIComponent(s)).join('/')}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     learningMarkdown.value = { content: await res.text() };

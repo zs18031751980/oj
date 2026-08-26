@@ -212,7 +212,7 @@ md.core.ruler.push('resolve_images', (state) => {
       }
       const finalPath = normalized.join('/');
       // 设置为同源静态资源 URL（学习资料由前端 public/learn 托管）
-      inlineToken.attrSet('src', `/learn/${finalPath}`);
+      inlineToken.attrSet('src', `/learn-dist/${finalPath}`);
     }
   }
 });

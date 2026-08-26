@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import FolderNode from './FolderNode.vue';
+import { sortNodesFoldersFirst } from '../utils/treeSort';
 
 /** ====== 数据类型 ====== */
 interface TreeNode {
@@ -29,6 +30,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'select', path: string): void;
+  (e: 'heading', id: string): void;
+  (e: 'browse', path: string): void;
   (e: 'rescan'): void;
 }>();
 
@@ -39,9 +42,14 @@ const effectiveSearch = computed(() => props.searchQuery || localSearch.value);
 const expandedPaths = ref<Set<string>>(new Set());
 const STORAGE_KEY = 'learn_sidebar_expanded';
 
+/** ====== 递归：文件夹优先 + 自然（数值）排序 ====== */
+function sortNodes(nodes: TreeNode[]): TreeNode[] {
+  return sortNodesFoldersFirst(nodes);
+}
+
 /** ====== 递归：搜索过滤 ====== */
 function filterTree(nodes: TreeNode[], q: string): TreeNode[] {
-  if (!q) return nodes;
+  if (!q) return sortNodes(nodes);
   const lower = q.toLowerCase();
   const result: TreeNode[] = [];
   for (const node of nodes) {
@@ -54,7 +62,7 @@ function filterTree(nodes: TreeNode[], q: string): TreeNode[] {
       result.push(node);
     }
   }
-  return result;
+  return sortNodes(result);
 }
 
 const displayTree = computed(() => filterTree(props.tree, effectiveSearch.value));
@@ -103,6 +111,10 @@ function toggleExpand(path: string) {
 function handleSelect(path: string) {
   emit('select', path);
 }
+
+function handleBrowse(path: string) {
+  emit('browse', path);
+}
 </script>
 
 <template>
@@ -123,12 +135,14 @@ function handleSelect(path: string) {
 
     <!-- Tab 切换 -->
     <div class="sidebar-tabs">
-      <button :class="['tab-btn', activeTab === 'files' && 'tab-active']" @click="activeTab = 'files'">
-        资料目录
-      </button>
-      <button :class="['tab-btn', activeTab === 'headings' && 'tab-active']" @click="activeTab = 'headings'">
-        本文目录
-      </button>
+      <div class="sidebar-tabs-inner">
+        <button :class="['tab-btn', activeTab === 'files' && 'tab-active']" @click="activeTab = 'files'">
+          资料目录
+        </button>
+        <button :class="['tab-btn', activeTab === 'headings' && 'tab-active']" @click="activeTab = 'headings'">
+          本文目录
+        </button>
+      </div>
       <button v-if="activeTab === 'files'" class="tab-rescan" title="重新扫描" @click="emit('rescan')">
         <Icon icon="material-symbols:refresh" class="h-4 w-4" />
       </button>
@@ -150,6 +164,7 @@ function handleSelect(path: string) {
           :depth="0"
           @toggle="toggleExpand"
           @select="handleSelect"
+          @browse="handleBrowse"
         />
       </template>
     </div>
@@ -165,7 +180,7 @@ function handleSelect(path: string) {
           v-for="(h, i) in headings"
           :key="i"
           :class="['heading-item', `heading-level-${h.level}`]"
-          @click="emit('select', h.id)"
+          @click="emit('heading', h.id)"
         >
           <span class="heading-text">{{ h.text }}</span>
         </button>
@@ -194,45 +209,51 @@ function handleSelect(path: string) {
 }
 
 .sidebar-search {
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 12px 0;
   position: relative;
 }
-:global(html.dark) .sidebar-search { border-bottom-color: #1e293b; }
 .search-icon {
-  position: absolute; left: 20px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 24px; top: 30px; transform: translateY(-50%);
   color: #94a3b8; width: 16px; height: 16px;
 }
 .search-input {
-  width: 100%; padding: 7px 32px 7px 32px;
-  border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px;
-  outline: none; background: #f8fafc; color: #1e293b; transition: border-color 0.2s;
+  width: 100%; height: 38px; padding: 0 32px;
+  border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;
+  outline: none; background: #f8fafc; color: #1e293b; transition: border-color 0.2s, box-shadow 0.2s;
 }
-.search-input:focus { border-color: #3b82f6; }
+.search-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
 .search-input::placeholder { color: #94a3b8; }
 :global(html.dark) .search-input {
   background: #1e293b; border-color: #334155; color: #e2e8f0;
 }
 .search-clear {
-  position: absolute; right: 20px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 24px; top: 30px; transform: translateY(-50%);
   background: none; border: none; cursor: pointer; color: #94a3b8; padding: 2px;
 }
 .search-clear:hover { color: #64748b; }
 
 .sidebar-tabs {
-  display: flex; align-items: center; padding: 8px 12px; gap: 4px;
+  display: flex; align-items: center; padding: 12px; gap: 8px;
   border-bottom: 1px solid #e2e8f0;
 }
 :global(html.dark) .sidebar-tabs { border-bottom-color: #1e293b; }
-.tab-btn {
-  flex: 1; padding: 6px 0; border: none; background: none;
-  font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer;
-  border-radius: 4px; transition: all 0.15s;
+.sidebar-tabs-inner {
+  display: flex; gap: 4px; flex: 1;
+  background: #f1f5f9; padding: 3px; border-radius: 9px;
 }
-.tab-btn:hover { background: #f1f5f9; color: #475569; }
-.tab-active { color: #2563eb; background: #eff6ff; }
+:global(html.dark) .sidebar-tabs-inner { background: #0f172a; }
+.tab-btn {
+  flex: 1; height: 34px; border: none; background: none;
+  font-size: 13px; font-weight: 600; color: #64748b; cursor: pointer;
+  border-radius: 7px; transition: all 0.15s;
+}
+.tab-btn:hover { background: #e2e8f0; color: #475569; }
+.tab-active { color: #2563eb; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1); }
 :global(html.dark) .tab-btn:hover { background: #1e293b; }
-:global(html.dark) .tab-active { color: #60a5fa; background: #172554; }
+:global(html.dark) .tab-active { color: #60a5fa; background: #1e293b; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 .tab-rescan {
   background: none; border: none; cursor: pointer; color: #64748b;
   padding: 4px; border-radius: 4px; transition: all 0.2s; margin-left: 4px;
