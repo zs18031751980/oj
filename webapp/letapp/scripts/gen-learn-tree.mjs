@@ -18,6 +18,22 @@ function sanitizeName(name) {
   return (name.replace(/^\d+[-_.\s]+/, '').trim()) || name;
 }
 
+/** 从文件名提取章节号（用于排序），无数字则排到最后 */
+function chapterOf(name) {
+  const m = name.match(/^(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+/** 读取 markdown 首个 H1 标题作为中文显示名 */
+function readTitle(fullPath, fallback) {
+  try {
+    const head = fs.readFileSync(fullPath, 'utf-8').split('\n').slice(0, 20).join('\n');
+    const m = head.match(/^#\s+(.+)$/m);
+    if (m && m[1].trim()) return m[1].trim();
+  } catch { /* ignore */ }
+  return fallback;
+}
+
 function makeId(rel) {
   return crypto.createHash('md5').update(rel || '__root__').digest('hex').slice(0, 12);
 }
@@ -27,10 +43,17 @@ function scan(dir, rel) {
   const children = [];
   let entries = [];
   try {
-    entries = fs.readdirSync(dir).sort();
+    entries = fs.readdirSync(dir);
   } catch {
     return null;
   }
+  // 按章节号数值排序，无数字者按名称排序
+  entries.sort((a, b) => {
+    const ca = chapterOf(a);
+    const cb = chapterOf(b);
+    if (ca !== cb) return ca - cb;
+    return a.localeCompare(b, 'zh-Hans-CN');
+  });
   for (const entry of entries) {
     if (entry.startsWith('.')) continue;
     const full = path.join(dir, entry);
@@ -46,7 +69,8 @@ function scan(dir, rel) {
       const child = scan(full, entryRel);
       if (child && child.children.length) children.push(child);
     } else if (entry.toLowerCase().endsWith('.md')) {
-      const name = sanitizeName(entry.replace(/\.md$/i, ''));
+      const fallback = sanitizeName(entry.replace(/\.md$/i, ''));
+      const name = readTitle(full, fallback);
       children.push({
         id: makeId(entryRel),
         name,
