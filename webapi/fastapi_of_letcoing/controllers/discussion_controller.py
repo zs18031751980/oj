@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Discussion, DiscussionReply, DiscussionLike, User
+from models.db_models import Discussion, DiscussionReply, DiscussionLike, User, get_database
+from core.db_robust import ensure_connected
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService
 
@@ -92,21 +93,23 @@ class DiscussionListController(Resource):
     def get(self):
         """获取讨论列表（按热度+时间排序）"""
         category = request.args.get('category', '').strip()
-        current_user = _get_current_user()
+        db = get_database()
 
         try:
-            query = Discussion.select()
-            if category and category != '全部':
-                query = query.where(Discussion.category == category)
+            with ensure_connected(db):
+                current_user = _get_current_user()
+                query = Discussion.select()
+                if category and category != '全部':
+                    query = query.where(Discussion.category == category)
 
-            discussions = list(query)
-            # 置顶帖排最前，其余按热度降序
-            pinned = [d for d in discussions if d.is_pinned]
-            normal = [d for d in discussions if not d.is_pinned]
-            normal.sort(key=lambda d: _calc_hotness(d), reverse=True)
-            sorted_discussions = pinned + normal
+                discussions = list(query)
+                # 置顶帖排最前，其余按热度降序
+                pinned = [d for d in discussions if d.is_pinned]
+                normal = [d for d in discussions if not d.is_pinned]
+                normal.sort(key=lambda d: _calc_hotness(d), reverse=True)
+                sorted_discussions = pinned + normal
 
-            return [_discussion_to_dict(d, current_user) for d in sorted_discussions], 200
+                return [_discussion_to_dict(d, current_user) for d in sorted_discussions], 200
         except Exception as e:
             return {'error': f'获取讨论列表失败: {str(e)}'}, 500
 
@@ -123,13 +126,15 @@ class DiscussionListController(Resource):
         if not title or not content:
             return {'error': '标题和内容不能为空'}, 400
 
-        discussion = Discussion.create(
-            title=title,
-            content=content,
-            author=user.id,
-            category=data.get('category', '全部'),
-            tags=data.get('tags', ''),
-        )
+        db = get_database()
+        with ensure_connected(db):
+            discussion = Discussion.create(
+                title=title,
+                content=content,
+                author=user.id,
+                category=data.get('category', '全部'),
+                tags=data.get('tags', ''),
+            )
         return _discussion_to_dict(discussion, user), 201
 
 
@@ -137,38 +142,40 @@ class DiscussionListController(Resource):
 class DiscussionDetailController(Resource):
     def get(self, discussion_id):
         """获取讨论详情（同时增加浏览量）"""
+        db = get_database()
         try:
-            d = Discussion.get_by_id(discussion_id)
-            # 增加浏览量
-            d.view_count = (d.view_count or 0) + 1
-            d.save()
-            current_user = _get_current_user()
-            data = _discussion_to_dict(d, current_user)
-            # 获取回复（按时间正序）
-            replies = DiscussionReply.select().where(
-                DiscussionReply.discussion == d
-            ).order_by(DiscussionReply.created_at)
-            data['replies'] = []
-            for r in replies:
-                rd = r.to_dict()
-                if 'author' in rd:
-                    rd['author_id'] = rd.pop('author')
-                if r.author:
-                    rd['author_name'] = r.author.username or '匿名'
-                else:
-                    rd['author_name'] = '匿名'
-                # 回复的点赞状态
-                rd['is_liked'] = False
-                if current_user:
-                    from models.db_models import DiscussionReplyLike
-                    try:
-                        rd['is_liked'] = DiscussionReplyLike.select().where(
-                            (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == current_user)
-                        ).exists()
-                    except Exception:
-                        pass
-                data['replies'].append(rd)
-            return data, 200
+            with ensure_connected(db):
+                d = Discussion.get_by_id(discussion_id)
+                # 增加浏览量
+                d.view_count = (d.view_count or 0) + 1
+                d.save()
+                current_user = _get_current_user()
+                data = _discussion_to_dict(d, current_user)
+                # 获取回复（按时间正序）
+                replies = DiscussionReply.select().where(
+                    DiscussionReply.discussion == d
+                ).order_by(DiscussionReply.created_at)
+                data['replies'] = []
+                for r in replies:
+                    rd = r.to_dict()
+                    if 'author' in rd:
+                        rd['author_id'] = rd.pop('author')
+                    if r.author:
+                        rd['author_name'] = r.author.username or '匿名'
+                    else:
+                        rd['author_name'] = '匿名'
+                    # 回复的点赞状态
+                    rd['is_liked'] = False
+                    if current_user:
+                        from models.db_models import DiscussionReplyLike
+                        try:
+                            rd['is_liked'] = DiscussionReplyLike.select().where(
+                                (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == current_user)
+                            ).exists()
+                        except Exception:
+                            pass
+                    data['replies'].append(rd)
+                return data, 200
         except Discussion.DoesNotExist:
             return {'error': '讨论不存在'}, 404
 
@@ -178,14 +185,18 @@ class DiscussionDetailController(Resource):
         if not user:
             return {'error': '请先登录'}, 401
 
+        db = get_database()
         try:
-            d = Discussion.get_by_id(discussion_id)
-            if d.author_id != user.id and user.role != 'manager':
-                return {'error': '无权删除'}, 403
-            d.delete_instance()
+            with ensure_connected(db):
+                d = Discussion.get_by_id(discussion_id)
+                if d.author_id != user.id and user.role != 'manager':
+                    return {'error': '无权删除'}, 403
+                d.delete_instance()
             return {'success': True}, 200
         except Discussion.DoesNotExist:
             return {'error': '讨论不存在'}, 404
+        except Exception as e:
+            return {'error': f'删除失败: {str(e)}'}, 500
 
 
 @api.route('/<int:discussion_id>/like')
@@ -195,24 +206,29 @@ class DiscussionLikeController(Resource):
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
+        db = get_database()
         try:
-            d = Discussion.get_by_id(discussion_id)
-        except Discussion.DoesNotExist:
-            return {'error': '讨论不存在'}, 404
+            with ensure_connected(db):
+                try:
+                    d = Discussion.get_by_id(discussion_id)
+                except Discussion.DoesNotExist:
+                    return {'error': '讨论不存在'}, 404
 
-        existing = DiscussionLike.select().where(
-            (DiscussionLike.discussion == d) & (DiscussionLike.user == user)
-        ).first()
-        if existing:
-            existing.delete_instance()
-            d.like_count = max(0, (d.like_count or 0) - 1)
-            d.save()
-            return {'liked': False, 'like_count': d.like_count}, 200
-        else:
-            DiscussionLike.create(discussion=d, user=user)
-            d.like_count = (d.like_count or 0) + 1
-            d.save()
-            return {'liked': True, 'like_count': d.like_count}, 200
+                existing = DiscussionLike.select().where(
+                    (DiscussionLike.discussion == d) & (DiscussionLike.user == user)
+                ).first()
+                if existing:
+                    existing.delete_instance()
+                    d.like_count = max(0, (d.like_count or 0) - 1)
+                    d.save()
+                    return {'liked': False, 'like_count': d.like_count}, 200
+                else:
+                    DiscussionLike.create(discussion=d, user=user)
+                    d.like_count = (d.like_count or 0) + 1
+                    d.save()
+                    return {'liked': True, 'like_count': d.like_count}, 200
+        except Exception as e:
+            return {'error': f'操作失败: {str(e)}'}, 500
 
 
 @api.route('/<int:discussion_id>/replies')
@@ -224,26 +240,28 @@ class DiscussionReplyListController(Resource):
         if not user:
             return {'error': '请先登录'}, 401
 
-        try:
-            d = Discussion.get_by_id(discussion_id)
-        except Discussion.DoesNotExist:
-            return {'error': '讨论不存在'}, 404
+        db = get_database()
+        with ensure_connected(db):
+            try:
+                d = Discussion.get_by_id(discussion_id)
+            except Discussion.DoesNotExist:
+                return {'error': '讨论不存在'}, 404
 
-        if d.is_closed:
-            return {'error': '讨论已关闭'}, 400
+            if d.is_closed:
+                return {'error': '讨论已关闭'}, 400
 
-        data = request.get_json(silent=True) or {}
-        content = data.get('content', '').strip()
-        if not content:
-            return {'error': '回复内容不能为空'}, 400
+            data = request.get_json(silent=True) or {}
+            content = data.get('content', '').strip()
+            if not content:
+                return {'error': '回复内容不能为空'}, 400
 
-        reply = DiscussionReply.create(
-            discussion=d,
-            author=user.id,
-            content=content,
-        )
-        d.reply_count += 1
-        d.save()
+            reply = DiscussionReply.create(
+                discussion=d,
+                author=user.id,
+                content=content,
+            )
+            d.reply_count += 1
+            d.save()
 
         rd = reply.to_dict()
         if 'author' in rd:
@@ -260,25 +278,27 @@ class DiscussionReplyLikeController(Resource):
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-        try:
-            r = DiscussionReply.get_by_id(reply_id)
-        except DiscussionReply.DoesNotExist:
-            return {'error': '回复不存在'}, 404
+        db = get_database()
+        with ensure_connected(db):
+            try:
+                r = DiscussionReply.get_by_id(reply_id)
+            except DiscussionReply.DoesNotExist:
+                return {'error': '回复不存在'}, 404
 
-        from models.db_models import DiscussionReplyLike
-        existing = DiscussionReplyLike.select().where(
-            (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == user)
-        ).first()
-        if existing:
-            existing.delete_instance()
-            r.like_count = max(0, (r.like_count or 0) - 1)
-            r.save()
-            return {'liked': False, 'like_count': r.like_count}, 200
-        else:
-            DiscussionReplyLike.create(reply=r, user=user)
-            r.like_count = (r.like_count or 0) + 1
-            r.save()
-            return {'liked': True, 'like_count': r.like_count}, 200
+            from models.db_models import DiscussionReplyLike
+            existing = DiscussionReplyLike.select().where(
+                (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == user)
+            ).first()
+            if existing:
+                existing.delete_instance()
+                r.like_count = max(0, (r.like_count or 0) - 1)
+                r.save()
+                return {'liked': False, 'like_count': r.like_count}, 200
+            else:
+                DiscussionReplyLike.create(reply=r, user=user)
+                r.like_count = (r.like_count or 0) + 1
+                r.save()
+                return {'liked': True, 'like_count': r.like_count}, 200
 
 
 @api.route('/replies/<int:reply_id>')
@@ -289,17 +309,22 @@ class DiscussionReplyDetailController(Resource):
         if not user:
             return {'error': '请先登录'}, 401
 
+        db = get_database()
         try:
-            r = DiscussionReply.get_by_id(reply_id)
-        except DiscussionReply.DoesNotExist:
-            return {'error': '回复不存在'}, 404
+            with ensure_connected(db):
+                try:
+                    r = DiscussionReply.get_by_id(reply_id)
+                except DiscussionReply.DoesNotExist:
+                    return {'error': '回复不存在'}, 404
 
-        if r.author_id != user.id and user.role != 'manager':
-            return {'error': '无权删除'}, 403
+                if r.author_id != user.id and user.role != 'manager':
+                    return {'error': '无权删除'}, 403
 
-        discussion = r.discussion
-        r.delete_instance()
-        if discussion:
-            discussion.reply_count = max(0, (discussion.reply_count or 0) - 1)
-            discussion.save()
-        return {'success': True}, 200
+                discussion = r.discussion
+                r.delete_instance()
+                if discussion:
+                    discussion.reply_count = max(0, (discussion.reply_count or 0) - 1)
+                    discussion.save()
+            return {'success': True}, 200
+        except Exception as e:
+            return {'error': f'删除失败: {str(e)}'}, 500
