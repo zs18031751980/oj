@@ -291,7 +291,7 @@ const loadDashboard = async () => {
       () => null,
     );
     const subPromise = authStore.isAuthenticated
-      ? listMySubmissions(1, 6)
+      ? listMySubmissions(1, 8)
       : Promise.resolve(null);
     const favPromise = authStore.isAuthenticated
       ? listFavorites()
@@ -304,7 +304,7 @@ const loadDashboard = async () => {
     if (probRes) {
       const list = Array.isArray(probRes.data) ? probRes.data : [];
       totalProblems.value = Number(probRes.total) || list.length;
-      recentProblems.value = list.slice(0, 6);
+      recentProblems.value = list.slice(0, 8);
       let e = 0,
         m = 0,
         h = 0;
@@ -491,119 +491,121 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <section class="home-dashboard border-t border-[#E2E8F0] py-10 dark:border-[#1E293B]">
+    <section class="home-dashboard border-t border-[#E2E8F0] py-6 dark:border-[#1E293B]">
       <div class="app-container">
-        <div class="ui-card mb-6 flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p class="ui-section-sub">欢迎回来</p>
-            <h2 class="ui-section-title">{{ authStore.isAuthenticated ? (authStore.displayName || '同学') : '开始你的编程之旅' }}</h2>
-            <p class="mt-1 text-sm text-[#64748B] dark:text-[#94A3B8]">今天也要坚持刷题，保持手感。</p>
+        <div class="ui-card mb-4 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-3">
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:menu-book-rounded" class="h-5 w-5" /></span>
+            <div>
+              <h2 class="ui-section-title leading-tight">{{ authStore.isAuthenticated ? (authStore.displayName || '同学') : '开始你的编程之旅' }}</h2>
+              <p class="text-xs text-[#64748B] dark:text-[#94A3B8]">{{ authStore.isAuthenticated ? '今天也要坚持刷题，保持手感。' : '登录后同步你的学习进度' }}</p>
+            </div>
           </div>
-          <div class="flex flex-wrap gap-3">
-            <router-link to="/problems" class="hero-dash-btn hero-dash-primary">
+          <div class="flex flex-wrap gap-2">
+            <router-link to="/problems" class="hero-dash-btn hero-dash-primary !px-3 !py-2 text-xs">
               <Icon icon="material-symbols:play-arrow-rounded" class="h-4 w-4" />
               开始刷题
             </router-link>
-            <router-link to="/playground" class="hero-dash-btn hero-dash-secondary">
+            <router-link to="/playground" class="hero-dash-btn hero-dash-secondary !px-3 !py-2 text-xs">
               <Icon icon="material-symbols:code-rounded" class="h-4 w-4" />
               打开编辑器
             </router-link>
-            <router-link to="/contests" class="hero-dash-btn hero-dash-outline">
+            <router-link to="/contests" class="hero-dash-btn hero-dash-outline !px-3 !py-2 text-xs">
               <Icon icon="material-symbols:trophy-rounded" class="h-4 w-4" />
               查看比赛
             </router-link>
           </div>
         </div>
 
-        <div class="ui-grid ui-grid-4 mb-6">
-          <div class="ui-card flex items-center gap-3 p-5">
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:check-circle-rounded" class="h-5 w-5" /></span>
-            <div>
-              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">已解决题目</p>
-              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : solvedCount }}</p>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div class="ui-card flex items-center gap-2.5 p-3">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:check-circle-rounded" class="h-4 w-4" /></span>
+            <div class="min-w-0">
+              <p class="truncate text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">已解决</p>
+              <p class="text-lg font-black leading-tight">{{ dashboardLoading ? '—' : solvedCount }}</p>
             </div>
           </div>
-          <div class="ui-card flex items-center gap-3 p-5">
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:history-rounded" class="h-5 w-5" /></span>
-            <div>
-              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">提交总数</p>
-              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : submissionTotal }}</p>
+          <div class="ui-card flex items-center gap-2.5 p-3">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:history-rounded" class="h-4 w-4" /></span>
+            <div class="min-w-0">
+              <p class="truncate text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">提交总数</p>
+              <p class="text-lg font-black leading-tight">{{ dashboardLoading ? '—' : submissionTotal }}</p>
             </div>
           </div>
-          <div class="ui-card flex items-center gap-3 p-5">
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:star-rounded" class="h-5 w-5" /></span>
-            <div>
-              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">收藏题目</p>
-              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : favoriteCount }}</p>
+          <div class="ui-card flex items-center gap-2.5 p-3">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:star-rounded" class="h-4 w-4" /></span>
+            <div class="min-w-0">
+              <p class="truncate text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">收藏</p>
+              <p class="text-lg font-black leading-tight">{{ dashboardLoading ? '—' : favoriteCount }}</p>
             </div>
           </div>
-          <div class="ui-card flex items-center gap-3 p-5">
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:library-books-rounded" class="h-5 w-5" /></span>
-            <div>
-              <p class="text-xs font-bold text-[#64748B] dark:text-[#94A3B8]">题库题量</p>
-              <p class="text-2xl font-black leading-tight">{{ dashboardLoading ? '—' : totalProblems }}</p>
+          <div class="ui-card flex items-center gap-2.5 p-3">
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]"><Icon icon="material-symbols:library-books-rounded" class="h-4 w-4" /></span>
+            <div class="min-w-0">
+              <p class="truncate text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">题库题量</p>
+              <p class="text-lg font-black leading-tight">{{ dashboardLoading ? '—' : totalProblems }}</p>
             </div>
           </div>
         </div>
 
-        <div class="grid gap-6 lg:grid-cols-2">
-          <div class="ui-card p-5">
-            <div class="mb-4 flex items-center justify-between">
+        <div class="mt-4 grid gap-4 lg:grid-cols-2">
+          <div class="ui-card p-4">
+            <div class="mb-3 flex items-center justify-between">
               <h3 class="ui-section-title">继续学习</h3>
-              <router-link to="/problems" class="text-sm font-bold text-[#2563EB] dark:text-[#60A5FA]">全部题目</router-link>
+              <router-link to="/problems" class="text-xs font-bold text-[#2563EB] dark:text-[#60A5FA]">全部题目</router-link>
             </div>
-            <div v-if="dashboardLoading" class="space-y-2">
-              <div v-for="i in 5" :key="i" class="ui-skeleton h-12 rounded-xl"></div>
+            <div v-if="dashboardLoading" class="space-y-1.5">
+              <div v-for="i in 6" :key="i" class="ui-skeleton h-9 rounded-lg"></div>
             </div>
-            <div v-else-if="recentProblems.length" class="space-y-2">
+            <div v-else-if="recentProblems.length" class="space-y-1">
               <router-link
                 v-for="p in recentProblems"
                 :key="p.id"
                 :to="`/problems/${p.id}`"
-                class="flex items-center gap-3 rounded-xl border border-[#E2E8F0] px-3 py-2.5 transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
+                class="flex items-center gap-2.5 rounded-lg border border-[#E2E8F0] px-2.5 py-2 text-sm transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
               >
                 <span class="min-w-0 flex-1 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
-                <span v-if="p.difficulty" class="ui-diff" :class="p.difficulty === '简单' ? 'ui-diff-easy' : p.difficulty === '中等' ? 'ui-diff-mid' : 'ui-diff-hard'">{{ p.difficulty }}</span>
-                <span class="shrink-0 text-xs text-[#64748B] dark:text-[#94A3B8]">通过率 {{ formatRate(p.accepted_count, p.submission_count) }}</span>
+                <span v-if="p.difficulty" class="ui-diff text-[11px]" :class="p.difficulty === '简单' ? 'ui-diff-easy' : p.difficulty === '中等' ? 'ui-diff-mid' : 'ui-diff-hard'">{{ p.difficulty }}</span>
+                <span class="shrink-0 text-[11px] text-[#64748B] dark:text-[#94A3B8]">通过率 {{ formatRate(p.accepted_count, p.submission_count) }}</span>
               </router-link>
             </div>
             <p v-else class="ui-empty">暂无题目，去题库探索吧</p>
           </div>
 
-          <div class="ui-card p-5">
-            <div class="mb-4 flex items-center justify-between">
+          <div class="ui-card p-4">
+            <div class="mb-3 flex items-center justify-between">
               <h3 class="ui-section-title">最近活动</h3>
-              <router-link to="/submissions" class="text-sm font-bold text-[#2563EB] dark:text-[#60A5FA]">全部记录</router-link>
+              <router-link to="/submissions" class="text-xs font-bold text-[#2563EB] dark:text-[#60A5FA]">全部记录</router-link>
             </div>
-            <div v-if="dashboardLoading" class="space-y-2">
-              <div v-for="i in 5" :key="i" class="ui-skeleton h-12 rounded-xl"></div>
+            <div v-if="dashboardLoading" class="space-y-1.5">
+              <div v-for="i in 6" :key="i" class="ui-skeleton h-9 rounded-lg"></div>
             </div>
-            <div v-else-if="recentSubmissions.length" class="space-y-2">
+            <div v-else-if="recentSubmissions.length" class="space-y-1">
               <button
                 v-for="s in recentSubmissions"
                 :key="s.id"
                 type="button"
-                class="flex w-full items-center gap-3 rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-left transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
+                class="flex w-full items-center gap-2.5 rounded-lg border border-[#E2E8F0] px-2.5 py-2 text-left text-sm transition hover:border-[#2563EB] dark:border-[#1E293B] dark:hover:border-[#60A5FA]"
                 @click="goProblem(s.problem_id)"
               >
-                <span class="ui-badge" :class="statusClass(s.status)">{{ statusLabel(s.status) }}</span>
+                <span class="ui-badge text-[11px]" :class="statusClass(s.status)">{{ statusLabel(s.status) }}</span>
                 <span class="min-w-0 flex-1 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ s.problem_title }}</span>
-                <span class="shrink-0 text-xs text-[#64748B] dark:text-[#94A3B8]">{{ formatDateShort(s.created_at) }}</span>
+                <span class="shrink-0 text-[11px] text-[#64748B] dark:text-[#94A3B8]">{{ formatDateShort(s.created_at) }}</span>
               </button>
             </div>
             <p v-else class="ui-empty">还没有提交记录，去<router-link to="/problems" class="font-bold text-[#2563EB] dark:text-[#60A5FA]">题库</router-link>试试吧</p>
           </div>
         </div>
 
-        <div class="ui-card mt-6 p-5">
-          <h3 class="ui-section-title mb-4">题库难度分布</h3>
-          <div class="grid gap-4 sm:grid-cols-3">
-            <div v-for="item in difficultyRows" :key="item.key" class="rounded-xl border border-[#E2E8F0] p-4 dark:border-[#1E293B]">
-              <div class="flex items-center justify-between text-sm font-bold">
+        <div class="ui-card mt-4 p-4">
+          <h3 class="ui-section-title mb-3">题库难度分布</h3>
+          <div class="grid gap-3 sm:grid-cols-3">
+            <div v-for="item in difficultyRows" :key="item.key" class="rounded-lg border border-[#E2E8F0] p-3 dark:border-[#1E293B]">
+              <div class="flex items-center justify-between text-xs font-bold">
                 <span :class="item.textClass">{{ item.label }}</span>
                 <span class="text-[#64748B] dark:text-[#94A3B8]">{{ item.value }} 题</span>
               </div>
-              <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#E2E8F0] dark:bg-[#1E293B]">
+              <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#E2E8F0] dark:bg-[#1E293B]">
                 <div class="h-full rounded-full" :class="item.barClass" :style="{ width: item.pct + '%' }"></div>
               </div>
             </div>
