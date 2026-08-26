@@ -26,7 +26,7 @@ def _resolve_learn_root() -> str:
     """解析学习资料根目录，按优先级尝试：
     1. 环境变量 LEARN_RESOURCES_ROOT
     2. 本地 Obsidian 仓库路径（开发机）
-    3. 前端 public/learn 目录（仓库内，生产回退）
+    3. 多种可能的仓库内 public/learn 回退路径
     """
     import os
     # 1. 环境变量优先
@@ -39,19 +39,23 @@ def _resolve_learn_root() -> str:
     if os.path.isdir(local_obsidian):
         return os.path.normpath(local_obsidian)
 
-    # 3. 仓库内 public/learn 回退
-    fallback = os.path.normpath(os.path.join(
-        os.path.dirname(__file__), '..', '..', '..',
-        'webapp', 'letapp', 'public', 'learn'
-    ))
-    if os.path.isdir(fallback):
-        return fallback
+    # 3. 从当前文件位置向上查找 webapp/letapp/public/learn
+    controller_dir = os.path.dirname(os.path.abspath(__file__))
+    current = controller_dir
+    for _ in range(10):  # 最多向上找10层
+        candidate = os.path.join(current, 'webapp', 'letapp', 'public', 'learn')
+        if os.path.isdir(candidate):
+            return os.path.normpath(candidate)
+        candidate2 = os.path.join(current, 'public', 'learn')
+        if os.path.isdir(candidate2):
+            return os.path.normpath(candidate2)
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
 
-    # 4. 环境变量（即使不存在也返回，便于报错提示）
-    if env_path:
-        return os.path.normpath(env_path)
-
-    return fallback
+    # 4. 返回默认路径（即使不存在，便于报错提示）
+    return os.path.normpath(os.path.join(controller_dir, '..', '..', '..', 'webapp', 'letapp', 'public', 'learn'))
 
 
 _LEARN_ROOT = _resolve_learn_root()
