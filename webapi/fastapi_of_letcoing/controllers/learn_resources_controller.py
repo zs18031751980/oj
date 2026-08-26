@@ -54,6 +54,18 @@ def _resolve_learn_root() -> str:
             break
         current = parent
 
+    # 3.5 尝试常见部署路径（直接绝对路径）
+    common_paths = [
+        '/webapp/letapp/public/learn',
+        '/app/webapp/letapp/public/learn',
+        '/var/www/oj/webapp/letapp/public/learn',
+        '/root/oj/webapp/letapp/public/learn',
+        '/home/z/桌面/code/oj/webapp/letapp/public/learn',
+    ]
+    for p in common_paths:
+        if os.path.isdir(p):
+            return os.path.normpath(p)
+
     # 4. 返回默认路径（即使不存在，便于报错提示）
     return os.path.normpath(os.path.join(controller_dir, '..', '..', '..', 'webapp', 'letapp', 'public', 'learn'))
 
