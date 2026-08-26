@@ -201,7 +201,7 @@ const regenerateTestcases = async (problemId: number) => {
 const deleteContest = async (id: number, title: string) => {
   if (!confirm(`确定删除比赛「${title}」？此操作不可恢复！`)) return;
   try {
-    await apiRequest(`/admin/contests/${id}`, { method: 'DELETE' });
+    await apiRequest(`/contests/${id}`, { method: 'DELETE' });
     message.success('比赛已删除');
     if (selectedContestId.value === id) {
       selectedContestId.value = null;
