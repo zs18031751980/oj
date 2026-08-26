@@ -40,6 +40,7 @@ from controllers.rankings_controller import api as rankings_api
 from controllers.contest_problem_controller import api as contest_problem_api
 from controllers.learn_favorite_controller import api as learn_favorite_api
 from controllers.learn_history_controller import api as learn_history_api
+from controllers.learn_resources_controller import api as learn_resources_api
 from controllers.user_controller import api as user_api
 # 导入依赖注入容器和服务配置
 from core.di_container import get_container
@@ -494,6 +495,7 @@ api.add_namespace(rankings_api, path='/rankings')
 api.add_namespace(contest_problem_api, path='/admin/contests')
 api.add_namespace(learn_favorite_api, path='/learn-favorites')
 api.add_namespace(learn_history_api, path='/learn-history')
+api.add_namespace(learn_resources_api, path='/learn-resources')
 api.add_namespace(user_api, path='/users')
 
 

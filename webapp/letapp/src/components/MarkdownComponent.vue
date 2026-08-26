@@ -45,12 +45,19 @@ interface HeadingItem {
 
 const props = withDefaults(defineProps<{
   content?: Content;
+  source?: string;
   showNav?: boolean;
   showHeadingLinks?: boolean;
+  baseDir?: string;
 }>(), {
   showNav: true,
   showHeadingLinks: true,
+  baseDir: '',
 });
+
+const emit = defineEmits<{
+  (e: 'navigate', file: string): void;
+}>();
 
 const route = useRoute();
 const headings = ref<HeadingItem[]>([]);
@@ -135,6 +142,41 @@ md.use(mdExpandTabs)
   .use(mdSup)
   .use(mdMark)
   .use(markdownItMermaid({ delay: 100 }));
+
+const resolveMdLink = (href: string, baseDir: string): string | null => {
+  if (!href || href.startsWith('#') || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('javascript:')) {
+    return null;
+  }
+  const cleanHref = (href.split('?')[0] || '').split('#')[0] || '';
+  if (!cleanHref.endsWith('.md')) {
+    return null;
+  }
+  const resolved = cleanHref.startsWith('/')
+    ? cleanHref.replace(/^\//, '')
+    : `${baseDir}${baseDir && !baseDir.endsWith('/') ? '/' : ''}${cleanHref}`;
+  return resolved;
+};
+
+md.core.ruler.push('resolve_md_links', (state) => {
+  const baseDir = (state.env as any)?.baseDir || '';
+  if (!baseDir) return;
+  const tokens = state.tokens;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (!token || token.type !== 'inline') continue;
+    const inlineTokens = token.children || [];
+    for (let j = 0; j < inlineTokens.length; j++) {
+      const inlineToken = inlineTokens[j];
+      if (!inlineToken || inlineToken.type !== 'link_open') continue;
+      const hrefAttr = inlineToken.attrGet('href');
+      if (!hrefAttr) continue;
+      const resolved = resolveMdLink(hrefAttr, baseDir);
+      if (resolved) {
+        inlineToken.attrSet('data-md-link', resolved);
+      }
+    }
+  }
+});
 
 [
   { name: 'warning', className: 'warning' },
@@ -221,7 +263,7 @@ const buildHeadingTree = (flatHeadings: HeadingItem[]) => {
 
 const render = async (markdown: string) => {
   headings.value = buildHeadingTree(extractHeadings(markdown));
-  const renderedHtml = md.render(markdown);
+  const renderedHtml = md.render(markdown, { baseDir: props.baseDir });
   const finalHtml = props.showHeadingLinks
     ? renderedHtml
     : renderedHtml.replace(/<a\b[^>]*class="[^"]*heading-anchor[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
@@ -266,9 +308,10 @@ const copyCode = async (code: string, index?: number) => {
 };
 
 watch(
-  () => [props.content, props.showHeadingLinks] as const,
-  async ([newValue]) => {
-    html.value = newValue ? await render(newValue.content) : '';
+  () => [props.content, props.source, props.showHeadingLinks] as const,
+  async ([content, source]) => {
+    const md = content?.content || source || '';
+    html.value = md ? await render(md) : '';
   },
   { immediate: true },
 );
@@ -287,6 +330,17 @@ const handleAnchorClick = (event: Event, href: string) => {
 };
 
 let scrollTicking = false;
+
+const handleMarkdownClick = (event: Event) => {
+  const target = event.target as HTMLElement;
+  const anchor = target.closest('a');
+  if (!anchor) return;
+  const mdLink = anchor.getAttribute('data-md-link');
+  if (mdLink) {
+    event.preventDefault();
+    emit('navigate', mdLink);
+  }
+};
 
 const handleScroll = () => {
   if (scrollTicking) return;
@@ -327,16 +381,22 @@ onMounted(() => {
       btn.classList.remove('copied');
     }, 2000);
   };
+  if (markdownBody.value) {
+    markdownBody.value.addEventListener('click', handleMarkdownClick);
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
   delete (window as any).__copyCode;
+  if (markdownBody.value) {
+    markdownBody.value.removeEventListener('click', handleMarkdownClick);
+  }
 });
 </script>
 
 <template>
-  <div v-if="content" class="learn-reader-layout">
+  <div v-if="content || source" class="learn-reader-layout">
     <!-- 阅读进度条 -->
     <div class="reading-progress-track">
       <div class="reading-progress-bar" :style="{ width: readingProgress + '%' }"></div>
@@ -347,7 +407,7 @@ onUnmounted(() => {
       <article class="markdown-article">
         <header v-if="hasHeaderMeta" class="article-header">
           <h1 class="article-title">
-            {{ content.title }}
+            {{ content?.title }}
           </h1>
           <div class="article-meta">
             <time v-if="date" class="meta-item">
