@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, defineAsyncComponent, onMounted, computed } from 'vue';
+import { Icon } from '@iconify/vue';
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import {
@@ -41,12 +42,12 @@ const createForm = ref({ title: '', content: '', category: '问答', tags: '' })
 const submitting = ref(false);
 
 const categories = ['全部', '问答', '分享', '闲聊', '综合'];
-const categoryEmojis: Record<string, string> = {
-  '全部': '💬',
-  '问答': '❓',
-  '分享': '🔗',
-  '闲聊': '💭',
-  '综合': '📋',
+const categoryIcons: Record<string, string> = {
+  '全部': 'material-symbols:apps',
+  '问答': 'material-symbols:help',
+  '分享': 'material-symbols:share',
+  '闲聊': 'material-symbols:chat-bubble',
+  '综合': 'material-symbols:article',
 };
 
 const tagColors: Record<string, string> = {
@@ -238,7 +239,7 @@ onMounted(loadData);
               : 'text-[#475569] hover:bg-[#F1F5F9] dark:text-[#94A3B8] dark:hover:bg-[#1E293B]'"
             @click="activeCategory = cat"
           >
-            <span class="text-xl shrink-0 w-7 text-center">{{ categoryEmojis[cat] }}</span>
+            <span class="cat-ico shrink-0 w-7 text-center"><Icon :icon="categoryIcons[cat] ?? ''" /></span>
             <span class="flex-1">{{ cat }}</span>
           </button>
         </div>
@@ -276,8 +277,8 @@ onMounted(loadData);
             class="ui-card flex items-start gap-4 p-4 transition hover:border-[#2563EB]/30 dark:hover:border-[#60A5FA]/30 cursor-pointer"
             @click="openDetail(d)"
           >
-            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA] text-lg">
-              👤
+            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]">
+              <Icon icon="material-symbols:person" class="h-5 w-5" />
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
@@ -499,6 +500,20 @@ onMounted(loadData);
 
 <style scoped>
 @reference 'tailwindcss';
+
+.cat-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563EB;
+}
+.dark .cat-ico {
+  color: #4F8CFF;
+}
+.cat-ico :deep(svg) {
+  width: 20px;
+  height: 20px;
+}
 
 .disc-modal-overlay {
   position: fixed;

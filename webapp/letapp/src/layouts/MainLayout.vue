@@ -222,8 +222,8 @@ const navItems = markRaw([
   { label: "在线编辑器", to: "/playground", icon: "material-symbols:code-rounded" },
   { label: "比赛", to: "/contests", icon: "material-symbols:trophy-rounded" },
   { label: "排行榜", to: "/rankings", icon: "material-symbols:leaderboard-rounded" },
-  { label: "讨论", to: "/discussion", icon: "material-symbols:forum-rounded" },
-  { label: "公告", to: "/announcements", icon: "material-symbols:campaign-rounded" },
+  { label: "讨论", to: "/discussion", icon: "material-symbols:forum" },
+  { label: "公告", to: "/announcements", icon: "material-symbols:campaign" },
 ]);
 
 const router = useRouter();

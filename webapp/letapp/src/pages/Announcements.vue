@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
+import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 
 const MarkdownComponent = defineAsyncComponent(
@@ -45,12 +46,12 @@ const canManageAnnouncements = computed(
 // 分类：优先使用后端存储的 category，兼容旧数据的标题推断
 const categories = ['全部', '系统公告', '比赛公告', '更新公告', '活动通知'];
 const activeCategory = ref('全部');
-const categoryEmojis: Record<string, string> = {
-  '全部': '📋',
-  '系统公告': '📢',
-  '比赛公告': '🏆',
-  '更新公告': '🔄',
-  '活动通知': '🎉',
+const categoryIcons: Record<string, string> = {
+  '全部': 'material-symbols:apps',
+  '系统公告': 'material-symbols:campaign',
+  '比赛公告': 'material-symbols:trophy',
+  '更新公告': 'material-symbols:sync',
+  '活动通知': 'material-symbols:celebration',
 };
 const inferCategory = (item: { category?: string; title: string }): string => {
   if (item.category) return item.category;
@@ -60,7 +61,7 @@ const inferCategory = (item: { category?: string; title: string }): string => {
   if (t.includes('活动') || t.includes('event')) return '活动通知';
   return '系统公告';
 };
-const getCategoryEmoji = (item: { category?: string; title: string }) => categoryEmojis[inferCategory(item)] ?? '📢';
+const getCategoryIcon = (item: { category?: string; title: string }) => categoryIcons[inferCategory(item)] ?? 'material-symbols:campaign';
 const getCategoryColor = (item: { category?: string; title: string }): string => {
   const cat = inferCategory(item);
   if (cat === '比赛公告') return 'bg-amber-50 dark:bg-amber-950/40';
@@ -177,7 +178,7 @@ watch(
                 : 'text-[#475569] hover:bg-[#F1F5F9] dark:text-[#94A3B8] dark:hover:bg-[#1E293B]'"
               @click="activeCategory = cat"
             >
-              <span class="text-lg shrink-0">{{ categoryEmojis[cat] }}</span>
+              <span class="cat-ico shrink-0"><Icon :icon="categoryIcons[cat] ?? ''" /></span>
               <span class="min-w-0 flex-1">{{ cat }}</span>
               <span class="shrink-0 text-xs font-bold text-[#94A3B8]">{{ categoryCounts[cat] || 0 }}</span>
             </button>
@@ -229,8 +230,8 @@ watch(
               @click="openAnnouncement(item)"
             >
               <!-- 左侧图标 48px -->
-              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl" :class="getCategoryColor(item)">
-                {{ getCategoryEmoji(item) }}
+              <span class="grid h-12 w-12 shrink-0 place-items-center rounded-xl" :class="getCategoryColor(item)">
+                <Icon :icon="getCategoryIcon(item)" class="ann-ico" />
               </span>
               <!-- 中间标题+摘要 -->
               <div class="min-w-0 flex-1">
@@ -282,4 +283,26 @@ watch(
 
 <style scoped>
 @reference 'tailwindcss';
+
+.cat-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2563EB;
+}
+.dark .cat-ico {
+  color: #4F8CFF;
+}
+.cat-ico :deep(svg) {
+  width: 20px;
+  height: 20px;
+}
+.ann-ico {
+  width: 24px;
+  height: 24px;
+  color: #2563EB;
+}
+.dark .ann-ico {
+  color: #4F8CFF;
+}
 </style>

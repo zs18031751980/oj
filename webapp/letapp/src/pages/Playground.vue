@@ -3,7 +3,7 @@ import {
   computed, defineAsyncComponent, markRaw, onMounted, onUnmounted, ref, watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiRequest, getContestProblem, type ContestProblemData } from "../services/api";
+import { apiRequest, getContestProblem, getProblem, type ContestProblemData, type ProblemDetailData } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
 
@@ -424,27 +424,48 @@ const openProblemSelector = async () => {
   }
 };
 
-const selectProblemFromList = (p: ProblemOption) => {
+const selectProblemFromList = async (p: ProblemOption) => {
   contestId.value = null;
   problemId.value = p.id;
-  // Load as contest problem fallback — for now show basic info
-  contestProblem.value = {
-    id: p.id,
-    contest_id: 0,
-    problem_index: `P${p.id}`,
-    title: p.title,
-    description: "",
-    input_desc: "",
-    output_desc: "",
-    correct_answer: "",
-    time_limit: 1000,
-    memory_limit: 256,
-    difficulty: p.difficulty,
-    testcase_count: 0,
-  };
   showProblemSelector.value = false;
   activeLeftTab.value = "problem";
+  try {
+    const detail = await getProblem(p.id);
+    contestProblem.value = mapProblemDetailToContest(detail);
+  } catch {
+    // 兜底：列表数据可能不含详情，至少展示标题与难度
+    contestProblem.value = {
+      id: p.id,
+      contest_id: 0,
+      problem_index: `P${p.id}`,
+      title: p.title,
+      description: "",
+      input_desc: "",
+      output_desc: "",
+      correct_answer: "",
+      time_limit: 1000,
+      memory_limit: 256,
+      difficulty: p.difficulty,
+      testcase_count: 0,
+    };
+  }
 };
+
+const mapProblemDetailToContest = (detail: ProblemDetailData): ContestProblemData => ({
+  id: detail.id,
+  contest_id: 0,
+  problem_index: `P${detail.id}`,
+  title: detail.title,
+  description: detail.description || "",
+  input_desc: detail.inputFormat || "",
+  output_desc: detail.outputFormat || "",
+  correct_answer: "",
+  time_limit: detail.timeLimit ?? 1000,
+  memory_limit: detail.memoryLimit ?? 256,
+  difficulty: detail.difficulty || "简单",
+  testcase_count: detail.testCaseCount ?? 0,
+  samples: detail.samples || [],
+});
 
 const closeProblemSelector = () => {
   showProblemSelector.value = false;
@@ -530,9 +551,18 @@ watch(selectedLanguage, (lang) => {
           <!-- 有题目时：题目内容 -->
           <template v-else>
             <div class="ide-panel-tabs">
-              <button :class="{ active: activeLeftTab === 'problem' }" @click="activeLeftTab = 'problem'">📝 题目</button>
-              <button :class="{ active: activeLeftTab === 'submissions' }" @click="activeLeftTab = 'submissions'">📊 提交记录</button>
-              <button :class="{ active: activeLeftTab === 'hints' }" @click="activeLeftTab = 'hints'">💡 提示</button>
+              <button :class="{ active: activeLeftTab === 'problem' }" @click="activeLeftTab = 'problem'">
+                <svg class="ide-tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h8l4 4v16H6V2zm2 2v2h6V4H8zm0 4v2h8V8H8zm0 4v2h8v-2H8zm0 4v2h5v-2H8z"/></svg>
+                题目
+              </button>
+              <button :class="{ active: activeLeftTab === 'submissions' }" @click="activeLeftTab = 'submissions'">
+                <svg class="ide-tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></svg>
+                提交记录
+              </button>
+              <button :class="{ active: activeLeftTab === 'hints' }" @click="activeLeftTab = 'hints'">
+                <svg class="ide-tab-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9 21h6v-2H9v2zm3-19a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>
+                提示
+              </button>
             </div>
             <div class="ide-panel-body">
               <div v-if="activeLeftTab === 'problem'" class="ide-problem-content">
@@ -554,6 +584,19 @@ watch(selectedLanguage, (lang) => {
                 <div v-if="contestProblem.output_desc" class="mt-4">
                   <h3>输出格式</h3>
                   <div class="ide-sample"><pre>{{ contestProblem.output_desc }}</pre></div>
+                </div>
+                <div v-if="contestProblem.samples && contestProblem.samples.length" class="mt-4">
+                  <h3>样例</h3>
+                  <div
+                    v-for="(s, idx) in contestProblem.samples"
+                    :key="idx"
+                    class="ide-sample-block"
+                  >
+                    <div class="ide-sample-label">示例 {{ idx + 1 }} 输入</div>
+                    <div class="ide-sample"><pre>{{ s.input }}</pre></div>
+                    <div class="ide-sample-label">示例 {{ idx + 1 }} 输出</div>
+                    <div class="ide-sample"><pre>{{ s.output }}</pre></div>
+                  </div>
                 </div>
                 <div class="mt-4">
                   <button class="ide-change-problem-btn" @click="openProblemSelector">更换题目</button>
@@ -896,6 +939,7 @@ html.dark .ide-panel-tabs { border-color: #1E293B; background: #1F2937; }
   color: #2563EB; border-bottom-color: #2563EB;
   background: #FFFFFF;
 }
+.ide-tab-icon { width: 16px; height: 16px; flex-shrink: 0; fill: currentColor; }
 html.dark .ide-panel-tabs button.active { background: #111827; }
 
 .ide-panel-body {
@@ -919,6 +963,9 @@ html.dark .ide-problem-desc h3 { color: #F3F4F6; }
 .ide-problem-desc p { margin: 0 0 12px; }
 
 .ide-sample { margin: 8px 0; border: 1px solid #E5E7EB; border-radius: 6px; overflow: hidden; }
+.ide-sample-block { margin-bottom: 16px; }
+.ide-sample-label { font-size: 13px; font-weight: 600; color: #64748B; margin: 8px 0 4px; }
+html.dark .ide-sample-label { color: #94A3B8; }
 .ide-sample pre {
   margin: 0; padding: 12px 16px;
   background: #F8FAFC; font-family: 'JetBrains Mono', monospace; font-size: 13px;

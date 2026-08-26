@@ -504,6 +504,7 @@ export interface ContestProblemData {
   memory_limit: number;
   difficulty: string;
   testcase_count: number;
+  samples?: Array<{ input: string; output: string }>;
 }
 
 export const listContestProblems = (contestId: number) =>
@@ -511,6 +512,25 @@ export const listContestProblems = (contestId: number) =>
 
 export const getContestProblem = (id: number) =>
   apiRequest<ContestProblemData>(`/contests/problems/${id}`);
+
+export interface ProblemDetailData {
+  id: number;
+  title: string;
+  difficulty: string;
+  description: string;
+  inputFormat: string;
+  outputFormat: string;
+  samples?: Array<{ input: string; output: string }>;
+  timeLimit: number;
+  memoryLimit: number;
+  category?: string;
+  categoryLabel?: string;
+  tags?: string[];
+  testCaseCount?: number;
+}
+
+export const getProblem = (id: number) =>
+  apiRequest<ProblemDetailData>(`/problems/${id}`, { skipAuth: true });
 
 export const createContestProblem = (contestId: number, data: {
   problem_index: string;
