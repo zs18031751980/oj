@@ -82,17 +82,18 @@ const categoryCounts = computed(() => {
   return counts;
 });
 
+import { formatDateTime as formatCSTDateTime } from '../utils/time';
+
 const formatTime = (dateStr?: string) => {
   if (!dateStr) return '时间未提供';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '时间未提供';
-  return date.toLocaleDateString('zh-CN', {
+  const date = formatCSTDateTime(dateStr, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
+  return date || '时间未提供';
 };
 
 const loadAnnouncements = async () => {

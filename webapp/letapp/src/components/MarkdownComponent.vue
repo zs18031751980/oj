@@ -356,7 +356,8 @@ watch(
 );
 
 const anchorLinks = computed(() => headings.value);
-const date = computed(() => (props.content?.date ? new Date(props.content.date).toLocaleDateString('zh-CN') : ''));
+import { formatDate } from '../utils/time';
+const date = computed(() => (props.content?.date ? formatDate(props.content?.date) : ''));
 const hasHeaderMeta = computed(() => Boolean(props.content?.title || props.content?.date || props.content?.watch));
 
 const handleAnchorClick = (event: Event, href: string) => {

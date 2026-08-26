@@ -129,7 +129,7 @@ class SubmissionListCreateController(Resource):
                 db_submission = None
 
         sid = db_submission.id if db_submission else _next_id(redis_service)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now().isoformat()
 
         submission_data = {
             'id': sid,

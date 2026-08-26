@@ -50,7 +50,8 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
             host=db_config["host"],
             port=db_config["port"],
             max_connections=db_config["max_connections"],
-            stale_timeout=db_config["stale_timeout"]
+            stale_timeout=db_config["stale_timeout"],
+            options="-c timezone=Asia/Shanghai"
         )
         print(f"[DB] 数据库连接已创建: {db_config['host']}:{db_config['port']}/{db_config['database']}")
         return db
@@ -63,7 +64,8 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
             host=config.host,
             port=config.port,
             max_connections=config.max_connections,
-            stale_timeout=config.stale_timeout
+            stale_timeout=config.stale_timeout,
+            options="-c timezone=Asia/Shanghai"
         )
         print(f"[DB] 数据库连接已创建(fallback): {config.host}:{config.port}/{config.database}")
         return db

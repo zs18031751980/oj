@@ -8,6 +8,7 @@ import {
   useMessage,
 } from 'naive-ui';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { formatDateTime as formatCSTDateTime } from '../../utils/time';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../../components/MarkdownComponent.vue'),
@@ -67,15 +68,14 @@ const previewContent = computed(() => ({
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '时间未提供';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '时间未提供';
-  return date.toLocaleDateString('zh-CN', {
+  const date = formatCSTDateTime(dateStr, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
+  return date || '时间未提供';
 };
 
 const getErrorMessage = (error: unknown, fallback: string) => {

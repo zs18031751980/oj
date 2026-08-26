@@ -6,6 +6,7 @@ import {
   listMySubmissions,
   type SubmissionHistoryItem,
 } from '../services/api';
+import { formatDateTime as formatCSTDateTime } from '../utils/time';
 
 const router = useRouter();
 
@@ -33,7 +34,7 @@ const getStatusInfo = (status: string) =>
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '—';
-  return new Date(dateString).toLocaleString('zh-CN', {
+  return formatCSTDateTime(dateString, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

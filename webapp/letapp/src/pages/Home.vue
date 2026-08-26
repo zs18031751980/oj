@@ -4,6 +4,7 @@ import { Icon } from "@iconify/vue";
 import { useRouter } from "vue-router";
 import { apiRequest, listMySubmissions, listFavorites } from "../services/api";
 import { useAuthStore } from "../stores/auth";
+import { formatDateTime as formatCSTDateTime } from "../utils/time";
 
 const router = useRouter();
 const terminalRef = ref<HTMLElement | null>(null);
@@ -264,7 +265,7 @@ const formatRate = (accepted: number, submission: number) => {
 };
 const formatDateShort = (dateString: string | null) => {
   if (!dateString) return "—";
-  return new Date(dateString).toLocaleDateString("zh-CN", {
+  return formatCSTDateTime(dateString, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

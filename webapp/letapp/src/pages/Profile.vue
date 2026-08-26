@@ -10,6 +10,7 @@ import {
   uploadAvatar,
   type UserProfileUpdate,
 } from '../services/api';
+import { formatDate as formatCSTDate } from '../utils/time';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -127,11 +128,7 @@ const loadStats = async () => {
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
+  return formatCSTDate(dateStr, { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 
 const goSubmissions = () => router.push('/submissions');

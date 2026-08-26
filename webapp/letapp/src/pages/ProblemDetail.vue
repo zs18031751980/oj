@@ -726,8 +726,10 @@ const difficultyClass = (d: string) =>
       ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'
       : 'bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400';
 
+import { formatTime, formatDateTime } from '../utils/time';
+
 const fmtTime = (d: Date | null) =>
-  d ? d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+  d ? formatTime(d, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
 
 const saveStatusText = computed(() => {
   if (saveStatus.value === 'saving') return '正在保存…';
@@ -959,7 +961,7 @@ onUnmounted(() => {
                   {{ getStatus(s.status).label }}
                 </span>
                 <span class="sub-lang">{{ s.language }}</span>
-                <span class="sub-time">{{ s.created_at ? new Date(s.created_at).toLocaleString('zh-CN') : '' }}</span>
+                <span class="sub-time">{{ s.created_at ? formatDateTime(s.created_at) : '' }}</span>
               </div>
             </div>
           </div>

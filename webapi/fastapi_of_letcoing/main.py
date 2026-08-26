@@ -12,8 +12,18 @@ LetCoding API 主入口模块
 import ast          # 用于安全解析 Python 字面量表达式（解析 OIDC 配置）
 import json         # 用于解析 JSON 格式的配置（OIDC 提供商配置）
 import os           # 用于读取环境变量
+import time         # 用于时区设置
 import re           # 用于正则匹配 .env 文件中的 OIDC_PROVIDERS 配置
 from pathlib import Path  # 用于跨平台路径操作
+
+# 统一后端时间基准为 UTC+8（Asia/Shanghai）：模型默认 created_at/updated_at 使用
+# datetime.now()，若线上主机时区非 UTC+8 会导致与数据库 now() 不一致。固定进程时区，
+# 配合数据库连接会话的 timezone=Asia/Shanghai，保证全链路时间统一为 UTC+8。
+os.environ.setdefault('TZ', 'Asia/Shanghai')
+try:
+    time.tzset()
+except Exception:
+    pass
 
 from dotenv import find_dotenv, load_dotenv  # 用于加载 .env 环境变量文件
 from flask import Flask, request              # Flask 核心框架

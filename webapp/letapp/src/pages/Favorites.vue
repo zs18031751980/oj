@@ -8,6 +8,7 @@ import {
   removeFavorite,
   type FavoriteItem,
 } from '../services/api';
+import { formatDate as formatCSTDate } from '../utils/time';
 
 const router = useRouter();
 const message = useMessage();
@@ -19,7 +20,7 @@ const removingId = ref<number | null>(null);
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '';
-  return new Date(dateString).toLocaleDateString('zh-CN', {
+  return formatCSTDate(dateString, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

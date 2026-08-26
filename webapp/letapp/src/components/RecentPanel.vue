@@ -10,6 +10,7 @@ export interface RecentItem {
 
 <script setup lang="ts">
 import { Icon } from '@iconify/vue';
+import { formatDate } from '../utils/time';
 
 defineProps<{
   items: RecentItem[];
@@ -35,8 +36,7 @@ function timeAgo(ts: number): string {
   if (diff < day) return '今天';
   if (diff < 2 * day) return '昨天';
   if (diff < 7 * day) return `${Math.floor(diff / day)} 天前`;
-  const d = new Date(ts * 1000);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  return formatDate(ts * 1000, { month: 'short', day: 'numeric' });
 }
 </script>
 

@@ -6,6 +6,7 @@ import {
   getAdminStats,
   type AdminStats,
 } from '../../services/api';
+import { formatDateTime as formatCSTDateTime } from '../../utils/time';
 
 const router = useRouter();
 
@@ -54,7 +55,7 @@ const roleDisplayName = (role: string) =>
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '—';
-  return new Date(dateString).toLocaleString('zh-CN', {
+  return formatCSTDateTime(dateString, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

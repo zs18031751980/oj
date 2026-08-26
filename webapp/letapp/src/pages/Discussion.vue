@@ -8,6 +8,7 @@ import {
   deleteDiscussion, deleteDiscussionReply,
   type DiscussionData, type DiscussionReplyData,
 } from '../services/api';
+import { formatDate, formatDateTime } from '../utils/time';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
@@ -82,12 +83,12 @@ const formatTime = (dateStr?: string) => {
   if (minutes < 60) return `${minutes} 分钟前`;
   if (hours < 24) return `${hours} 小时前`;
   if (days < 7) return `${days} 天前`;
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  return formatDate(d, { month: 'short', day: 'numeric' });
 };
 
 const formatFullTime = (dateStr?: string) => {
   if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('zh-CN', {
+  return formatDateTime(dateStr, {
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
   });

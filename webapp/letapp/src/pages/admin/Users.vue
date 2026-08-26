@@ -9,6 +9,7 @@ import {
   type AdminUserData,
 } from '../../services/api';
 import { useAuthStore } from '../../stores/auth';
+import { formatDateTime as formatCSTDateTime } from '../../utils/time';
 
 const dialog = useDialog();
 const message = useMessage();
@@ -131,7 +132,7 @@ const getStatusKey = (user: AdminUserData): keyof typeof statusInfoMap =>
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return '—';
-  return new Date(dateString).toLocaleString('zh-CN', {
+  return formatCSTDateTime(dateString, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

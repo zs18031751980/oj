@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getContest, listContestProblems, joinContest, type ContestData, type ContestProblemData } from '../services/api';
+import { formatDateTime as formatCSTDateTime } from '../utils/time';
 
 const route = useRoute();
 const router = useRouter();
@@ -19,9 +20,8 @@ const difficultyClass = (d: string) =>
 
 const formatTime = (dateStr?: string | null) => {
   if (!dateStr) return '待定';
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return '待定';
-  return d.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const d = formatCSTDateTime(dateStr, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d || '待定';
 };
 
 const loadData = async () => {
