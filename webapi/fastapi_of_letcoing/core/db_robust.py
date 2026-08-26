@@ -83,16 +83,15 @@ def ensure_connected(database: Database):
         try:
             if database.is_closed() or not database.is_connection_usable():
                 database.connect()
-            yield
-            return
+            try:
+                yield
+                return
+            finally:
+                # 使用结束后把连接归还连接池，避免连接泄漏
+                database.close()
         except RETRYABLE_DB_ERRORS as exc:
             last_exc = exc
             if attempt == 0:
-                try:
-                    if not database.is_closed():
-                        database.close()
-                except Exception:
-                    pass
                 continue
             break
     raise DatabaseUnavailableError() from last_exc
@@ -120,15 +119,15 @@ def run_db_operation(
         try:
             if database.is_closed() or not database.is_connection_usable():
                 database.connect()
-            return operation()
+            try:
+                return operation()
+            finally:
+                # 操作结束后务必把连接归还连接池，避免连接泄漏导致
+                # "Exceeded maximum connections"
+                database.close()
         except RETRYABLE_DB_ERRORS as exc:
             last_exc = exc
             if attempt < retries:
-                try:
-                    if not database.is_closed():
-                        database.close()
-                except Exception:
-                    pass
                 continue
             break
     raise DatabaseUnavailableError() from last_exc

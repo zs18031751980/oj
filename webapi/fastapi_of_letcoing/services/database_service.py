@@ -25,6 +25,15 @@ from core.db_robust import (
 from interfaces.service_interfaces import IConfigService
 
 
+def _get_shared_database(config_service: IConfigService) -> Database:
+    """
+    与 ORM 模型共用同一个连接池（models.db_models.get_database()），
+    避免 DatabaseService 与模型各自创建连接池导致连接数叠加、撑爆 max_connections。
+    """
+    from models.db_models import get_database
+    return get_database()
+
+
 class DatabaseService(Injectable):
     """
     数据库服务基类
@@ -42,7 +51,7 @@ class DatabaseService(Injectable):
         """
         初始化数据库服务
 
-        Args:
+        参数:
             config_service: 配置服务，用于读取数据库连接参数
         """
         self._config_service = config_service
@@ -51,22 +60,12 @@ class DatabaseService(Injectable):
 
     def _get_database(self) -> Database:
         """
-        获取 PostgreSQL 数据库连接池实例
+        获取 PostgreSQL 数据库连接池实例（进程内共享单例）
 
-        惰性初始化：首次调用时根据 ConfigService 的配置创建连接池。
+        所有 DatabaseService 及其子类共享同一个连接池，避免每个控制器各开一个池、
+        连接数叠加导致 "Exceeded maximum connections"。
         """
-        if self._database is None:
-            db_config = self._config_service.get_database_config()
-            self._database = PooledPostgresqlExtDatabase(
-                db_config["database"],
-                user=db_config["username"],
-                password=db_config["password"],
-                host=db_config["host"],
-                port=db_config["port"],
-                max_connections=db_config["max_connections"],
-                stale_timeout=db_config["stale_timeout"]
-            )
-        return self._database
+        return _get_shared_database(self._config_service)
 
     def _ensure_connection(self):
         """确保数据库连接可用，如果不可用则记录警告（不阻塞启动，首次查询时再重试）"""

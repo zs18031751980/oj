@@ -425,6 +425,18 @@ setup_services(app.config)
 from models.db_models import init_database
 init_database()
 
+# 每个请求结束后把线程本地数据库连接归还连接池，避免多线程下连接泄漏
+# 导致 "Exceeded maximum connections"
+from models.db_models import get_database
+
+
+@app.teardown_appcontext
+def _close_db_pool(exc=None):
+    db = get_database()
+    if not db.is_closed():
+        db.close()
+
+
 # 创建数据库表（如不存在），失败时只打印警告，避免阻塞启动
 try:
     create_tables()

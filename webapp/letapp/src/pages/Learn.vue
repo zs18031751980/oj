@@ -94,9 +94,11 @@ function getNodeByPath(path: string): TreeNode | null {
   if (!path) return treeData.value;
   const parts = path.split('/').filter(Boolean);
   let node: TreeNode | null = treeData.value;
+  let acc = '';
   for (const part of parts) {
     if (!node || !node.children) return null;
-    node = node.children.find((c) => c.name === part) || null;
+    acc = acc ? acc + '/' + part : part;
+    node = node.children.find((c) => c.path === acc) || null;
     if (!node) return null;
   }
   return node;
@@ -110,10 +112,10 @@ function buildBreadcrumb(path: string): BreadcrumbItem[] {
   let acc = '';
   for (const part of parts) {
     if (!node || !node.children) break;
-    node = node.children.find((c) => c.name === part) || null;
-    if (!node) break;
     acc = acc ? acc + '/' + part : part;
-    crumbs.push({ name: cleanName(part), path: acc });
+    node = node.children.find((c) => c.path === acc) || null;
+    if (!node) break;
+    crumbs.push({ name: node.name, path: acc });
   }
   return crumbs;
 }

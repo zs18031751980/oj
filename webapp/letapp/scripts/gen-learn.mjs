@@ -17,6 +17,7 @@ const DST = path.resolve(__dirname, '..', 'public', 'learn-dist');
 const SKIP_COPY = new Set([
   '__pycache__', 'node_modules', '.git', '.obsidian',
   'ai-skills教学', 'runoob', 'w3', 'opencode-skills', 'include', 'lib',
+  'c-language',
 ]);
 
 if (!fs.existsSync(SRC)) {
@@ -220,6 +221,7 @@ function dirRel(abs) {
 const SKIP_DIRS = new Set([
   '__pycache__', 'node_modules', '.git', 'images', 'assets',
   '.obsidian', 'ai-skills教学', 'runoob', 'w3', 'opencode-skills',
+  'c-language',
 ]);
 function chapterOf(name) {
   const m = name.match(/^(\d+)/);

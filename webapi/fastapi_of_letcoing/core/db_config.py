@@ -32,7 +32,7 @@ class DatabaseConfig:
     password: str = ""                  # 数据库密码
 
     # ----- 连接池配置 -----
-    max_connections: int = 20           # 连接池最大连接数
+    max_connections: int = 70           # 连接池最大连接数
     stale_timeout: int = 300            # 空闲连接超时时间（秒）
 
     def __post_init__(self):
