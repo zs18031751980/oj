@@ -6,6 +6,9 @@ import { useRoute, useRouter } from 'vue-router';
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
 );
+const LearnSidebar = defineAsyncComponent(
+  () => import('../components/LearnSidebar.vue'),
+);
 
 import {
   listLearnFavorites, addLearnFavorite, removeLearnFavorite,
@@ -254,6 +257,68 @@ const nextChapter = computed(() => (
 ));
 
 const currentMarkdownFile = computed(() => currentChapter.value?.markdownFile || currentResource.value?.markdownFile || '');
+
+// 树形目录数据
+interface SidebarTreeNode {
+  id: string;
+  title: string;
+  markdownFile?: string;
+  children?: SidebarTreeNode[];
+}
+
+const sidebarTree = computed<SidebarTreeNode[]>(() => {
+  if (!currentResource.value) return [];
+  const r = currentResource.value;
+  if (!r.chapters?.length) {
+    return [{ id: r.id, title: r.title, markdownFile: r.markdownFile }];
+  }
+  return [{
+    id: r.id,
+    title: r.title,
+    children: r.chapters.map(ch => ({
+      id: ch.id,
+      title: ch.title,
+      markdownFile: ch.markdownFile,
+    })),
+  }];
+});
+
+// Markdown 标题解析
+const mdHeadings = ref<{ level: number; text: string; id: string }[]>([]);
+
+const parseMdHeadings = (markdown: string) => {
+  const headings: { level: number; text: string; id: string }[] = [];
+  const lines = markdown.split('\n');
+  for (const raw of lines) {
+    const match = raw.match(/^(#{1,3})\s+(.+)/);
+    if (match) {
+      const level = match[1]?.length ?? 1;
+      const text = (match[2] || '').replace(/[*_`~\[\]]/g, '').trim();
+      const id = text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+      headings.push({ level, text, id });
+    }
+  }
+  return headings;
+};
+
+watch(selectedResource, (res) => {
+  if (res?.content) {
+    mdHeadings.value = parseMdHeadings(res.content);
+  } else {
+    mdHeadings.value = [];
+  }
+}, { immediate: true });
+
+const handleSidebarSelect = async (node: SidebarTreeNode) => {
+  if (node.markdownFile) {
+    const chapter = currentResource.value?.chapters?.find(ch => ch.id === node.id);
+    if (chapter) {
+      await openChapter(chapter);
+    } else {
+      await openResource(currentResource.value!);
+    }
+  }
+};
 
 const findResourceById = (id: string) => allResources.find((item) => item.id === id || item.title === id);
 
@@ -640,30 +705,44 @@ watch(
 
     <!-- ===== 详情页 ===== -->
     <template v-else>
-      <div class="learn-detail-container py-6 lg:py-8">
+      <div class="learn-detail-layout">
 
-        <!-- 工具栏 -->
-        <div class="learn-toolbar">
-          <button class="learn-back-btn" @click="goBackFromDetail">
-            <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
-            {{ currentChapter ? '返回课程目录' : '返回学习资源' }}
-          </button>
+        <!-- 左侧树形导航 -->
+        <Suspense>
+          <LearnSidebar
+            :tree="sidebarTree"
+            :current-id="currentDocId"
+            :current-chapter-id="currentChapterId"
+            :headings="mdHeadings"
+            @select="handleSidebarSelect"
+          />
+        </Suspense>
 
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!isChapterDirectory"
-              class="learn-toolbar-btn"
-              :disabled="isLoadingDoc || !selectedResource"
-              @click="downloadCurrentMarkdown"
-              title="导出 Markdown"
-            >
-              <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
+        <!-- 右侧内容 -->
+        <div class="learn-detail-main">
+
+          <!-- 工具栏 -->
+          <div class="learn-toolbar">
+            <button class="learn-back-btn" @click="goBackFromDetail">
+              <Icon icon="material-symbols:arrow-back-rounded" class="h-4 w-4" />
+              {{ currentChapter ? '返回课程目录' : '返回学习资源' }}
             </button>
-            <button class="learn-toolbar-btn" title="去编辑器练习" @click="router.push('/playground')">
-              <Icon icon="material-symbols:code" class="h-4 w-4" />
-            </button>
+
+            <div class="flex items-center gap-2">
+              <button
+                v-if="!isChapterDirectory"
+                class="learn-toolbar-btn"
+                :disabled="isLoadingDoc || !selectedResource"
+                @click="downloadCurrentMarkdown"
+                title="导出 Markdown"
+              >
+                <Icon icon="material-symbols:download-rounded" class="h-4 w-4" />
+              </button>
+              <button class="learn-toolbar-btn" title="去编辑器练习" @click="router.push('/playground')">
+                <Icon icon="material-symbols:code" class="h-4 w-4" />
+              </button>
+            </div>
           </div>
-        </div>
 
         <!-- 章节目录模式 -->
         <div v-if="isChapterDirectory" class="learn-chapter-directory">
@@ -752,7 +831,9 @@ watch(
             </button>
           </nav>
         </template>
-      </div>
+
+        </div><!-- learn-detail-main -->
+      </div><!-- learn-detail-layout -->
     </template>
   </div>
 </template>
@@ -1060,12 +1141,42 @@ watch(
   color: #FB7185;
 }
 
-/* ===== 详情页容器 ===== */
-.learn-detail-container {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
+/* ===== 详情页布局 ===== */
+.learn-detail-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #f6f8fc;
+}
+:global(html.dark) .learn-detail-layout {
+  background: #0f172a;
+}
+.learn-detail-main {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 24px 32px;
+}
+@media (max-width: 1024px) {
+  .learn-detail-main {
+    padding: 16px;
+  }
+}
+@media (max-width: 768px) {
+  .learn-detail-layout {
+    flex-direction: column;
+  }
+  .learn-file-sidebar {
+    position: static !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: auto !important;
+    max-height: 50vh;
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .learn-detail-main {
+    padding: 12px;
+  }
 }
 
 /* ===== 工具栏 ===== */
@@ -1437,10 +1548,6 @@ watch(
 
 /* ===== 移动端适配 ===== */
 @media (max-width: 768px) {
-  .learn-detail-container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
   .chapter-grid {
     grid-template-columns: 1fr;
   }
