@@ -648,6 +648,13 @@ _SCHEMA_MIGRATIONS = [
             "ALTER TABLE announcements ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT '系统公告';",
         ],
     ),
+    (
+        "0007_like_tables_updated_at",
+        [
+            "ALTER TABLE discussion_likes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();",
+            "ALTER TABLE discussion_reply_likes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();",
+        ],
+    ),
 ]
 
 
