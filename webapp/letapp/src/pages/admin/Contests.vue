@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, defineAsyncComponent, onMounted } from 'vue';
+import { ref, computed, nextTick, watch, defineAsyncComponent, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import {
@@ -36,7 +36,19 @@ const isLoadingProblems = ref(false);
 const showProblemForm = ref(false);
 const editingProblem = ref(false);
 const editingProblemId = ref<number | null>(null);
-const problemForm = ref({
+
+// 代码编辑器语言选项
+const languageOptions = [
+  { value: 'c', label: 'C' },
+  { value: 'cpp', label: 'C++' },
+  { value: 'python', label: 'Python' },
+  { value: 'java', label: 'Java' },
+  { value: 'javascript', label: 'JavaScript' },
+];
+const languageLabel = (v: string) =>
+  languageOptions.find((o) => o.value === v)?.label || v;
+
+const defaultProblemForm = () => ({
   problem_index: '',
   title: '',
   description: '',
@@ -46,7 +58,11 @@ const problemForm = ref({
   time_limit: 1000,
   memory_limit: 256,
   difficulty: '中等',
+  language: 'cpp',
+  samples: [{ input: '', output: '' }] as { input: string; output: string }[],
 });
+
+const problemForm = ref(defaultProblemForm());
 const isGeneratingTestcases = ref(false);
 
 // 表单校验状态
@@ -93,6 +109,159 @@ const clearFormErrors = () => {
     description: '',
     correct_answer: '',
   };
+};
+
+// 代码编辑器全屏
+const codeFullscreen = ref(false);
+
+// 文本域引用
+const descTextarea = ref<HTMLTextAreaElement | null>(null);
+const codeTextarea = ref<HTMLTextAreaElement | null>(null);
+const codeGutter = ref<HTMLDivElement | null>(null);
+const codeGutterFs = ref<HTMLDivElement | null>(null);
+
+// 代码行号
+const codeLineCount = computed(() => {
+  const v = problemForm.value.correct_answer || '';
+  return v.split('\n').length;
+});
+
+// 题目描述字符数
+const descCharCount = computed(() => (problemForm.value.description || '').length);
+
+// Markdown 工具栏
+const applyMd = (type: string) => {
+  const ta = descTextarea.value;
+  if (!ta) return;
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  const val = problemForm.value.description;
+  const sel = val.slice(start, end);
+  let before = '', after = '', placeholder = '';
+  switch (type) {
+    case 'bold': before = '**'; after = '**'; placeholder = '加粗文本'; break;
+    case 'italic': before = '*'; after = '*'; placeholder = '斜体文本'; break;
+    case 'code': before = '`'; after = '`'; placeholder = '代码'; break;
+    case 'link': before = '['; after = '](https://)'; placeholder = '链接文本'; break;
+    case 'list': before = '- '; after = ''; placeholder = '列表项'; break;
+    default: return;
+  }
+  const insert = before + (sel || placeholder) + after;
+  problemForm.value.description = val.slice(0, start) + insert + val.slice(end);
+  nextTick(() => {
+    ta.focus();
+    const pos = start + before.length;
+    ta.setSelectionRange(pos, pos + (sel || placeholder).length);
+  });
+};
+
+// 代码滚动同步行号
+const onCodeScroll = (e: Event) => {
+  if (codeGutter.value) {
+    codeGutter.value.scrollTop = (e.target as HTMLTextAreaElement).scrollTop;
+  }
+};
+const onCodeScrollFs = (e: Event) => {
+  if (codeGutterFs.value) {
+    codeGutterFs.value.scrollTop = (e.target as HTMLTextAreaElement).scrollTop;
+  }
+};
+
+// 复制参考代码
+const copyCode = async () => {
+  try {
+    await navigator.clipboard.writeText(problemForm.value.correct_answer);
+    message.success('代码已复制');
+  } catch {
+    message.error('复制失败');
+  }
+};
+
+// 样例管理
+const addSample = () => {
+  problemForm.value.samples.push({ input: '', output: '' });
+};
+const removeSample = (index: number) => {
+  if (problemForm.value.samples.length <= 1) {
+    problemForm.value.samples = [{ input: '', output: '' }];
+    return;
+  }
+  if (!confirm(`确认删除样例 ${index + 1}？`)) return;
+  problemForm.value.samples.splice(index, 1);
+};
+const moveSample = (index: number, dir: number) => {
+  const target = index + dir;
+  if (target < 0 || target >= problemForm.value.samples.length) return;
+  const list = problemForm.value.samples;
+  const a = list[index];
+  const b = list[target];
+  if (!a || !b) return;
+  list[index] = b;
+  list[target] = a;
+};
+const copySample = async (s: { input: string; output: string }) => {
+  try {
+    await navigator.clipboard.writeText(`输入:\n${s.input}\n输出:\n${s.output}`);
+    message.success('样例已复制');
+  } catch {
+    message.error('复制失败');
+  }
+};
+
+// 完成度
+const completionItems = computed(() => {
+  const f = problemForm.value;
+  const sampleDone = f.samples.some((s) => s.input.trim() && s.output.trim());
+  return [
+    { key: 'base', label: '基础信息', done: !!(f.problem_index.trim() && f.title.trim()) },
+    { key: 'desc', label: '题目描述', done: !!f.description.trim() },
+    { key: 'sample', label: '样例测试', done: sampleDone, optional: true },
+    { key: 'code', label: '参考代码', done: !!f.correct_answer.trim() },
+  ];
+});
+const completionDone = computed(() => completionItems.value.filter((i) => i.done).length);
+const completionTotal = computed(() => completionItems.value.length);
+const completionPercent = computed(() =>
+  Math.round((completionDone.value / completionTotal.value) * 100),
+);
+const allRequiredDone = computed(() => completionItems.value.every((i) => i.done));
+
+// 草稿
+const draftKey = (id: number | null) => `problem_draft_${id ?? 'tmp'}`;
+const saveDraft = () => {
+  if (!selectedContestId.value) return;
+  try {
+    localStorage.setItem(
+      draftKey(selectedContestId.value),
+      JSON.stringify(problemForm.value),
+    );
+    message.success('草稿已保存');
+  } catch {
+    message.error('草稿保存失败');
+  }
+};
+const loadDraft = () => {
+  if (!selectedContestId.value) return;
+  const raw = localStorage.getItem(draftKey(selectedContestId.value));
+  if (!raw) return;
+  try {
+    const d = JSON.parse(raw);
+    const base = defaultProblemForm();
+    problemForm.value = {
+      ...base,
+      ...d,
+      samples: Array.isArray(d.samples) && d.samples.length
+        ? d.samples
+        : base.samples,
+    };
+    message.info('已恢复上次保存的草稿');
+  } catch {
+    /* ignore */
+  }
+};
+const clearDraft = () => {
+  if (!selectedContestId.value) return;
+  localStorage.removeItem(draftKey(selectedContestId.value));
 };
 
 // 加载比赛列表
@@ -157,6 +326,9 @@ const openProblemForm = (problem?: any) => {
   if (problem) {
     editingProblem.value = true;
     editingProblemId.value = problem.id;
+    const samples = Array.isArray(problem.samples) && problem.samples.length
+      ? problem.samples
+      : [{ input: '', output: '' }];
     problemForm.value = {
       problem_index: problem.problem_index,
       title: problem.title,
@@ -167,21 +339,17 @@ const openProblemForm = (problem?: any) => {
       time_limit: problem.time_limit,
       memory_limit: problem.memory_limit,
       difficulty: problem.difficulty,
+      language: problem.language || 'cpp',
+      samples,
     };
   } else {
     editingProblem.value = false;
     editingProblemId.value = null;
-    problemForm.value = {
-      problem_index: String.fromCharCode(65 + problems.value.length),
-      title: '',
-      description: '',
-      input_desc: '',
-      output_desc: '',
-      correct_answer: '',
-      time_limit: 1000,
-      memory_limit: 256,
-      difficulty: '中等',
-    };
+    problemForm.value = defaultProblemForm();
+    problemForm.value.problem_index = String.fromCharCode(
+      65 + problems.value.length,
+    );
+    loadDraft();
   }
   showProblemForm.value = true;
 };
@@ -195,21 +363,36 @@ const saveProblem = async () => {
   }
 
   const f = problemForm.value;
+  const payload = {
+    problem_index: f.problem_index,
+    title: f.title,
+    description: f.description,
+    input_desc: f.input_desc,
+    output_desc: f.output_desc,
+    correct_answer: f.correct_answer,
+    time_limit: f.time_limit,
+    memory_limit: f.memory_limit,
+    difficulty: f.difficulty,
+    language: f.language,
+    samples: JSON.stringify(f.samples),
+  };
+
   isGeneratingTestcases.value = true;
   try {
     if (editingProblem.value && editingProblemId.value) {
       await apiRequest(`/admin/contests/${editingProblemId.value}`, {
         method: 'PUT',
-        body: JSON.stringify(f),
+        body: JSON.stringify(payload),
       });
       message.success('题目更新成功');
     } else {
       await apiRequest(`/admin/contests/?contest_id=${selectedContestId.value}`, {
         method: 'POST',
-        body: JSON.stringify(f),
+        body: JSON.stringify(payload),
       });
       message.success('题目创建成功，测试用例已自动生成');
     }
+    clearDraft();
     showProblemForm.value = false;
     await loadProblems(selectedContestId.value);
   } catch (e) {
@@ -264,6 +447,11 @@ const difficultyClass = (d: string) =>
   d === '简单' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
   : d === '中等' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
   : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400';
+
+// 关闭弹窗时退出代码全屏，避免残留遮罩
+watch(showProblemForm, (v) => {
+  if (!v) codeFullscreen.value = false;
+});
 
 onMounted(loadContests);
 </script>
@@ -411,165 +599,341 @@ onMounted(loadContests);
       <div class="problem-modal">
         <!-- 顶部标题栏 -->
         <div class="problem-modal-header">
-          <h2 class="problem-modal-title">{{ editingProblem ? '编辑题目' : '添加题目' }}</h2>
-          <button class="problem-modal-close" @click="showProblemForm = false">
+          <div class="problem-modal-header-left">
+            <button class="problem-back-btn" @click="showProblemForm = false" title="返回题目列表">
+              <Icon icon="material-symbols:arrow-back" class="h-4 w-4" />
+              <span>题目管理</span>
+            </button>
+            <div class="problem-modal-titles">
+              <h2 class="problem-modal-title">{{ editingProblem ? '编辑题目' : '添加题目' }}</h2>
+              <p class="problem-modal-subtitle">创建一道新的编程题，填写内容后即可发布到题库。</p>
+            </div>
+          </div>
+          <button class="problem-modal-close" @click="showProblemForm = false" title="关闭">
             <Icon icon="material-symbols:close" class="h-5 w-5" />
           </button>
         </div>
 
         <!-- 内容区域 -->
         <div class="problem-modal-body">
-          <!-- 左侧：表单区 (58%) -->
+          <!-- 左侧：统一编辑工作区 -->
           <div class="problem-form-section">
-            <!-- 分组1：基础信息 -->
-            <div class="problem-form-group">
-              <div class="problem-form-group-header">
-                <Icon icon="material-symbols:info" class="h-4 w-4 text-[#2563EB]" />
-                <span class="problem-form-group-title">基础信息</span>
-              </div>
-              <div class="problem-form-group-content">
-                <div class="problem-form-row">
-                  <div class="problem-form-field">
-                    <label class="problem-label">
-                      题目编号 <span class="problem-required">*</span>
-                    </label>
-                    <input
-                      v-model="problemForm.problem_index"
-                      class="problem-input"
-                      :class="{ 'problem-input-error': formErrors.problem_index }"
-                      placeholder="例如：A"
-                      maxlength="10"
-                      @blur="validateField('problem_index')"
-                    />
-                    <span v-if="formErrors.problem_index" class="problem-form-error">{{ formErrors.problem_index }}</span>
-                  </div>
-                  <div class="problem-form-field">
-                    <label class="problem-label">难度</label>
-                    <select v-model="problemForm.difficulty" class="problem-input">
-                      <option value="简单">简单</option>
-                      <option value="中等">中等</option>
-                      <option value="困难">困难</option>
-                    </select>
+            <div class="problem-editor-surface">
+              <!-- 分组1：基础信息 -->
+              <section class="problem-section">
+                <div class="problem-section-head">
+                  <div>
+                    <h3 class="problem-section-title">基础信息</h3>
+                    <p class="problem-section-desc">设置题目的编号、难度与分类信息。</p>
                   </div>
                 </div>
-                <div class="problem-form-field">
-                  <label class="problem-label">
-                    题目标题 <span class="problem-required">*</span>
-                  </label>
-                  <input
-                    v-model="problemForm.title"
-                    class="problem-input"
-                    :class="{ 'problem-input-error': formErrors.title }"
-                    placeholder="请输入题目标题，例如：两数之和"
-                    @blur="validateField('title')"
-                  />
-                  <span v-if="formErrors.title" class="problem-form-error">{{ formErrors.title }}</span>
+                <div class="problem-section-body">
+                  <div class="problem-grid-12">
+                    <div class="problem-col-3">
+                      <label class="problem-label">题目编号 <span class="problem-required">*</span></label>
+                      <input
+                        v-model="problemForm.problem_index"
+                        class="problem-input"
+                        :class="{ 'problem-input-error': formErrors.problem_index }"
+                        placeholder="A"
+                        maxlength="10"
+                        @blur="validateField('problem_index')"
+                      />
+                      <span v-if="formErrors.problem_index" class="problem-form-error">{{ formErrors.problem_index }}</span>
+                    </div>
+                    <div class="problem-col-3">
+                      <label class="problem-label">难度</label>
+                      <select v-model="problemForm.difficulty" class="problem-input">
+                        <option value="简单">简单</option>
+                        <option value="中等">中等</option>
+                        <option value="困难">困难</option>
+                      </select>
+                    </div>
+                    <div class="problem-col-3">
+                      <label class="problem-label">时间限制</label>
+                      <div class="problem-input-with-unit">
+                        <input v-model.number="problemForm.time_limit" type="number" class="problem-input" min="100" max="10000" />
+                        <span class="problem-input-unit">ms</span>
+                      </div>
+                    </div>
+                    <div class="problem-col-3">
+                      <label class="problem-label">内存限制</label>
+                      <div class="problem-input-with-unit">
+                        <input v-model.number="problemForm.memory_limit" type="number" class="problem-input" min="64" max="1024" />
+                        <span class="problem-input-unit">MB</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="problem-grid-12">
+                    <div class="problem-col-12">
+                      <label class="problem-label">题目标题 <span class="problem-required">*</span></label>
+                      <input
+                        v-model="problemForm.title"
+                        class="problem-input"
+                        :class="{ 'problem-input-error': formErrors.title }"
+                        placeholder="请输入题目标题，例如：两数之和"
+                        @blur="validateField('title')"
+                      />
+                      <span v-if="formErrors.title" class="problem-form-error">{{ formErrors.title }}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </section>
 
-            <!-- 分组2：题目内容 -->
-            <div class="problem-form-group">
-              <div class="problem-form-group-header">
-                <Icon icon="material-symbols:description" class="h-4 w-4 text-[#2563EB]" />
-                <span class="problem-form-group-title">题目内容</span>
-              </div>
-              <div class="problem-form-group-content">
-                <div class="problem-form-field">
-                  <label class="problem-label">
-                    题目描述 <span class="problem-required">*</span>
-                  </label>
-                  <div class="problem-textarea-wrapper">
-                    <textarea
-                      v-model="problemForm.description"
-                      class="problem-textarea font-mono"
-                      :class="{ 'problem-input-error': formErrors.description }"
-                      rows="10"
-                      placeholder="## 题目描述&#10;&#10;给定一个整数数组..."
-                      @blur="validateField('description')"
-                    ></textarea>
-                    <div class="problem-textarea-hint">
-                      <Icon icon="material-symbols:code" class="h-3.5 w-3.5" />
-                      <span>支持 Markdown 格式</span>
+              <!-- 分组2：题目描述 -->
+              <section class="problem-section">
+                <div class="problem-section-head">
+                  <div>
+                    <h3 class="problem-section-title">题目描述</h3>
+                    <p class="problem-section-desc">使用 Markdown 描述题目的背景、要求与格式。</p>
+                  </div>
+                </div>
+                <div class="problem-section-body">
+                  <div class="problem-form-field">
+                    <label class="problem-label">题目描述 <span class="problem-required">*</span></label>
+                    <div class="problem-md-editor">
+                      <div class="problem-md-toolbar">
+                        <button class="problem-md-btn" title="加粗" @click="applyMd('bold')"><Icon icon="material-symbols:format-bold" class="h-4 w-4" /></button>
+                        <button class="problem-md-btn" title="斜体" @click="applyMd('italic')"><Icon icon="material-symbols:format-italic" class="h-4 w-4" /></button>
+                        <button class="problem-md-btn" title="代码" @click="applyMd('code')"><Icon icon="material-symbols:code" class="h-4 w-4" /></button>
+                        <button class="problem-md-btn" title="链接" @click="applyMd('link')"><Icon icon="material-symbols:link" class="h-4 w-4" /></button>
+                        <button class="problem-md-btn" title="列表" @click="applyMd('list')"><Icon icon="material-symbols:format-list-bulleted" class="h-4 w-4" /></button>
+                      </div>
+                      <textarea
+                        ref="descTextarea"
+                        v-model="problemForm.description"
+                        class="problem-textarea problem-desc-textarea"
+                        :class="{ 'problem-input-error': formErrors.description }"
+                        placeholder="## 题目描述&#10;&#10;给定一个整数数组..."
+                        @blur="validateField('description')"
+                      ></textarea>
+                      <div class="problem-desc-footer">
+                        <span class="problem-hint"><Icon icon="material-symbols:code" class="h-3.5 w-3.5" /> 支持 Markdown</span>
+                        <span class="problem-hint">{{ descCharCount }} / 10,000</span>
+                      </div>
                     </div>
                     <span v-if="formErrors.description" class="problem-form-error">{{ formErrors.description }}</span>
                   </div>
-                </div>
-                <div class="problem-form-row">
-                  <div class="problem-form-field">
-                    <label class="problem-label">输入格式</label>
-                    <textarea v-model="problemForm.input_desc" class="problem-textarea" rows="5" placeholder="第一行包含..."></textarea>
+                  <div class="problem-grid-12">
+                    <div class="problem-col-6">
+                      <label class="problem-label">输入格式</label>
+                      <textarea v-model="problemForm.input_desc" class="problem-textarea" rows="4" placeholder="第一行包含..."></textarea>
+                    </div>
+                    <div class="problem-col-6">
+                      <label class="problem-label">输出格式</label>
+                      <textarea v-model="problemForm.output_desc" class="problem-textarea" rows="4" placeholder="输出一个整数..."></textarea>
+                    </div>
                   </div>
-                  <div class="problem-form-field">
-                    <label class="problem-label">输出格式</label>
-                    <textarea v-model="problemForm.output_desc" class="problem-textarea" rows="5" placeholder="输出一个整数..."></textarea>
-                  </div>
                 </div>
-              </div>
-            </div>
+              </section>
 
-            <!-- 分组3：判题配置 -->
-            <div class="problem-form-group">
-              <div class="problem-form-group-header">
-                <Icon icon="material-symbols:settings" class="h-4 w-4 text-[#2563EB]" />
-                <span class="problem-form-group-title">判题配置</span>
-              </div>
-              <div class="problem-form-group-content">
-                <div class="problem-form-field">
-                  <label class="problem-label">
-                    正确答案（参考代码） <span class="problem-required">*</span>
-                  </label>
-                  <textarea
-                    v-model="problemForm.correct_answer"
-                    class="problem-textarea font-mono"
-                    :class="{ 'problem-input-error': formErrors.correct_answer }"
-                    rows="8"
-                    placeholder="# Python 示例&#10;def solve(n, nums):&#10;    return sum(nums)"
-                    @blur="validateField('correct_answer')"
-                  ></textarea>
-                  <span v-if="formErrors.correct_answer" class="problem-form-error">{{ formErrors.correct_answer }}</span>
-                </div>
-                <div class="problem-form-row">
-                  <div class="problem-form-field">
-                    <label class="problem-label">时间限制</label>
-                    <div class="problem-input-with-unit">
-                      <input v-model.number="problemForm.time_limit" type="number" class="problem-input" min="100" max="10000" />
-                      <span class="problem-input-unit">ms</span>
-                    </div>
-                  </div>
-                  <div class="problem-form-field">
-                    <label class="problem-label">内存限制</label>
-                    <div class="problem-input-with-unit">
-                      <input v-model.number="problemForm.memory_limit" type="number" class="problem-input" min="64" max="1024" />
-                      <span class="problem-input-unit">MB</span>
-                    </div>
+              <!-- 分组3：样例测试 -->
+              <section class="problem-section">
+                <div class="problem-section-head">
+                  <div>
+                    <h3 class="problem-section-title">样例测试</h3>
+                    <p class="problem-section-desc">填写题目的标准输入与标准输出，用于展示给用户查看。</p>
                   </div>
                 </div>
-              </div>
+                <div class="problem-section-body">
+                  <div
+                    v-for="(sample, idx) in problemForm.samples"
+                    :key="idx"
+                    class="problem-sample-card"
+                  >
+                    <div class="problem-sample-head">
+                      <div class="problem-sample-title">
+                        <button
+                          class="problem-sample-drag"
+                          title="上移"
+                          :disabled="idx === 0"
+                          @click="moveSample(idx, -1)"
+                        ><Icon icon="material-symbols:arrow-upward" class="h-4 w-4" /></button>
+                        <button
+                          class="problem-sample-drag"
+                          title="下移"
+                          :disabled="idx === problemForm.samples.length - 1"
+                          @click="moveSample(idx, 1)"
+                        ><Icon icon="material-symbols:arrow-downward" class="h-4 w-4" /></button>
+                        <span>样例 {{ idx + 1 }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <button class="problem-sample-copy" title="复制样例" @click="copySample(sample)">
+                          <Icon icon="material-symbols:content-copy" class="h-3.5 w-3.5" /> 复制
+                        </button>
+                        <button class="problem-sample-del" title="删除样例" @click="removeSample(idx)">
+                          <Icon icon="material-symbols:delete-outline" class="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div class="problem-sample-body">
+                      <div class="problem-sample-col">
+                        <label class="problem-sample-label">
+                          标准输入
+                          <span class="problem-sample-sub">Input</span>
+                        </label>
+                        <textarea
+                          v-model="sample.input"
+                          class="problem-io-textarea"
+                          rows="5"
+                          placeholder="示例：&#10;10 20"
+                          @keydown.tab.prevent="(e: any) => { const t = e.target; const s = t.selectionStart; sample.input = sample.input.slice(0,s) + '  ' + sample.input.slice(t.selectionEnd); nextTick(()=>{ t.selectionStart = t.selectionEnd = s+2 }) }"
+                        ></textarea>
+                        <div class="problem-sample-count">{{ sample.input.length }} / 2000</div>
+                      </div>
+                      <div class="problem-sample-col">
+                        <label class="problem-sample-label">
+                          标准输出
+                          <span class="problem-sample-sub">Output</span>
+                        </label>
+                        <textarea
+                          v-model="sample.output"
+                          class="problem-io-textarea"
+                          rows="5"
+                          placeholder="示例：&#10;20"
+                          @keydown.tab.prevent="(e: any) => { const t = e.target; const s = t.selectionStart; sample.output = sample.output.slice(0,s) + '  ' + sample.output.slice(t.selectionEnd); nextTick(()=>{ t.selectionStart = t.selectionEnd = s+2 }) }"
+                        ></textarea>
+                        <div class="problem-sample-count">{{ sample.output.length }} / 2000</div>
+                      </div>
+                    </div>
+                  </div>
+                  <button class="problem-add-sample" @click="addSample">
+                    <Icon icon="material-symbols:add" class="h-4 w-4" />
+                    添加样例
+                  </button>
+                </div>
+              </section>
+
+              <!-- 分组4：参考代码 -->
+              <section class="problem-section">
+                <div class="problem-section-head">
+                  <div>
+                    <h3 class="problem-section-title">参考代码</h3>
+                    <p class="problem-section-desc">用于帮助用户理解题目，可选择不填写。</p>
+                  </div>
+                </div>
+                <div class="problem-section-body">
+                  <div class="problem-form-field">
+                    <div class="problem-code-header">
+                      <div class="problem-code-title">
+                        <Icon icon="material-symbols:code" class="h-4 w-4" />
+                        <span>参考代码</span>
+                        <span class="problem-code-badge">{{ languageLabel(problemForm.language) }}</span>
+                      </div>
+                      <div class="problem-code-actions">
+                        <select v-model="problemForm.language" class="problem-code-lang">
+                          <option v-for="o in languageOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                        </select>
+                        <button class="problem-code-btn" title="复制" @click="copyCode"><Icon icon="material-symbols:content-copy" class="h-4 w-4" /></button>
+                        <button class="problem-code-btn" title="全屏" @click="codeFullscreen = true"><Icon icon="material-symbols:fullscreen" class="h-4 w-4" /></button>
+                      </div>
+                    </div>
+                    <div class="problem-code-editor">
+                      <div ref="codeGutter" class="problem-code-gutter">
+                        <div v-for="n in codeLineCount" :key="n" class="problem-code-lineno">{{ n }}</div>
+                      </div>
+                      <textarea
+                        ref="codeTextarea"
+                        v-model="problemForm.correct_answer"
+                        class="problem-code-textarea"
+                        :class="{ 'problem-input-error': formErrors.correct_answer }"
+                        placeholder="# Python 示例&#10;def solve(n, nums):&#10;    return sum(nums)"
+                        spellcheck="false"
+                        @scroll="onCodeScroll"
+                      ></textarea>
+                    </div>
+                    <span v-if="formErrors.correct_answer" class="problem-form-error">{{ formErrors.correct_answer }}</span>
+                  </div>
+                </div>
+              </section>
             </div>
           </div>
 
-          <!-- 右侧：实时预览区 (42%) -->
+          <!-- 右侧：实时预览区 -->
           <div class="problem-preview-section">
             <div class="problem-preview-header">
-              <Icon icon="material-symbols:visibility" class="h-4 w-4 text-[#2563EB]" />
-              <span class="problem-preview-title">预览效果</span>
+              <div class="problem-preview-header-left">
+                <Icon icon="material-symbols:visibility" class="h-4 w-4 text-[#2563EB]" />
+                <span class="problem-preview-title">题目预览</span>
+              </div>
+              <div class="problem-preview-live">
+                <span class="problem-live-dot"></span>
+                <span>实时更新</span>
+              </div>
             </div>
+
+            <!-- 完成度 -->
+            <div class="problem-completion">
+              <div class="problem-completion-head">
+                <span class="problem-completion-label">题目完成度</span>
+                <span class="problem-completion-percent">{{ completionPercent }}%</span>
+              </div>
+              <div class="problem-completion-bar">
+                <div class="problem-completion-fill" :style="{ width: completionPercent + '%' }"></div>
+              </div>
+              <div class="problem-completion-items">
+                <div
+                  v-for="item in completionItems"
+                  :key="item.key"
+                  class="problem-completion-item"
+                  :class="{ 'is-done': item.done }"
+                >
+                  <Icon
+                    :icon="item.done ? 'material-symbols:check-circle' : (item.optional ? 'material-symbols:circle' : 'material-symbols:cancel')"
+                    class="h-4 w-4"
+                  />
+                  <span>{{ item.label }}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="problem-preview-content">
-              <template v-if="problemForm.title || problemForm.description">
+              <template v-if="problemForm.title || problemForm.description || problemForm.samples.some(s => s.input || s.output)">
                 <div class="problem-preview-card">
-                  <div v-if="problemForm.title" class="problem-preview-title-area">
-                    <h3 class="problem-preview-problem-title">{{ problemForm.title }}</h3>
+                  <div class="problem-preview-title-area">
+                    <div class="problem-preview-index">#{{ problemForm.problem_index || 'A' }}</div>
+                    <h3 class="problem-preview-problem-title">{{ problemForm.title || '题目标题' }}</h3>
                     <span class="problem-preview-difficulty" :class="difficultyClass(problemForm.difficulty)">
                       {{ problemForm.difficulty }}
                     </span>
                   </div>
-                  <div v-if="problemForm.description" class="problem-preview-description">
-                    <MarkdownComponent
-                      :content="{ content: problemForm.description }"
-                      :show-nav="false"
-                      :show-heading-links="false"
-                    />
+
+                  <div v-if="problemForm.description" class="problem-preview-block">
+                    <div class="problem-preview-block-title">题目描述</div>
+                    <div class="problem-preview-description">
+                      <MarkdownComponent
+                        :content="{ content: problemForm.description }"
+                        :show-nav="false"
+                        :show-heading-links="false"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="problem-preview-block">
+                    <div class="problem-preview-block-title">知识点</div>
+                    <div class="problem-preview-tags">
+                      <span class="problem-preview-tag">{{ languageLabel(problemForm.language) }}</span>
+                      <span class="problem-preview-tag">{{ problemForm.difficulty }}</span>
+                    </div>
+                  </div>
+
+                  <div
+                    v-for="(sample, idx) in problemForm.samples.filter(s => s.input || s.output)"
+                    :key="idx"
+                    class="problem-preview-block"
+                  >
+                    <div class="problem-preview-block-title">示例 {{ idx + 1 }}</div>
+                    <div class="problem-preview-example">
+                      <div class="problem-preview-ex-label">Input</div>
+                      <pre class="problem-preview-ex-code">{{ sample.input || '—' }}</pre>
+                      <div class="problem-preview-ex-label">Output</div>
+                      <pre class="problem-preview-ex-code">{{ sample.output || '—' }}</pre>
+                    </div>
+                  </div>
+
+                  <div v-if="problemForm.correct_answer" class="problem-preview-block">
+                    <div class="problem-preview-block-title">参考代码</div>
+                    <pre class="problem-preview-code">{{ problemForm.correct_answer }}</pre>
                   </div>
                 </div>
               </template>
@@ -585,17 +949,56 @@ onMounted(loadContests);
         <!-- 底部操作栏 -->
         <div class="problem-modal-footer">
           <div class="problem-modal-footer-hint">
-            <Icon icon="material-symbols:check-circle" class="h-4 w-4 text-emerald-500" />
-            <span>表单已准备就绪</span>
+            <template v-if="allRequiredDone">
+              <Icon icon="material-symbols:check-circle" class="h-4 w-4 text-emerald-500" />
+              <span class="text-emerald-600 dark:text-emerald-400">所有必要信息已完成</span>
+            </template>
+            <template v-else>
+              <span class="problem-hint-dot"></span>
+              <span>已填写 {{ completionDone }} / {{ completionTotal }} 个必要信息</span>
+            </template>
           </div>
           <div class="problem-modal-footer-actions">
             <button class="problem-btn problem-btn-cancel" @click="showProblemForm = false">取消</button>
+            <button class="problem-btn problem-btn-secondary" @click="saveDraft">保存草稿</button>
             <button class="problem-btn problem-btn-primary" :disabled="isGeneratingTestcases" @click="saveProblem">
               <Icon v-if="isGeneratingTestcases" icon="svg-spinners:ring-resize" class="h-4 w-4" />
-              <Icon v-else icon="material-symbols:add-circle" class="h-4 w-4" />
-              {{ isGeneratingTestcases ? '正在生成测试用例...' : (editingProblem ? '保存修改' : '创建题目') }}
+              <Icon v-else icon="material-symbols:upload" class="h-4 w-4" />
+              {{ isGeneratingTestcases ? '正在生成测试用例...' : (editingProblem ? '保存修改' : '创建并发布') }}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 代码编辑器全屏 -->
+    <div v-if="codeFullscreen" class="problem-fullscreen-overlay" @click.self="codeFullscreen = false">
+      <div class="problem-fullscreen">
+        <div class="problem-fullscreen-header">
+          <div class="problem-code-title">
+            <Icon icon="material-symbols:code" class="h-4 w-4" />
+            <span>参考代码</span>
+            <span class="problem-code-badge">{{ languageLabel(problemForm.language) }}</span>
+          </div>
+          <div class="problem-code-actions">
+            <select v-model="problemForm.language" class="problem-code-lang">
+              <option v-for="o in languageOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <button class="problem-code-btn" title="复制" @click="copyCode"><Icon icon="material-symbols:content-copy" class="h-4 w-4" /></button>
+            <button class="problem-code-btn" title="退出全屏" @click="codeFullscreen = false"><Icon icon="material-symbols:fullscreen-exit" class="h-4 w-4" /></button>
+          </div>
+        </div>
+        <div class="problem-code-editor problem-code-editor-full">
+          <div ref="codeGutterFs" class="problem-code-gutter">
+            <div v-for="n in codeLineCount" :key="n" class="problem-code-lineno">{{ n }}</div>
+          </div>
+          <textarea
+            v-model="problemForm.correct_answer"
+            class="problem-code-textarea"
+            placeholder="# Python 示例&#10;def solve(n, nums):&#10;    return sum(nums)"
+            spellcheck="false"
+            @scroll="onCodeScrollFs"
+          ></textarea>
         </div>
       </div>
     </div>
@@ -717,16 +1120,17 @@ onMounted(loadContests);
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1160px;
-  max-height: 90vh;
+  max-width: 1240px;
+  height: calc(100vh - 48px);
+  max-height: 92vh;
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 :global(.dark) .problem-modal {
-  background: #111827;
-  border: 1px solid #1E293B;
+  background: #0F141B;
+  border: 1px solid #27313D;
 }
 
 /* 顶部标题栏 */
@@ -734,29 +1138,74 @@ onMounted(loadContests);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  padding: 0 28px;
-  border-bottom: 1px solid #E2E8F0;
+  min-height: 76px;
+  padding: 12px 28px;
+  border-bottom: 1px solid #E5EAF0;
   flex-shrink: 0;
 }
 :global(.dark) .problem-modal-header {
-  border-bottom-color: #1E293B;
+  border-bottom-color: #27313D;
+}
+.problem-modal-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.problem-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: transparent;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-back-btn:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+}
+:global(.dark) .problem-back-btn {
+  color: #94A3B8;
+  border-color: #27313D;
+}
+:global(.dark) .problem-back-btn:hover {
+  background: #1A222C;
+  color: #E5E7EB;
+}
+.problem-modal-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .problem-modal-title {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   color: #0F172A;
   margin: 0;
+  line-height: 1.2;
 }
 :global(.dark) .problem-modal-title {
   color: #E5E7EB;
+}
+.problem-modal-subtitle {
+  font-size: 13px;
+  color: #667085;
+}
+:global(.dark) .problem-modal-subtitle {
+  color: #98A2B3;
 }
 .problem-modal-close {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -769,7 +1218,7 @@ onMounted(loadContests);
   color: #1E293B;
 }
 :global(.dark) .problem-modal-close:hover {
-  background: #1E293B;
+  background: #1A222C;
   color: #E5E7EB;
 }
 
@@ -778,8 +1227,9 @@ onMounted(loadContests);
   display: flex;
   gap: 24px;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
-  padding: 24px;
+  padding: 24px 28px;
 }
 
 /* 左侧表单区 */
@@ -787,7 +1237,7 @@ onMounted(loadContests);
   flex: 0 0 58%;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -805,48 +1255,62 @@ onMounted(loadContests);
   background: #475569;
 }
 
-/* 表单分组 */
-.problem-form-group {
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
+/* 统一编辑 Surface */
+.problem-editor-surface {
+  background: #FFFFFF;
+  border: 1px solid #E5EAF0;
+  border-radius: 16px;
+  padding: 4px 28px;
   overflow: hidden;
 }
-:global(.dark) .problem-form-group {
-  border-color: #1E293B;
-}
-.problem-form-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #F8FAFC;
-  border-bottom: 1px solid #E2E8F0;
-}
-:global(.dark) .problem-form-group-header {
-  background: #1E293B;
-  border-bottom-color: #1E293B;
-}
-.problem-form-group-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #334155;
-}
-:global(.dark) .problem-form-group-title {
-  color: #E5E7EB;
-}
-.problem-form-group-content {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+:global(.dark) .problem-editor-surface {
+  background: #151B23;
+  border-color: #27313D;
 }
 
-/* 表单行 */
-.problem-form-row {
+/* Section */
+.problem-section {
+  padding: 24px 0;
+  border-bottom: 1px solid #EDF1F5;
+}
+.problem-section:last-child {
+  border-bottom: none;
+}
+:global(.dark) .problem-section {
+  border-bottom-color: #1F2935;
+}
+.problem-section-head {
+  margin-bottom: 20px;
+}
+.problem-section-title {
+  font-size: 18px;
+  font-weight: 650;
+  color: #344054;
+  margin: 0;
+}
+:global(.dark) .problem-section-title {
+  color: #D0D5DD;
+}
+.problem-section-desc {
+  font-size: 13px;
+  color: #98A2B3;
+  margin: 6px 0 0;
+}
+.problem-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 12 列网格 */
+.problem-grid-12 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(12, 1fr);
   gap: 16px;
 }
+.problem-col-3 { grid-column: span 3; }
+.problem-col-6 { grid-column: span 6; }
+.problem-col-12 { grid-column: span 12; }
 
 /* 表单字段 */
 .problem-form-field {
@@ -854,15 +1318,13 @@ onMounted(loadContests);
   flex-direction: column;
   gap: 6px;
 }
-
-/* 标签 */
 .problem-label {
   font-size: 13px;
   font-weight: 600;
-  color: #475569;
+  color: #344054;
 }
 :global(.dark) .problem-label {
-  color: #94A3B8;
+  color: #D0D5DD;
 }
 .problem-required {
   color: #EF4444;
@@ -871,12 +1333,12 @@ onMounted(loadContests);
 
 /* 输入框 */
 .problem-input {
-  height: 42px;
+  height: 44px;
   padding: 0 14px;
   font-size: 14px;
   color: #1E293B;
-  background: #fff;
-  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  border: 1px solid #D9E0E8;
   border-radius: 8px;
   outline: none;
   transition: all 0.15s ease;
@@ -886,12 +1348,12 @@ onMounted(loadContests);
 }
 .problem-input:focus {
   border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
 }
 :global(.dark) .problem-input {
   color: #E5E7EB;
-  background: #0F172A;
-  border-color: #1E293B;
+  background: #10151C;
+  border-color: #27313D;
 }
 :global(.dark) .problem-input::placeholder {
   color: #64748B;
@@ -905,30 +1367,29 @@ onMounted(loadContests);
 .problem-input-with-unit {
   display: flex;
   align-items: center;
-  gap: 0;
 }
 .problem-input-with-unit .problem-input {
   flex: 1;
   border-radius: 8px 0 0 8px;
+  border-right: none;
 }
 .problem-input-unit {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 42px;
+  height: 44px;
   padding: 0 12px;
   font-size: 13px;
   font-weight: 500;
   color: #64748B;
   background: #F8FAFC;
-  border: 1px solid #E2E8F0;
-  border-left: none;
+  border: 1px solid #D9E0E8;
   border-radius: 0 8px 8px 0;
 }
 :global(.dark) .problem-input-unit {
   color: #94A3B8;
-  background: #1E293B;
-  border-color: #1E293B;
+  background: #1A222C;
+  border-color: #27313D;
 }
 
 /* 文本域 */
@@ -938,8 +1399,8 @@ onMounted(loadContests);
   font-size: 14px;
   line-height: 1.6;
   color: #1E293B;
-  background: #fff;
-  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  border: 1px solid #D9E0E8;
   border-radius: 8px;
   outline: none;
   resize: vertical;
@@ -950,12 +1411,12 @@ onMounted(loadContests);
 }
 .problem-textarea:focus {
   border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
 }
 :global(.dark) .problem-textarea {
   color: #E5E7EB;
-  background: #0F172A;
-  border-color: #1E293B;
+  background: #10151C;
+  border-color: #27313D;
 }
 :global(.dark) .problem-textarea::placeholder {
   color: #64748B;
@@ -965,17 +1426,404 @@ onMounted(loadContests);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
-/* 文本域包装器 */
-.problem-textarea-wrapper {
-  position: relative;
+/* Markdown 编辑器 */
+.problem-md-editor {
+  border: 1px solid #D9E0E8;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #FFFFFF;
+  transition: all 0.15s ease;
 }
-.problem-textarea-hint {
+.problem-md-editor:focus-within {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+:global(.dark) .problem-md-editor {
+  background: #10151C;
+  border-color: #27313D;
+}
+.problem-md-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 8px;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E5EAF0;
+}
+:global(.dark) .problem-md-toolbar {
+  background: #1A222C;
+  border-bottom-color: #27313D;
+}
+.problem-md-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-md-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+:global(.dark) .problem-md-btn {
+  color: #94A3B8;
+}
+:global(.dark) .problem-md-btn:hover {
+  background: #27313D;
+  color: #E5E7EB;
+}
+.problem-desc-textarea {
+  border: none;
+  border-radius: 0;
+  resize: vertical;
+  min-height: 260px;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+}
+.problem-desc-textarea:focus {
+  box-shadow: none;
+}
+.problem-desc-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #F8FAFC;
+  border-top: 1px solid #E5EAF0;
+}
+:global(.dark) .problem-desc-footer {
+  background: #1A222C;
+  border-top-color: #27313D;
+}
+.problem-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #98A2B3;
+}
+
+/* 样例卡片 */
+.problem-sample-card {
+  border: 1px solid #E5EAF0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+:global(.dark) .problem-sample-card {
+  border-color: #27313D;
+}
+.problem-sample-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 12px;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E5EAF0;
+}
+:global(.dark) .problem-sample-head {
+  background: #1A222C;
+  border-bottom-color: #27313D;
+}
+.problem-sample-title {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 6px;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+:global(.dark) .problem-sample-title {
+  color: #D0D5DD;
+}
+.problem-sample-drag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
   color: #94A3B8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-sample-drag:hover:not(:disabled) {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+.problem-sample-drag:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+:global(.dark) .problem-sample-drag:hover:not(:disabled) {
+  background: #27313D;
+  color: #E5E7EB;
+}
+.problem-sample-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #2563EB;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-sample-copy:hover {
+  background: rgba(37, 99, 235, 0.10);
+}
+.problem-sample-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-sample-del:hover {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+.problem-sample-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+.problem-sample-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.problem-sample-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+:global(.dark) .problem-sample-label {
+  color: #D0D5DD;
+}
+.problem-sample-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #98A2B3;
+  font-family: 'JetBrains Mono', monospace;
+}
+.problem-io-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1E293B;
+  background: #FAFBFC;
+  border: 1px solid #D9E0E8;
+  border-radius: 8px;
+  outline: none;
+  resize: vertical;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  transition: all 0.15s ease;
+}
+.problem-io-textarea::placeholder {
+  color: #94A3B8;
+}
+.problem-io-textarea:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+:global(.dark) .problem-io-textarea {
+  color: #E5E7EB;
+  background: #0D1117;
+  border-color: #27313D;
+}
+.problem-sample-count {
+  align-self: flex-end;
+  font-size: 12px;
+  color: #98A2B3;
+}
+.problem-add-sample {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563EB;
+  background: #FFFFFF;
+  border: 1px dashed #D9E2EC;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-add-sample:hover {
+  background: #F8FAFF;
+  border-color: #2563EB;
+}
+:global(.dark) .problem-add-sample {
+  background: #151B23;
+  border-color: #27313D;
+}
+
+/* 代码编辑器 */
+.problem-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 12px;
+  background: #F1F5F9;
+  border: 1px solid #D9E0E8;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+:global(.dark) .problem-code-header {
+  background: #1A222C;
+  border-color: #27313D;
+}
+.problem-code-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+:global(.dark) .problem-code-title {
+  color: #E5E7EB;
+}
+.problem-code-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563EB;
+  background: rgba(37, 99, 235, 0.10);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+.problem-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.problem-code-lang {
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #334155;
+  background: #FFFFFF;
+  border: 1px solid #D9E0E8;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+:global(.dark) .problem-code-lang {
+  color: #E5E7EB;
+  background: #0D1117;
+  border-color: #27313D;
+}
+.problem-code-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.problem-code-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+:global(.dark) .problem-code-btn {
+  color: #94A3B8;
+}
+:global(.dark) .problem-code-btn:hover {
+  background: #27313D;
+  color: #E5E7EB;
+}
+.problem-code-editor {
+  display: flex;
+  border: 1px solid #D9E0E8;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  background: #FAFBFC;
+}
+:global(.dark) .problem-code-editor {
+  background: #0D1117;
+  border-color: #27313D;
+}
+.problem-code-gutter {
+  flex-shrink: 0;
+  width: 48px;
+  padding: 14px 0;
+  overflow: hidden;
+  background: #F1F5F9;
+  border-right: 1px solid #E5EAF0;
+  user-select: none;
+}
+:global(.dark) .problem-code-gutter {
+  background: #11161F;
+  border-right-color: #1F2935;
+}
+.problem-code-lineno {
+  height: 24px;
+  line-height: 24px;
+  text-align: right;
+  padding-right: 12px;
+  font-size: 13px;
+  color: #98A2B3;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+}
+.problem-code-textarea {
+  flex: 1;
+  min-height: 380px;
+  height: 380px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1E293B;
+  background: #FAFBFC;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 4;
+}
+:global(.dark) .problem-code-textarea {
+  color: #E5E7EB;
+  background: #0D1117;
+}
+.problem-code-textarea:focus {
+  box-shadow: none;
+}
+.problem-code-editor-full .problem-code-textarea {
+  height: calc(100vh - 140px);
+  min-height: calc(100vh - 140px);
 }
 
 /* 错误状态 */
@@ -998,25 +1846,34 @@ onMounted(loadContests);
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
+  min-height: 0;
+  border: 1px solid #E5EAF0;
+  border-radius: 16px;
   overflow: hidden;
+  background: #FFFFFF;
 }
 :global(.dark) .problem-preview-section {
-  border-color: #1E293B;
+  border-color: #27313D;
+  background: #0F141B;
 }
 .problem-preview-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 16px;
   background: #F8FAFC;
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E5EAF0;
   flex-shrink: 0;
 }
 :global(.dark) .problem-preview-header {
-  background: #1E293B;
-  border-bottom-color: #1E293B;
+  background: #151B23;
+  border-bottom-color: #27313D;
+}
+.problem-preview-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .problem-preview-title {
   font-size: 15px;
@@ -1026,11 +1883,88 @@ onMounted(loadContests);
 :global(.dark) .problem-preview-title {
   color: #E5E7EB;
 }
+.problem-preview-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #98A2B3;
+}
+.problem-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: #22C55E;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+/* 完成度 */
+.problem-completion {
+  padding: 16px;
+  background: #F8FAFC;
+  border-bottom: 1px solid #E5EAF0;
+  flex-shrink: 0;
+}
+:global(.dark) .problem-completion {
+  background: #10151C;
+  border-bottom-color: #27313D;
+}
+.problem-completion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.problem-completion-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #344054;
+}
+:global(.dark) .problem-completion-label {
+  color: #D0D5DD;
+}
+.problem-completion-percent {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2563EB;
+}
+.problem-completion-bar {
+  height: 6px;
+  background: #E5EAF0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+:global(.dark) .problem-completion-bar {
+  background: #27313D;
+}
+.problem-completion-fill {
+  height: 100%;
+  background: #2563EB;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+.problem-completion-items {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  margin-top: 12px;
+}
+.problem-completion-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #98A2B3;
+}
+.problem-completion-item.is-done {
+  color: #16A34A;
+}
+
 .problem-preview-content {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  min-height: 480px;
+  min-height: 0;
 }
 .problem-preview-content::-webkit-scrollbar {
   width: 6px;
@@ -1049,28 +1983,39 @@ onMounted(loadContests);
 /* 预览卡片 */
 .problem-preview-card {
   background: #fff;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
+  border: 1px solid #E5EAF0;
+  border-radius: 12px;
   padding: 20px;
 }
 :global(.dark) .problem-preview-card {
-  background: #0F172A;
-  border-color: #1E293B;
+  background: #0F141B;
+  border-color: #27313D;
 }
 .problem-preview-title-area {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E5EAF0;
 }
 :global(.dark) .problem-preview-title-area {
-  border-bottom-color: #1E293B;
+  border-bottom-color: #27313D;
+}
+.problem-preview-index {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: #2563EB;
+  background: rgba(37, 99, 235, 0.10);
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-top: 4px;
 }
 .problem-preview-problem-title {
-  font-size: 18px;
+  flex: 1;
+  font-size: 20px;
   font-weight: 700;
   color: #0F172A;
   margin: 0;
@@ -1086,13 +2031,100 @@ onMounted(loadContests);
   padding: 4px 10px;
   border-radius: 9999px;
 }
-.problem-preview-description {
+.problem-preview-block {
+  margin-top: 18px;
+}
+.problem-preview-block-title {
   font-size: 14px;
-  line-height: 1.7;
+  font-weight: 650;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+:global(.dark) .problem-preview-block-title {
+  color: #E5E7EB;
+}
+.problem-preview-description {
+  font-size: 15px;
+  line-height: 1.8;
   color: #334155;
 }
 :global(.dark) .problem-preview-description {
   color: #CBD5E1;
+}
+.problem-preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.problem-preview-tag {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  background: #F1F5F9;
+  border-radius: 6px;
+}
+:global(.dark) .problem-preview-tag {
+  color: #D0D5DD;
+  background: #1A222C;
+}
+.problem-preview-example {
+  background: #F8FAFC;
+  border: 1px solid #E5EAF0;
+  border-radius: 8px;
+  padding: 14px;
+}
+:global(.dark) .problem-preview-example {
+  background: #10151C;
+  border-color: #27313D;
+}
+.problem-preview-ex-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #667085;
+  margin-bottom: 4px;
+}
+.problem-preview-ex-label:not(:first-child) {
+  margin-top: 10px;
+}
+.problem-preview-ex-code {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1E293B;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  background: #FFFFFF;
+  border: 1px solid #E5EAF0;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+:global(.dark) .problem-preview-ex-code {
+  color: #E5E7EB;
+  background: #0D1117;
+  border-color: #27313D;
+}
+.problem-preview-code {
+  margin: 0;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1E293B;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  background: #FAFBFC;
+  border: 1px solid #E5EAF0;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+:global(.dark) .problem-preview-code {
+  color: #E5E7EB;
+  background: #0D1117;
+  border-color: #27313D;
 }
 
 /* 预览空状态 */
@@ -1115,13 +2147,16 @@ onMounted(loadContests);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 72px;
+  height: 80px;
   padding: 0 28px;
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid #E5EAF0;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
 }
 :global(.dark) .problem-modal-footer {
-  border-top-color: #1E293B;
+  border-top-color: #27313D;
+  background: rgba(11, 15, 20, 0.88);
 }
 .problem-modal-footer-hint {
   display: flex;
@@ -1129,6 +2164,12 @@ onMounted(loadContests);
   gap: 6px;
   font-size: 13px;
   color: #64748B;
+}
+.problem-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #F59E0B;
 }
 .problem-modal-footer-actions {
   display: flex;
@@ -1142,8 +2183,8 @@ onMounted(loadContests);
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 42px;
-  padding: 0 20px;
+  height: 44px;
+  padding: 0 22px;
   font-size: 14px;
   font-weight: 600;
   border-radius: 8px;
@@ -1153,9 +2194,9 @@ onMounted(loadContests);
 }
 .problem-btn-cancel {
   min-width: 80px;
-  background: #fff;
+  background: #FFFFFF;
   color: #475569;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #D9E0E8;
 }
 .problem-btn-cancel:hover {
   background: #F8FAFC;
@@ -1164,13 +2205,31 @@ onMounted(loadContests);
 :global(.dark) .problem-btn-cancel {
   background: #0F172A;
   color: #94A3B8;
-  border-color: #1E293B;
+  border-color: #27313D;
 }
 :global(.dark) .problem-btn-cancel:hover {
-  background: #1E293B;
+  background: #1A222C;
+}
+.problem-btn-secondary {
+  min-width: 96px;
+  background: #FFFFFF;
+  color: #2563EB;
+  border: 1px solid #D9E0E8;
+}
+.problem-btn-secondary:hover {
+  background: #EFF6FF;
+  border-color: #2563EB;
+}
+:global(.dark) .problem-btn-secondary {
+  background: #151B23;
+  color: #60A5FA;
+  border-color: #27313D;
+}
+:global(.dark) .problem-btn-secondary:hover {
+  background: #1A222C;
 }
 .problem-btn-primary {
-  min-width: 120px;
+  min-width: 132px;
   background: #2563EB;
   color: #fff;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
@@ -1189,5 +2248,51 @@ onMounted(loadContests);
   box-shadow: none;
   transform: none;
   cursor: not-allowed;
+}
+
+/* 全屏代码编辑器 */
+.problem-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(4px);
+  padding: 24px;
+}
+.problem-fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1100px;
+  height: calc(100vh - 48px);
+  background: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+}
+:global(.dark) .problem-fullscreen {
+  background: #0D1117;
+  border: 1px solid #27313D;
+}
+.problem-fullscreen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  padding: 0 16px;
+  background: #F1F5F9;
+  border-bottom: 1px solid #E5EAF0;
+}
+:global(.dark) .problem-fullscreen-header {
+  background: #151B23;
+  border-bottom-color: #27313D;
+}
+.problem-code-editor-full {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
 }
 </style>

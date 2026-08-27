@@ -413,6 +413,8 @@ class ContestProblem(BaseModel):
     time_limit = IntegerField(default=1000, verbose_name="时间限制(ms)")
     memory_limit = IntegerField(default=256, verbose_name="内存限制(MB)")
     difficulty = CharField(max_length=20, default="中等", verbose_name="难度")
+    language = CharField(max_length=20, default="cpp", verbose_name="参考代码语言")
+    samples = TextField(default="[]", verbose_name="样例输入输出(JSON)")
     sort_order = IntegerField(default=0, verbose_name="排序序号")
 
     class Meta:
@@ -655,6 +657,13 @@ _SCHEMA_MIGRATIONS = [
         [
             "ALTER TABLE discussion_likes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();",
             "ALTER TABLE discussion_reply_likes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT now();",
+        ],
+    ),
+    (
+        "0008_contest_problem_samples_language",
+        [
+            "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'cpp';",
+            "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS samples TEXT DEFAULT '[]';",
         ],
     ),
 ]

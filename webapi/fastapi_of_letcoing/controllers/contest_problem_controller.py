@@ -27,6 +27,8 @@ contest_problem_model = api.model('ContestProblem', {
     'time_limit': fields.Integer(description='时间限制(ms)'),
     'memory_limit': fields.Integer(description='内存限制(MB)'),
     'difficulty': fields.String(description='难度'),
+    'language': fields.String(description='参考代码语言'),
+    'samples': fields.String(description='样例输入输出(JSON)'),
     'testcase_count': fields.Integer(description='测试用例数'),
 })
 
@@ -40,6 +42,8 @@ contest_problem_input = api.model('ContestProblemInput', {
     'time_limit': fields.Integer(default=1000, description='时间限制(ms)'),
     'memory_limit': fields.Integer(default=256, description='内存限制(MB)'),
     'difficulty': fields.String(default='中等', description='难度'),
+    'language': fields.String(default='cpp', description='参考代码语言'),
+    'samples': fields.String(description='样例输入输出(JSON)'),
 })
 
 
@@ -240,6 +244,12 @@ def _problem_to_dict(p: ContestProblem) -> dict:
     data['testcase_count'] = ContestTestcase.select().where(
         ContestTestcase.contest_problem == p
     ).count()
+    # 样例输入输出反序列化为列表
+    raw_samples = data.get('samples') or '[]'
+    try:
+        data['samples'] = json.loads(raw_samples) if isinstance(raw_samples, str) else raw_samples
+    except Exception:
+        data['samples'] = []
     return data
 
 
@@ -292,6 +302,8 @@ class ContestProblemListController(Resource):
             time_limit=data.get('time_limit', 1000),
             memory_limit=data.get('memory_limit', 256),
             difficulty=data.get('difficulty', '中等'),
+            language=data.get('language', 'cpp'),
+            samples=data.get('samples', '[]'),
             sort_order=data.get('sort_order', 0),
         )
 
@@ -358,6 +370,10 @@ class ContestProblemDetailController(Resource):
             problem.memory_limit = data['memory_limit']
         if 'difficulty' in data:
             problem.difficulty = data['difficulty']
+        if 'language' in data:
+            problem.language = data.get('language', 'cpp')
+        if 'samples' in data:
+            problem.samples = data.get('samples', '[]')
         if 'sort_order' in data:
             problem.sort_order = data['sort_order']
         problem.save()
