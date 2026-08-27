@@ -59,7 +59,7 @@ const defaultProblemForm = () => ({
   memory_limit: 256,
   difficulty: '中等',
   language: 'cpp',
-  samples: [] as { input: string; output: string }[],
+  samples: [] as { uid: string; input: string; output: string }[],
 });
 
 const problemForm = ref(defaultProblemForm());
@@ -178,17 +178,22 @@ const copyCode = async () => {
 };
 
 // 样例管理
+let sampleUidSeq = 0;
+const nextSampleUid = () => `s_${Date.now().toString(36)}_${(sampleUidSeq++).toString(36)}`;
 const addSample = () => {
-  problemForm.value.samples.push({ input: '', output: '' });
+  problemForm.value.samples.push({ uid: nextSampleUid(), input: '', output: '' });
 };
-const removeSample = (index: number) => {
-  if (!confirm(`确认删除样例 ${index + 1}？`)) return;
-  problemForm.value.samples.splice(index, 1);
+const removeSample = (uid: string) => {
+  const idx = problemForm.value.samples.findIndex((s) => s.uid === uid);
+  if (idx === -1) return;
+  if (!confirm(`确认删除样例 ${idx + 1}？`)) return;
+  problemForm.value.samples.splice(idx, 1);
 };
-const moveSample = (index: number, dir: number) => {
-  const target = index + dir;
-  if (target < 0 || target >= problemForm.value.samples.length) return;
+const moveSample = (uid: string, dir: number) => {
   const list = problemForm.value.samples;
+  const index = list.findIndex((s) => s.uid === uid);
+  const target = index + dir;
+  if (index === -1 || target < 0 || target >= list.length) return;
   const a = list[index];
   const b = list[target];
   if (!a || !b) return;
@@ -323,7 +328,7 @@ const openProblemForm = (problem?: any) => {
     editingProblem.value = true;
     editingProblemId.value = problem.id;
     const samples = Array.isArray(problem.samples) && problem.samples.length
-      ? problem.samples
+      ? problem.samples.map((s: any) => ({ uid: nextSampleUid(), input: s.input || '', output: s.output || '' }))
       : [];
     problemForm.value = {
       problem_index: problem.problem_index,
@@ -370,7 +375,7 @@ const saveProblem = async () => {
     memory_limit: f.memory_limit,
     difficulty: f.difficulty,
     language: f.language,
-    samples: JSON.stringify(f.samples),
+    samples: JSON.stringify(f.samples.map((s) => ({ input: s.input, output: s.output }))),
   };
 
   isGeneratingTestcases.value = true;
@@ -734,7 +739,7 @@ onMounted(loadContests);
                 <div class="problem-section-body">
                   <div
                     v-for="(sample, idx) in problemForm.samples"
-                    :key="idx"
+                    :key="sample.uid"
                     class="problem-sample-card"
                   >
                     <div class="problem-sample-head">
@@ -743,13 +748,13 @@ onMounted(loadContests);
                           class="problem-sample-drag"
                           title="上移"
                           :disabled="idx === 0"
-                          @click="moveSample(idx, -1)"
+                          @click="moveSample(sample.uid, -1)"
                         ><Icon icon="material-symbols:arrow-upward" class="h-4 w-4" /></button>
                         <button
                           class="problem-sample-drag"
                           title="下移"
                           :disabled="idx === problemForm.samples.length - 1"
-                          @click="moveSample(idx, 1)"
+                          @click="moveSample(sample.uid, 1)"
                         ><Icon icon="material-symbols:arrow-downward" class="h-4 w-4" /></button>
                         <span>样例 {{ idx + 1 }}</span>
                       </div>
@@ -757,8 +762,8 @@ onMounted(loadContests);
                         <button class="problem-sample-copy" title="复制样例" @click="copySample(sample)">
                           <Icon icon="material-symbols:content-copy" class="h-3.5 w-3.5" /> 复制
                         </button>
-                        <button class="problem-sample-del" title="删除样例" @click="removeSample(idx)">
-                          <Icon icon="material-symbols:delete-outline" class="h-4 w-4" />
+                        <button class="problem-sample-del" title="删除样例" @click="removeSample(sample.uid)">
+                          <Icon icon="material-symbols:delete-outline" class="h-3.5 w-3.5" /> 删除
                         </button>
                       </div>
                     </div>
@@ -1585,21 +1590,22 @@ onMounted(loadContests);
   background: rgba(37, 99, 235, 0.10);
 }
 .problem-sample-del {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 26px;
+  gap: 3px;
   height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #EF4444;
+  background: transparent;
   border: none;
   border-radius: 6px;
-  background: transparent;
-  color: #94A3B8;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 .problem-sample-del:hover {
   background: #FEE2E2;
-  color: #EF4444;
+  color: #DC2626;
 }
 .problem-sample-body {
   display: grid;
