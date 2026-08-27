@@ -367,6 +367,9 @@ onUnmounted(() => {
       <div class="hero-grid" aria-hidden="true"></div>
       <div class="hero-layout">
         <div class="hero-copy">
+          <span class="code-mark mark-tag" aria-hidden="true">&lt;/&gt;</span>
+          <span class="code-mark mark-brace" aria-hidden="true">{ }</span>
+          <span class="code-mark mark-comment" aria-hidden="true">//</span>
           <span class="hero-label intro intro-label">
             <span class="status-dot"></span>
             Let Coding Online Judge
@@ -380,6 +383,10 @@ onUnmounted(() => {
               >更加顺手</span
             >
           </h1>
+
+          <p class="hero-desc intro intro-desc">
+            少一点切换，把注意力留给代码。
+          </p>
 
           <div class="hero-actions intro intro-actions">
             <button
@@ -689,6 +696,7 @@ onUnmounted(() => {
   min-height: calc(100svh - var(--header-h, 5rem));
   border-bottom: 1px solid #cbd5e1;
   background: #f3f6f8;
+  overflow: hidden;
 }
 .hero-grid {
   position: absolute;
@@ -712,7 +720,48 @@ onUnmounted(() => {
   padding: 3.5rem 0;
 }
 .hero-copy {
+  position: relative;
   min-width: 0;
+}
+.hero-label,
+.hero-title,
+.hero-desc,
+.hero-actions {
+  position: relative;
+  z-index: 1;
+}
+.code-mark {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.mark-tag {
+  top: -1.5rem;
+  left: 0.1rem;
+  z-index: 5;
+  font-size: 0.9rem;
+  color: #0891b2;
+  opacity: 0.45;
+}
+.mark-brace {
+  top: 5%;
+  right: -3rem;
+  z-index: 0;
+  font-size: 9rem;
+  line-height: 1;
+  color: #9fb4c4;
+  opacity: 0.1;
+}
+.mark-comment {
+  right: 0.5rem;
+  bottom: 0.6rem;
+  z-index: 5;
+  font-size: 0.8rem;
+  color: #5b6b7a;
+  opacity: 0.4;
 }
 .hero-label {
   display: inline-flex;
@@ -749,7 +798,7 @@ onUnmounted(() => {
   padding-block: 0.35rem;
   font-size: 1.06em;
   line-height: 1.28;
-  background: linear-gradient(100deg, #066b85 0%, #0891b2 45%, #22d3ee 100%);
+  background: linear-gradient(100deg, #0e7da0 0%, #23a9cc 50%, #5fcdee 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -767,7 +816,15 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-top: 2rem;
+  margin-top: 1.8rem;
+}
+.hero-desc {
+  margin: 0.9rem 0 0;
+  max-width: 32rem;
+  color: #5b6b7a;
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1.6;
 }
 .hero-button {
   position: relative;
@@ -1173,6 +1230,9 @@ onUnmounted(() => {
 .intro-actions {
   animation-delay: 0.6s;
 }
+.intro-desc {
+  animation-delay: 0.53s;
+}
 .intro-terminal {
   animation-delay: 0.7s;
 }
@@ -1294,6 +1354,18 @@ html:not(.dark) .language-button.active {
   border-color: #45545f;
   background: rgba(15, 23, 31, 0.8);
   color: #d2dce3;
+}
+.dark .hero-desc {
+  color: #aab6c2;
+}
+.dark .mark-tag {
+  color: #22d3ee;
+}
+.dark .mark-brace {
+  color: #4b6275;
+}
+.dark .mark-comment {
+  color: #7c8a97;
 }
 @media (min-width: 1024px) {
   .hero-layout {
