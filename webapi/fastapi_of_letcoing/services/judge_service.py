@@ -13,14 +13,18 @@ import json
 import threading
 import time
 from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from core.di_container import get_container
 from interfaces.service_interfaces import ICodeExecutionService, ILoggerService, IRedisService
 from models.db_models import Submission, Testcase
 from models.glot_models import CodeExecutionRequest
-from controllers.contest_problem_controller import _run_code
+from controllers.contest_problem_controller import (
+    _run_code,
+    _generate_testcases,
+    _reference_looks_nondeterministic,
+    _detect_language,
+)
 
 
 class JudgeWorker:
@@ -65,7 +69,12 @@ class JudgeWorker:
                             task = json.loads(raw_contest) if isinstance(raw_contest, str) else raw_contest
                             self._process_contest_task(task)
                         else:
-                            time.sleep(0.5)
+                            raw_gen = self.redis.list_pop("testcase_gen_queue")
+                            if raw_gen:
+                                task = json.loads(raw_gen) if isinstance(raw_gen, str) else raw_gen
+                                self._process_gen_task(task)
+                            else:
+                                time.sleep(0.5)
                 except Exception as e:
                     self.logger.error("JudgeWorker loop error", e)
                     time.sleep(1)
@@ -213,6 +222,110 @@ class JudgeWorker:
         except Exception:
             pass
 
+    def _save_gen_status(self, problem_id, data):
+        """将测试用例生成进度/结果写入 Redis，供前端轮询"""
+        try:
+            self.redis.set(f"testcase_gen:{problem_id}", data, 3600)
+        except Exception:
+            pass
+
+    def _process_gen_task(self, task: dict):
+        """后台生成比赛题目的测试用例（与判题解耦，避免阻塞建题请求）"""
+        from models.db_models import ContestProblem, ContestTestcase
+
+        problem_id = task.get("problem_id")
+        correct_answer = task.get("correct_answer", "")
+        count = int(task.get("count", 100) or 100)
+        time_limit = int(task.get("time_limit", 1000) or 1000)
+        memory_limit = int(task.get("memory_limit", 256) or 256)
+
+        try:
+            problem = ContestProblem.get_by_id(problem_id)
+        except Exception:
+            return
+
+        self._save_gen_status(problem_id, {
+            "status": "generating", "generated": 0, "total": count,
+        })
+        try:
+            # 静态拦截非确定性参考代码：一旦依赖时间/随机种子，建题时答案能过、
+            # 正式比赛（不同时间/进程）提交却会出现“部分用例不通过”。直接拒绝生成，
+            # 倒逼修正参考代码使其确定性，从源头消除该问题。
+            lang = _detect_language(correct_answer)
+            flagged, reason = _reference_looks_nondeterministic(correct_answer, lang)
+            if flagged:
+                ContestTestcase.delete().where(
+                    ContestTestcase.contest_problem == problem
+                ).execute()
+                self._save_gen_status(problem_id, {
+                    "status": "error",
+                    "error": (
+                        f"参考代码疑似非确定性（{reason}）。非确定性代码在正式比赛提交时"
+                        "会出现“部分用例不通过”，因此无法生成可信测试用例。请移除对时间/随机"
+                        "种子的依赖（如 srand(time(NULL))、chrono::now()、random_device、"
+                        "Math.random()、random 未固定种子等），改为确定性实现后重新生成。"
+                    ),
+                    "generated": 0,
+                    "total": count,
+                })
+                self.logger.warning(
+                    f"Reference answer for problem {problem_id} is non-deterministic ({reason}); rejected."
+                )
+                return
+
+            # 先清掉旧用例，保证重生成时数据一致
+            ContestTestcase.delete().where(
+                ContestTestcase.contest_problem == problem
+            ).execute()
+
+            testcases = _generate_testcases(
+                correct_answer, count, time_limit, memory_limit
+            )
+
+            # 参考代码不可靠（非确定性或大量用例运行出错）时，拒绝生成：
+            # 这类用例在正式比赛（另一时刻/进程）提交时会出现“部分不通过”，
+            # 因此不保存任何用例，并给出明确错误，倒逼修正参考代码使其确定性。
+            if len(testcases) < count:
+                ContestTestcase.delete().where(
+                    ContestTestcase.contest_problem == problem
+                ).execute()
+                self._save_gen_status(problem_id, {
+                    "status": "error",
+                    "error": (
+                        "参考代码输出不稳定：在多次运行下结果不一致，或大量随机用例运行出错，"
+                        "无法生成足够且可信的测试用例。请确认参考代码：①不依赖随机/时间种子"
+                        "（如 srand(time(NULL))、chrono 取时间、random_device）；②无未初始化变量/"
+                        "数组越界等未定义行为；③对随机输入都能正确运行。修正后重新生成。"
+                    ),
+                    "generated": 0,
+                    "total": count,
+                })
+                self.logger.warning(
+                    f"Reference answer for problem {problem_id} is non-deterministic/unstable; "
+                    f"generated {len(testcases)}/{count}, rejected."
+                )
+                return
+
+            for idx, tc in enumerate(testcases):
+                ContestTestcase.create(
+                    contest_problem=problem,
+                    input_data=tc['input_data'],
+                    expected_output=tc['expected_output'],
+                    is_sample=tc['is_sample'],
+                    sort_order=tc['sort_order'],
+                )
+            self._save_gen_status(problem_id, {
+                "status": "done", "generated": len(testcases), "total": count,
+            })
+            self.logger.info(
+                f"Testcases generated for problem {problem_id}: {len(testcases)}/{count}"
+            )
+        except Exception as exc:
+            self.logger.error(f"Testcase generation failed for {problem_id}", exc)
+            self._save_gen_status(problem_id, {
+                "status": "error", "error": str(exc), "generated": 0, "total": count,
+            })
+
     def _process_contest_task(self, task: dict):
         """处理比赛题目判题任务（本地执行，对比题目存储的测试用例）"""
         from models.db_models import (
@@ -260,7 +373,7 @@ class JudgeWorker:
 
         def _judge_one(tc):
             expected = (tc.expected_output or "").strip()
-            output, err_type = _run_code(
+            output, err_type, time_used_ms, stderr = _run_code(
                 code, language, tc.input_data,
                 timeout=time_limit_sec, memory_limit=memory_limit,
             )
@@ -270,19 +383,33 @@ class JudgeWorker:
                     "status": err_type,
                     "expected": expected,
                     "actual": None,
+                    "time_used": time_used_ms,
+                    "stderr": stderr or "",
                 }
             actual = (output or "").strip()
             passed = actual == expected
+            # 答案数值正确但空白/换行不一致时归为 PE（格式错误），便于前端区分
+            if not passed and actual.replace(" ", "").replace("\n", "") == expected.replace(" ", "").replace("\n", ""):
+                return {
+                    "passed": False,
+                    "status": "PE",
+                    "expected": expected,
+                    "actual": actual,
+                    "time_used": time_used_ms,
+                    "stderr": "",
+                }
             return {
                 "passed": passed,
                 "status": "AC" if passed else "WA",
                 "expected": expected,
                 "actual": actual,
+                "time_used": time_used_ms,
+                "stderr": "",
             }
 
-        # 并行判题，避免用例过多导致任务执行过久
-        with ThreadPoolExecutor(max_workers=min(8, len(testcases))) as executor:
-            details = list(executor.map(_judge_one, testcases))
+        # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
+        # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
+        details = [_judge_one(tc) for tc in testcases]
 
         passed = sum(1 for d in details if d["passed"])
         total = len(details)

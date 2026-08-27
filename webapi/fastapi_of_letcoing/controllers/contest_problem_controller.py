@@ -1,17 +1,19 @@
 import json
 import random
+import re
 import string
 import subprocess
 import tempfile
 import os
+import time
 from datetime import datetime
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import (
-    Contest, ContestParticipant, ContestProblem, ContestTestcase, User
+    Contest, ContestParticipant, ContestProblem, ContestTestcase, ContestSubmission, User
 )
 from core.di_container import inject
-from interfaces.service_interfaces import IJWTService
+from interfaces.service_interfaces import IJWTService, IRedisService
 
 api = Namespace('admin/contests', description='比赛管理接口（管理员）')
 
@@ -77,90 +79,167 @@ def _detect_language(code: str) -> str:
     return 'python'
 
 
+# 典型的「非确定性」来源：基于时间/随机种子的播种。一旦参考代码依赖这些，
+# 它在不同时间/进程下输出会变化，导致「建题时答案能过、正式比赛提交却部分 WA」。
+_NONDET_PATTERNS = [
+    (r'srand\s*\(\s*(time|std::time|chrono)', "srand(time(...)) 按时间播种"),
+    (r'random_device', "std::random_device（通常非确定性）"),
+    (r'(system_clock|steady_clock|high_resolution_clock)\s*::\s*now\s*\(\s*\)', "chrono::now() 取当前时间"),
+    (r'time\s*\(\s*(NULL|0|nullptr|_)', "time(NULL) 取当前时间"),
+    (r'arc4random', "arc4random（非确定性随机）"),
+    (r'/dev/urandom', "读取 /dev/urandom（非确定性随机）"),
+    (r'Math\.random\s*\(', "Math.random()（非确定性随机）"),
+    (r'Date\.now\s*\(', "Date.now()（取当前时间）"),
+    (r'performance\.now\s*\(', "performance.now()（取当前时间）"),
+    (r'(time\.time|datetime\.now)\s*\(', "time/datetime.now（取当前时间）"),
+    (r'os\.urandom|secrets\.', "os.urandom/secrets（非确定性随机）"),
+]
+
+
+def _strip_comments(code: str, language: str) -> str:
+    """粗略剔除注释，避免注释里的字眼（如 `// time(NULL) 不好`）误触发非确定性判定。"""
+    # 字符串字面量中的 // # /* 不处理（OJ 答案代码极少在字符串里写这些关键字），足够稳妥
+    if language in ('cpp', 'java', 'js', 'javascript'):
+        code = re.sub(r'/\*.*?\*/', ' ', code, flags=re.S)
+        code = re.sub(r'//[^\n]*', ' ', code)
+    else:  # python 等以 # 注释
+        code = re.sub(r'#[^\n]*', ' ', code)
+    return code
+
+
+def _reference_looks_nondeterministic(code: str, language: str) -> tuple[bool, str]:
+    """
+    静态扫描参考代码是否含有「非确定性」特征（时间/随机播种等）。
+
+    为什么需要静态扫描：仅靠「多次运行一致性」校验无法 100% 捕捉非确定性——
+    例如 C 库 rand() 的最低位在不同秒之间常保持稳定，仅靠重跑会误判为“确定”。
+    因此直接识别常见的非确定性播种写法，从源头拦截，确保只有确定性参考代码
+    才能生成比赛测试用例。
+    """
+    code = _strip_comments(code, language)
+
+    # srand 使用非常量种子（如 srand(t)）必然非确定；srand(42) 这类常量种子是确定的
+    m = re.search(r'srand\s*\((.*?)\)', code, re.S)
+    if m and not re.search(r'^\s*-?\d+\s*$', m.group(1)):
+        return True, "srand 使用了非常量种子（疑似时间/随机播种）"
+
+    # Python 的 random 默认按系统熵播种；只有显式 random.seed(常量) 才是确定的
+    if language in ('python', 'py'):
+        if re.search(r'random\.', code) and not re.search(r'random\.seed\s*\(\s*-?\d+', code):
+            return True, "使用了 random 但未用固定种子（默认非确定性）"
+
+    for pat, desc in _NONDET_PATTERNS:
+        if re.search(pat, code):
+            return True, desc
+    return False, ''
+
+
+def _sleep_to_next_second():
+    """睡到下一个整秒之后一点点，保证后续运行落在与当前不同的墙钟秒内。
+
+    用于捕捉「按秒播种」的非确定性（srand(time(NULL))、chrono::system_clock 取秒等）：
+    紧挨着跑两次往往落在同一秒 → 种子相同 → 误判为确定；跨秒后种子不同 → 暴露差异。
+    """
+    now = time.time()
+    time.sleep(1.0 - (now - int(now)) + 0.02)
+
+
 def _run_reference_twice(
     code: str, language: str, stdin: str, timeout: int, memory_limit: int | None
 ) -> tuple[str | None, bool]:
     """
-    运行参考代码两次并返回 (输出, 是否自洽)。
+    运行参考代码两次（两次处于**不同墙钟秒**）并返回 (输出, 是否自洽)。
 
-    - 仅编译一次（cpp/java），执行两次，保证性能与一致性；
-    - 若任一运行编译/运行/超时/内存出错（输出为 None），返回 (None, False)；
-    - 若两次运行输出不一致（非确定性），返回 (输出, False)；
-    - 否则返回 (去尾空白后的输出, True)。
-    这样既保证参考代码在比赛限制内稳定通过，又能过滤掉非确定性用例。
+    这是「答案代码在比赛提交时却过不了部分用例」的根因修复关键：
+      - 编译型语言每次运行都是独立进程（ASLR 不同），可捕捉未初始化变量/UB/容器遍历序
+        等非确定性；
+      - 两次运行强制跨秒（见 `_sleep_to_next_second`），可捕捉 time(NULL)/chrono 按秒
+        播种等非确定性——这是原题「新建时答案能过、正式比赛（另一时刻运行）却 WA」的主因；
+      - 任意一次编译/运行/超时/内存出错（输出为 None）→ 返回 (None, False)；
+      - 两次原始输出不一致 → 视为非确定性，返回 (输出, False)；
+      - 两次完全一致 → 返回 (去尾空白后的输出, True)。
+    后续 `_generate_testcases` 会用 `len(testcases) < count` 判定参考代码是否不可靠，
+    不可靠则拒绝生成，倒逼修正参考代码（使其确定性）。
     """
     try:
         if language == 'cpp':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
-                f.write(code)
-                f.flush()
-                src = f.name
-            exe_path = src + '.exe'
-            try:
-                compile_result = subprocess.run(
-                    ['g++', '-o', exe_path, src],
-                    capture_output=True, text=True, timeout=max(timeout, 10),
-                )
-                if compile_result.returncode != 0:
-                    return (None, False)
-                r1 = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
-                if r1[0] is None:
-                    return (None, False)
-                r2 = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
-                if r2[0] is None:
-                    return (None, False)
-                return (r1[0].strip(), r1[0] == r2[0])
-            finally:
-                os.unlink(src)
-                if os.path.exists(exe_path):
-                    os.unlink(exe_path)
+            outputs = []
+            for i in range(3):
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
+                    f.write(code)
+                    f.flush()
+                    src = f.name
+                exe_path = src + '.exe'
+                try:
+                    compile_result = subprocess.run(
+                        ['g++', '-o', exe_path, src],
+                        capture_output=True, text=True, timeout=max(timeout, 10),
+                    )
+                    if compile_result.returncode != 0:
+                        return (None, False)
+                    res = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
+                    if res[0] is None:
+                        return (None, False)
+                    outputs.append(res[0])
+                finally:
+                    try:
+                        os.unlink(src)
+                        if os.path.exists(exe_path):
+                            os.unlink(exe_path)
+                    except Exception:
+                        pass
+                if i < 2:
+                    _sleep_to_next_second()
+            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
 
         elif language == 'java':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
-                f.write(code)
-                f.flush()
-                java_src = f.name
-            try:
-                class_dir = os.path.dirname(java_src)
-                compile_result = subprocess.run(
-                    ['javac', java_src],
-                    capture_output=True, text=True, timeout=max(timeout, 10),
-                )
-                if compile_result.returncode != 0:
-                    return (None, False)
-                r1 = _interpret(
-                    _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
-                    is_compiled=True,
-                )
-                if r1[0] is None:
-                    return (None, False)
-                r2 = _interpret(
-                    _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
-                    is_compiled=True,
-                )
-                if r2[0] is None:
-                    return (None, False)
-                return (r1[0].strip(), r1[0] == r2[0])
-            finally:
+            outputs = []
+            for i in range(3):
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
+                    f.write(code)
+                    f.flush()
+                    java_src = f.name
                 try:
-                    if os.path.exists(java_src):
-                        os.unlink(java_src)
-                    class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
-                    if os.path.exists(class_file):
-                        os.unlink(class_file)
-                except Exception:
-                    pass
+                    class_dir = os.path.dirname(java_src)
+                    compile_result = subprocess.run(
+                        ['javac', java_src],
+                        capture_output=True, text=True, timeout=max(timeout, 10),
+                    )
+                    if compile_result.returncode != 0:
+                        return (None, False)
+                    res = _interpret(
+                        _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
+                        is_compiled=True,
+                    )
+                    if res[0] is None:
+                        return (None, False)
+                    outputs.append(res[0])
+                finally:
+                    try:
+                        if os.path.exists(java_src):
+                            os.unlink(java_src)
+                        class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
+                        if os.path.exists(class_file):
+                            os.unlink(class_file)
+                    except Exception:
+                        pass
+                if i < 2:
+                    _sleep_to_next_second()
+            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
 
         else:
-            r1 = _run_code(code, language, stdin, timeout, memory_limit)
-            if r1[0] is None:
-                return (None, False)
-            r2 = _run_code(code, language, stdin, timeout, memory_limit)
-            if r2[0] is None:
-                return (None, False)
-            return (r1[0].strip(), r1[0] == r2[0])
+            outputs = []
+            for i in range(3):
+                out, err_type, _, _ = _run_code(code, language, stdin, timeout, memory_limit)
+                if err_type is not None or out is None:
+                    return (None, False)
+                outputs.append(out)
+                if i == 0:
+                    _sleep_to_next_second()
+            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
     except Exception:
         return (None, False)
+
 
 
 def _generate_testcases(
@@ -264,30 +343,31 @@ def _exec_command(cmd: list, stdin: str, timeout: int, memory_mb: int | None):
 
 def _interpret(result, is_compiled: bool):
     """
-    将执行结果转换为 (stdout, error_type)。
+    将执行结果转换为 (stdout, error_type, stderr)。
     error_type ∈ {None, 'RE', 'TLE', 'MLE'}。
     编译阶段错误由调用方单独判定为 'CE'。
     """
     stdout, stderr, returncode, timed_out, mem_exceeded = result
     if timed_out:
-        return (None, 'TLE')
+        return (None, 'TLE', stderr)
     if mem_exceeded:
-        return (None, 'MLE')
+        return (None, 'MLE', stderr)
     if returncode != 0:
         # 已编译语言此处仅可能是运行时错误；脚本语言运行失败也归为 RE
-        return (None, 'RE')
-    return (stdout, None)
+        return (None, 'RE', stderr)
+    return (stdout, None, stderr)
 
 
-def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_limit: int | None = None) -> tuple[str | None, str | None]:
+def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_limit: int | None = None) -> tuple[str | None, str | None, int, str | None]:
     """
-    运行代码并返回 (stdout, error_type)。
+    运行代码并返回 (stdout, error_type, time_used_ms, stderr)。
     error_type ∈ {None, 'CE', 'TLE', 'RE', 'MLE'}：
       - None: 正常运行且有输出
       - 'CE': 编译错误（cpp/java/go）
       - 'TLE': 超时
       - 'RE': 运行时错误（非零退出码）
       - 'MLE': 内存超出限制
+    time_used_ms 仅统计「运行」耗时（不含编译），单位毫秒。
     """
     try:
         if language == 'python':
@@ -296,10 +376,13 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                 f.flush()
                 src = f.name
             try:
+                t0 = time.perf_counter()
                 result = _exec_command(['python3', src], stdin, timeout, memory_limit)
+                t1 = time.perf_counter()
             finally:
                 os.unlink(src)
-            return _interpret(result, is_compiled=False)
+            stdout, err_type, stderr = _interpret(result, is_compiled=False)
+            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
 
         elif language == 'cpp':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
@@ -315,13 +398,16 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                     timeout=max(timeout, 10),
                 )
                 if compile_result.returncode != 0:
-                    return (None, 'CE')
+                    return (None, 'CE', 0, compile_result.stderr)
+                t0 = time.perf_counter()
                 result = _exec_command([exe_path], stdin, timeout, memory_limit)
+                t1 = time.perf_counter()
             finally:
                 os.unlink(src)
                 if os.path.exists(exe_path):
                     os.unlink(exe_path)
-            return _interpret(result, is_compiled=True)
+            stdout, err_type, stderr = _interpret(result, is_compiled=True)
+            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
 
         elif language == 'java':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
@@ -337,10 +423,12 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                     timeout=max(timeout, 10),
                 )
                 if compile_result.returncode != 0:
-                    return (None, 'CE')
+                    return (None, 'CE', 0, compile_result.stderr)
+                t0 = time.perf_counter()
                 result = _exec_command(
                     ['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit
                 )
+                t1 = time.perf_counter()
             finally:
                 try:
                     if os.path.exists(java_src):
@@ -350,7 +438,8 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                         os.unlink(class_file)
                 except Exception:
                     pass
-            return _interpret(result, is_compiled=True)
+            stdout, err_type, stderr = _interpret(result, is_compiled=True)
+            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
 
         elif language == 'go':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
@@ -358,9 +447,11 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                 f.flush()
                 go_src = f.name
             try:
+                t0 = time.perf_counter()
                 result = _exec_command(
                     ['go', 'run', go_src], stdin, max(timeout, 15), memory_limit
                 )
+                t1 = time.perf_counter()
             finally:
                 try:
                     if os.path.exists(go_src):
@@ -370,13 +461,13 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
             # go run 同时完成编译与运行，非零退出码统一视为编译错误之外归为 RE
             stdout, stderr, returncode, timed_out, mem_exceeded = result
             if timed_out:
-                return (None, 'TLE')
+                return (None, 'TLE', int((t1 - t0) * 1000), stderr)
             if mem_exceeded:
-                return (None, 'MLE')
+                return (None, 'MLE', int((t1 - t0) * 1000), stderr)
             if returncode != 0:
                 # go 无独立编译阶段，编译失败也归为 CE 以便前端区分
-                return (None, 'CE')
-            return (stdout, None)
+                return (None, 'CE', int((t1 - t0) * 1000), stderr)
+            return (stdout, None, int((t1 - t0) * 1000), stderr)
 
         elif language in ('javascript', 'js', 'node'):
             with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
@@ -384,18 +475,21 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
                 f.flush()
                 js_src = f.name
             try:
+                t0 = time.perf_counter()
                 result = _exec_command(['node', js_src], stdin, timeout, memory_limit)
+                t1 = time.perf_counter()
             finally:
                 try:
                     if os.path.exists(js_src):
                         os.unlink(js_src)
                 except Exception:
                     pass
-            return _interpret(result, is_compiled=False)
+            stdout, err_type, stderr = _interpret(result, is_compiled=False)
+            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
 
     except (subprocess.TimeoutExpired, Exception):
         pass
-    return (None, 'RE')
+    return (None, 'RE', 0, None)
 
 
 def _problem_to_dict(p: ContestProblem) -> dict:
@@ -467,22 +561,23 @@ class ContestProblemListController(Resource):
             sort_order=data.get('sort_order', 0),
         )
 
-        # 自动生成测试用例：使用与正式比赛判题一致的时限/内存限制
-        testcases = _generate_testcases(
-            data['correct_answer'], 100,
-            data.get('time_limit', 1000), data.get('memory_limit', 256),
-        )
-        for tc in testcases:
-            ContestTestcase.create(
-                contest_problem=problem,
-                input_data=tc['input_data'],
-                expected_output=tc['expected_output'],
-                is_sample=tc['is_sample'],
-                sort_order=tc['sort_order'],
-            )
+        # 自动生成测试用例改为后台队列执行，避免建题请求因生成耗时过长（100
+        # 个用例 × 多次编译/运行 + 间隔）而触发反向代理/网关超时。生成进度可通过
+        # GET /<problem_id>/testcase-generation 轮询。
+        try:
+            redis_service = inject(IRedisService)
+            redis_service.list_push('testcase_gen_queue', {
+                'problem_id': problem.id,
+                'correct_answer': data['correct_answer'],
+                'count': 100,
+                'time_limit': data.get('time_limit', 1000),
+                'memory_limit': data.get('memory_limit', 256),
+            })
+        except Exception:
+            pass
 
         result = _problem_to_dict(problem)
-        result['generated_testcases'] = len(testcases)
+        result['testcase_generation'] = 'queued'
         return result, 201
 
 
@@ -543,7 +638,7 @@ class ContestProblemDetailController(Resource):
         return _problem_to_dict(problem), 200
 
     def delete(self, problem_id):
-        """删除比赛题目"""
+        """删除比赛题目（同时清理其测试用例与提交记录）"""
         user, err = _require_manager()
         if err:
             return err
@@ -554,9 +649,13 @@ class ContestProblemDetailController(Resource):
             return {'error': '题目不存在'}, 404
 
         try:
-            # 先删除该题目的测试用例，避免外键约束冲突
+            # 显式按依赖顺序清理子表，避免外键约束冲突或级联未生效导致删除失败
             ContestTestcase.delete().where(
                 ContestTestcase.contest_problem == problem
+            ).execute()
+            from models.db_models import ContestSubmission
+            ContestSubmission.delete().where(
+                ContestSubmission.contest_problem == problem
             ).execute()
             problem.delete_instance()
             return {'success': True}, 200
@@ -567,7 +666,7 @@ class ContestProblemDetailController(Resource):
 @api.route('/<int:problem_id>/regenerate-testcases')
 class RegenerateTestcasesController(Resource):
     def post(self, problem_id):
-        """重新生成测试用例"""
+        """重新生成测试用例（后台队列执行）"""
         user, err = _require_manager()
         if err:
             return err
@@ -577,23 +676,51 @@ class RegenerateTestcasesController(Resource):
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
 
-        # 删除旧测试用例
+        # 删除旧测试用例（生成任务会再次清理并写入，这里先清空避免轮询期间数量闪烁）
         ContestTestcase.delete().where(
             ContestTestcase.contest_problem == problem
         ).execute()
 
-        # 生成新测试用例：使用与正式比赛判题一致的时限/内存限制
-        testcases = _generate_testcases(
-            problem.correct_answer, 100,
-            problem.time_limit or 1000, problem.memory_limit or 256,
-        )
-        for tc in testcases:
-            ContestTestcase.create(
-                contest_problem=problem,
-                input_data=tc['input_data'],
-                expected_output=tc['expected_output'],
-                is_sample=tc['is_sample'],
-                sort_order=tc['sort_order'],
-            )
+        # 重新生成改为后台队列执行，使用与正式比赛判题一致的时限/内存限制
+        try:
+            redis_service = inject(IRedisService)
+            redis_service.list_push('testcase_gen_queue', {
+                'problem_id': problem.id,
+                'correct_answer': problem.correct_answer,
+                'count': 100,
+                'time_limit': problem.time_limit or 1000,
+                'memory_limit': problem.memory_limit or 256,
+            })
+        except Exception:
+            pass
 
-        return {'success': True, 'count': len(testcases)}, 200
+        return {'success': True, 'testcase_generation': 'queued'}, 200
+
+
+@api.route('/<int:problem_id>/testcase-generation')
+class TestcaseGenerationStatusController(Resource):
+    def get(self, problem_id):
+        """轮询测试用例生成进度（建题/重生成后供前端展示）"""
+        user, err = _require_manager()
+        if err:
+            return err
+
+        try:
+            ContestProblem.get_by_id(problem_id)
+        except ContestProblem.DoesNotExist:
+            return {'error': '题目不存在'}, 404
+
+        redis_service = inject(IRedisService)
+        status = redis_service.get(f"testcase_gen:{problem_id}")
+        if not status:
+            # 无记录：可能已生成完成且缓存过期，回查数据库实际数量
+            try:
+                from models.db_models import ContestTestcase
+                count = ContestTestcase.select().where(
+                    ContestTestcase.contest_problem == problem_id
+                ).count()
+                status = {'status': 'done', 'generated': count, 'total': count}
+            except Exception:
+                status = {'status': 'unknown'}
+        return status, 200
+

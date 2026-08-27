@@ -409,11 +409,22 @@ const saveProblem = async () => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      message.success('题目创建成功，测试用例已自动生成');
+      message.success('题目创建成功，测试用例正在后台生成');
     }
     clearDraft();
     showProblemForm.value = false;
+    isGeneratingTestcases.value = false;
     await loadProblems(selectedContestId.value);
+    // 创建场景下，定位刚新建的题目并轮询生成进度，直到用例数稳定
+    if (!editingProblem.value) {
+      const created = problems.value.find(
+        (p) => p.problem_index === f.problem_index && p.title === f.title,
+      );
+      if (created) {
+        await pollTestcaseGeneration(created.id);
+        if (selectedContestId.value) await loadProblems(selectedContestId.value);
+      }
+    }
   } catch (e) {
     message.error(e instanceof Error ? e.message : '保存失败');
   } finally {
@@ -433,13 +444,41 @@ const deleteProblem = async (id: number) => {
   }
 };
 
-// 重新生成测试用例
+// 轮询测试用例生成进度（后台队列执行，避免长时间等待）
+const pollTestcaseGeneration = async (problemId: number) => {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const status = await apiRequest<{ status: string; generated: number; total: number; error?: string }>(
+        `/admin/contests/${problemId}/testcase-generation`,
+      );
+      if (status.status === 'done') {
+        message.success(`已生成 ${status.generated} 组测试用例`);
+        return;
+      }
+      if (status.status === 'error') {
+        message.error('测试用例生成出错：' + (status.error || '未知错误'));
+        return;
+      }
+    } catch (e) {
+      // 轮询期间偶发网络错误可忽略，继续重试
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  message.warning('测试用例生成超时，请稍后刷新查看');
+};
+
+// 重新生成测试用例（后台队列执行）
 const regenerateTestcases = async (problemId: number) => {
   try {
-    const res = await apiRequest<{ count: number }>(`/admin/contests/${problemId}/regenerate-testcases`, {
+    const res = await apiRequest<{ success: boolean; testcase_generation: string }>(`/admin/contests/${problemId}/regenerate-testcases`, {
       method: 'POST',
     });
-    message.success(`已重新生成 ${res.count} 组测试用例`);
+    if (res.testcase_generation !== 'queued') {
+      message.warning('重新生成未成功入队');
+      return;
+    }
+    message.success('已提交后台重新生成，正在生成测试用例...');
+    await pollTestcaseGeneration(problemId);
     if (selectedContestId.value) await loadProblems(selectedContestId.value);
   } catch (e) {
     message.error('重新生成失败');

@@ -19,6 +19,7 @@ from controllers.announcement_controller import _require_editor
 from interfaces.service_interfaces import IJWTService, IRedisService
 from models.db_models import (
     Announcement, Submission, User, UserCode, Favorite, ContestParticipant,
+    ContestSubmission,
     Discussion, DiscussionReply, DiscussionLike, DiscussionReplyLike,
     LearnFavorite, LearnBrowsingHistory,
 )
@@ -292,6 +293,8 @@ class AdminUserDetailController(Resource):
 
             # 3) 用户代码、提交记录解除关联
             UserCode.delete().where(UserCode.user == user).execute()
+            # 比赛提交记录（user 外键非空，无法置空，必须随用户删除）
+            ContestSubmission.delete().where(ContestSubmission.user == user).execute()
             Submission.update(user=None).where(Submission.user == user).execute()
 
             user.delete_instance()

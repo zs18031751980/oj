@@ -117,7 +117,14 @@ const submitResult = ref<{
   status: string;
   passed?: number;
   total?: number;
-  details?: Array<{ passed: boolean; status: string; expected?: string; actual?: string | null }>;
+  details?: Array<{
+    passed: boolean;
+    status: string;
+    expected?: string;
+    actual?: string | null;
+    time_used?: number;
+    stderr?: string;
+  }>;
   message?: string;
 } | null>(null);
 
@@ -806,14 +813,51 @@ watch(selectedLanguage, (lang) => {
                   <li
                     v-for="(d, i) in submitResult.details"
                     :key="i"
-                    :class="[getJudgeStatus(d.status).badge]"
-                    :title="`#${i + 1}：${getJudgeStatus(d.status).label}`"
+                    :class="[getJudgeStatus(d.status).badge, d.passed ? 'pass' : 'fail']"
+                    :title="`#${i + 1}：${getJudgeStatus(d.status).label}${d.time_used != null ? ' · 耗时 ' + d.time_used + 'ms' : ''}`"
                   >
                     <span class="ide-submit-detail-idx">#{{ i + 1 }}</span>
                     <span class="ide-submit-detail-status">{{ getJudgeStatus(d.status).label }}</span>
                     <span class="ide-submit-detail-short">{{ getJudgeStatus(d.status).short }}</span>
+                    <span v-if="d.time_used != null" class="ide-submit-detail-time">{{ d.time_used }}ms</span>
                   </li>
                 </ul>
+                <div
+                  v-if="submitResult.details && submitResult.details.some((d) => !d.passed)"
+                  class="ide-submit-failures"
+                >
+                  <div class="ide-submit-failures-title">失败用例详情</div>
+                  <div
+                    v-for="(d, i) in submitResult.details.filter((x) => !x.passed)"
+                    :key="'f' + i"
+                    class="ide-submit-failure"
+                  >
+                    <div class="ide-submit-failure-head">
+                      <span
+                        class="ide-submit-failure-badge"
+                        :class="[getJudgeStatus(d.status).badge, getJudgeStatus(d.status).text]"
+                      >{{ getJudgeStatus(d.status).short }}</span>
+                      <span class="ide-submit-failure-idx">#{{ submitResult.details!.indexOf(d) + 1 }}</span>
+                      <span v-if="d.time_used != null" class="ide-submit-failure-time">耗时 {{ d.time_used }}ms</span>
+                    </div>
+                    <template v-if="d.status === 'CE' || d.status === 'RE'">
+                      <pre v-if="d.stderr" class="ide-submit-failure-stderr">{{ d.stderr }}</pre>
+                      <pre v-else class="ide-submit-failure-stderr">（无可用错误输出）</pre>
+                    </template>
+                    <template v-else>
+                      <div class="ide-submit-failure-io">
+                        <div class="ide-submit-failure-col">
+                          <div class="ide-submit-failure-label">期望输出</div>
+                          <pre class="ide-submit-failure-code">{{ d.expected || '（空）' }}</pre>
+                        </div>
+                        <div class="ide-submit-failure-col">
+                          <div class="ide-submit-failure-label">你的输出</div>
+                          <pre class="ide-submit-failure-code">{{ d.actual === null ? '（无输出 / 运行失败）' : (d.actual || '（空）') }}</pre>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
               </div>
             </template>
           </div>
@@ -1281,6 +1325,33 @@ html.dark .ide-io-textarea { border-color: #374151; background: #1F2937; color: 
 .ide-submit-details li.fail { background: #FEE2E2; color: #DC2626; }
 .ide-submit-detail-idx { opacity: 0.7; }
 .ide-submit-detail-status { font-family: 'JetBrains Mono', monospace; }
+.ide-submit-detail-time { font-size: 10px; opacity: 0.65; margin-left: 2px; }
+
+.ide-submit-failures { margin-top: 14px; border-top: 1px dashed #E2E8F0; padding-top: 12px; }
+html.dark .ide-submit-failures { border-color: #1E293B; }
+.ide-submit-failures-title { font-size: 13px; font-weight: 800; color: #DC2626; margin-bottom: 10px; }
+html.dark .ide-submit-failures-title { color: #F87171; }
+.ide-submit-failure { margin-bottom: 12px; border: 1px solid #F1F5F9; border-radius: 8px; overflow: hidden; }
+html.dark .ide-submit-failure { border-color: #1F2937; }
+.ide-submit-failure-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #F8FAFC; }
+html.dark .ide-submit-failure-head { background: #0F172A; }
+.ide-submit-failure-badge { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+.ide-submit-failure-idx { font-size: 12px; font-weight: 700; color: #475569; }
+html.dark .ide-submit-failure-idx { color: #94A3B8; }
+.ide-submit-failure-time { margin-left: auto; font-size: 11px; color: #94A3B8; }
+.ide-submit-failure-stderr, .ide-submit-failure-code {
+  margin: 0; padding: 8px 10px; font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; white-space: pre-wrap; word-break: break-all; background: #FFFFFF; color: #334155;
+}
+html.dark .ide-submit-failure-stderr, html.dark .ide-submit-failure-code { background: #111827; color: #CBD5E1; }
+.ide-submit-failure-stderr { color: #B91C1C; }
+html.dark .ide-submit-failure-stderr { color: #FCA5A5; }
+.ide-submit-failure-io { display: flex; gap: 1px; background: #E2E8F0; }
+html.dark .ide-submit-failure-io { background: #1F2937; }
+.ide-submit-failure-col { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #FFFFFF; }
+html.dark .ide-submit-failure-col { background: #0B1220; }
+.ide-submit-failure-label { font-size: 11px; font-weight: 700; color: #64748B; padding: 4px 10px 0; }
+html.dark .ide-submit-failure-label { color: #94A3B8; }
 
 .ide-submit-verdict {
   display: inline-flex; align-items: center; gap: 8px;

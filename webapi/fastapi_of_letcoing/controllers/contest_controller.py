@@ -220,6 +220,11 @@ class ContestDetailController(Resource):
 
         try:
             # 先显式级联删除依赖数据，避免外键约束冲突
+            # 比赛提交记录同时引用 contest 与 contest_problem（均为非空外键），
+            # 必须在删除题目/比赛前清理，否则会因外键约束导致删除失败。
+            ContestSubmission.delete().where(
+                ContestSubmission.contest == contest
+            ).execute()
             problem_ids = [
                 cp.id
                 for cp in ContestProblem.select(ContestProblem.id).where(
