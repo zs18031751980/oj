@@ -406,10 +406,52 @@ const fileBreadcrumb = computed<BreadcrumbItem[]>(() => {
 
 /** ====== 响应式 ====== */
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1440);
-const showRecent = computed(() => windowWidth.value >= 1280);
+function getRecentMode(w: number): 'desktop' | 'tablet' | 'mobile' {
+  if (w >= 1024) return 'desktop';
+  if (w >= 768) return 'tablet';
+  return 'mobile';
+}
+
+/** 右侧“最近浏览”收起状态（按设备尺寸分别记忆） */
+const RECENT_COLLAPSED_KEY = 'learn_recent_collapsed_v1';
+const storedCollapsed = ref<Record<string, boolean>>({});
+function loadCollapsed() {
+  try {
+    const raw = localStorage.getItem(RECENT_COLLAPSED_KEY);
+    if (raw) storedCollapsed.value = JSON.parse(raw) || {};
+  } catch { /* ignore */ }
+}
+function saveCollapsed() {
+  try { localStorage.setItem(RECENT_COLLAPSED_KEY, JSON.stringify(storedCollapsed.value)); } catch { /* ignore */ }
+}
+
+const recentMode = computed(() => getRecentMode(windowWidth.value));
+const showRecent = computed(() => recentMode.value !== 'mobile');
+const recentCollapsed = ref(false);
+function defaultCollapsedFor(mode: string): boolean {
+  // 平板默认收起，桌面默认展开
+  return mode === 'tablet';
+}
+function syncCollapsed() {
+  const m = recentMode.value;
+  if (m === 'mobile') { recentCollapsed.value = false; return; }
+  recentCollapsed.value = storedCollapsed.value[m] ?? defaultCollapsedFor(m);
+}
+function toggleRecent() {
+  const m = recentMode.value;
+  if (m === 'mobile') return;
+  recentCollapsed.value = !recentCollapsed.value;
+  storedCollapsed.value = { ...storedCollapsed.value, [m]: recentCollapsed.value };
+  saveCollapsed();
+}
+
+loadCollapsed();
+syncCollapsed();
+
 function onResize() {
   windowWidth.value = window.innerWidth;
   if (windowWidth.value >= 768) mobileSidebarOpen.value = false;
+  syncCollapsed();
 }
 function toggleMobileSidebar() {
   mobileSidebarOpen.value = !mobileSidebarOpen.value;
@@ -447,6 +489,8 @@ watch(currentFile, (f) => {
 onMounted(async () => {
   window.addEventListener('resize', onResize);
   loadRecent();
+  loadCollapsed();
+  syncCollapsed();
   await loadTree();
   const queryPath = route.query.path as string;
   if (queryPath) await loadFile(queryPath);
@@ -698,13 +742,32 @@ onUnmounted(() => {
         </template>
       </main>
 
-      <!-- 右侧最近浏览 -->
-      <aside v-if="showRecent && treeData" class="learn-recent-col">
-        <RecentPanel
-          :items="recentList"
-          @open="openFile"
-          @clear="clearRecent"
-        />
+      <!-- 右侧最近浏览（可收起） -->
+      <aside
+        v-if="showRecent && treeData"
+        class="learn-recent-col"
+        :class="{ 'is-collapsed': recentCollapsed }"
+      >
+        <div class="recent-topbar">
+          <span class="recent-title">最近浏览</span>
+          <button
+            class="recent-collapse-btn"
+            :title="recentCollapsed ? '展开最近浏览' : '收起最近浏览'"
+            @click="toggleRecent"
+          >
+            <Icon
+              :icon="recentCollapsed ? 'material-symbols:chevron-left' : 'material-symbols:chevron-right'"
+              class="h-[18px] w-[18px]"
+            />
+          </button>
+        </div>
+        <div v-show="!recentCollapsed" class="recent-scroll">
+          <RecentPanel
+            :items="recentList"
+            @open="openFile"
+            @clear="clearRecent"
+          />
+        </div>
       </aside>
     </div>
   </div>
@@ -719,13 +782,19 @@ onUnmounted(() => {
 
 /* ===== 页面标题区 ===== */
 .learn-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 24px 24px 20px;
   min-height: 92px;
+  background: #f6f8fc;
+  border-bottom: 1px solid #e2e8f0;
 }
+:global(html.dark) .learn-header { background: #0f172a; border-bottom-color: #1e293b; }
 .learn-header-left {
   display: flex;
   align-items: center;
@@ -781,7 +850,7 @@ onUnmounted(() => {
   margin: 0 2px;
 }
 
-/* ===== 主体 ===== */
+/* ===== 主体（全宽自适应三栏） ===== */
 .learn-body {
   display: flex;
   align-items: flex-start;
@@ -793,27 +862,84 @@ onUnmounted(() => {
   min-width: 280px;
   flex-shrink: 0;
   position: sticky;
-  top: 76px;
+  top: 92px;
   align-self: stretch;
-  height: calc(100vh - 76px);
+  height: calc(100vh - 92px);
+  overflow-y: auto;
 }
 .learn-main-col {
   flex: 1;
   min-width: 0;
   padding: 0 24px;
-  max-width: 920px;
 }
 .learn-recent-col {
-  width: 280px;
-  min-width: 280px;
+  width: 320px;
   flex-shrink: 0;
   position: sticky;
-  top: 104px;
-  height: calc(100vh - 124px);
+  top: 92px;
+  height: calc(100vh - 92px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-left: 1px solid #e2e8f0;
-  padding-left: 20px;
+  transition: width 0.25s ease;
 }
 :global(html.dark) .learn-recent-col { border-left-color: #1e293b; }
+.learn-recent-col.is-collapsed {
+  width: 44px;
+}
+.recent-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 12px 12px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+:global(html.dark) .recent-topbar { border-bottom-color: #1e293b; }
+.recent-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+}
+:global(html.dark) .recent-title { color: #94a3b8; }
+.learn-recent-col.is-collapsed .recent-topbar {
+  justify-content: center;
+  padding: 14px 0 12px;
+}
+.learn-recent-col.is-collapsed .recent-title {
+  display: none;
+}
+.recent-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.recent-collapse-btn:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+:global(html.dark) .recent-collapse-btn { color: #94a3b8; }
+:global(html.dark) .recent-collapse-btn:hover { background: #334155; color: #e5e7eb; }
+.recent-scroll {
+  width: 320px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 20px 16px;
+}
 
 /* ===== 状态 ===== */
 .learn-state {
@@ -1137,11 +1263,9 @@ onUnmounted(() => {
 
 /* ===== 详情页 ===== */
 .learn-detail-main {
-  height: calc(100vh - 76px);
-  overflow-y: auto;
   padding: 4px 0 40px;
 }
-.learn-doc-container { max-width: 820px; }
+.learn-doc-container { max-width: 1080px; margin: 0 auto; }
 .learn-doc-title {
   font-size: 28px;
   font-weight: 800;
@@ -1193,21 +1317,20 @@ onUnmounted(() => {
 }
 
 /* ===== 响应式 ===== */
-@media (max-width: 1279px) {
-  .learn-recent-col { display: none; }
-  .learn-main-col { max-width: none; }
-}
 @media (max-width: 1023px) {
   .learn-sidebar-col {
     width: 240px;
     min-width: 240px;
   }
+  .learn-recent-col { width: 300px; }
+  .recent-scroll { width: 300px; }
+  .learn-recent-col.is-collapsed { width: 44px; }
 }
 @media (max-width: 767px) {
   .learn-header { padding: 16px 16px 14px; min-height: 72px; }
   .learn-title { font-size: 24px; }
   .learn-body { padding: 0 12px 24px; }
-  .learn-main-col { padding: 0; max-width: none; }
+  .learn-main-col { padding: 0; }
   .learn-sidebar-col {
     position: fixed;
     top: 0;

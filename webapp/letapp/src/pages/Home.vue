@@ -373,11 +373,11 @@ onUnmounted(() => {
           </span>
 
           <h1 class="hero-title">
-            <span class="title-line intro intro-title-one">让写代码</span>
+            <span class="title-line intro intro-title-one">写代码</span>
             <span
               class="title-line title-accent intro intro-title-two"
-              data-text="更直接、更顺手"
-              >更直接 更顺手</span
+              data-text="更加顺手"
+              >更加顺手</span
             >
           </h1>
 
@@ -745,8 +745,14 @@ onUnmounted(() => {
 .title-accent {
   position: relative;
   width: fit-content;
-  margin-top: 0.4rem;
-  color: #0891b2;
+  margin-top: 0.85rem;
+  padding-block: 0.35rem;
+  font-size: 1.06em;
+  line-height: 1.28;
+  background: linear-gradient(100deg, #066b85 0%, #0891b2 45%, #22d3ee 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .title-accent::after {
   content: attr(data-text);

@@ -1,7 +1,7 @@
 from datetime import datetime
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Contest, ContestParticipant, User, ContestProblem
+from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService
 
@@ -174,10 +174,31 @@ class ContestDetailController(Resource):
 
         try:
             contest = Contest.get_by_id(contest_id)
-            contest.delete_instance()
-            return {'success': True}, 200
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
+
+        try:
+            # 先显式级联删除依赖数据，避免外键约束冲突
+            problem_ids = [
+                cp.id
+                for cp in ContestProblem.select(ContestProblem.id).where(
+                    ContestProblem.contest == contest
+                )
+            ]
+            if problem_ids:
+                ContestTestcase.delete().where(
+                    ContestTestcase.contest_problem.in_(problem_ids)
+                ).execute()
+                ContestProblem.delete().where(
+                    ContestProblem.contest == contest
+                ).execute()
+            ContestParticipant.delete().where(
+                ContestParticipant.contest == contest
+            ).execute()
+            contest.delete_instance()
+            return {'success': True}, 200
+        except Exception as exc:
+            return {'error': f'删除失败: {exc}'}, 500
 
 
 @api.route('/<int:contest_id>/join')

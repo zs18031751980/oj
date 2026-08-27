@@ -17,7 +17,11 @@ from peewee import fn
 from core.di_container import inject
 from controllers.announcement_controller import _require_editor
 from interfaces.service_interfaces import IJWTService, IRedisService
-from models.db_models import Announcement, Submission, User, UserCode
+from models.db_models import (
+    Announcement, Submission, User, UserCode, Favorite, ContestParticipant,
+    Discussion, DiscussionReply, DiscussionLike, DiscussionReplyLike,
+    LearnFavorite, LearnBrowsingHistory,
+)
 
 api = Namespace('admin', description='管理后台接口')
 
@@ -238,9 +242,59 @@ class AdminUserDetailController(Resource):
         except User.DoesNotExist:
             return {'error': '用户不存在'}, 404
 
-        # 清理关联数据：删除用户代码，提交记录解除关联
-        UserCode.delete().where(UserCode.user == user_id).execute()
-        Submission.update(user=None).where(Submission.user == user_id).execute()
-        user.delete_instance()
+        try:
+            # 清理所有引用该用户的关联数据，避免外键约束冲突
+            # 1) 讨论区：先删点赞/回复，再删讨论本身
+            user_reply_ids = [
+                r.id for r in DiscussionReply.select(DiscussionReply.id).where(
+                    DiscussionReply.author == user
+                )
+            ]
+            if user_reply_ids:
+                DiscussionReplyLike.delete().where(
+                    DiscussionReplyLike.reply.in_(user_reply_ids)
+                ).execute()
+                DiscussionReply.delete().where(
+                    DiscussionReply.id.in_(user_reply_ids)
+                ).execute()
+            user_disc_ids = [
+                d.id for d in Discussion.select(Discussion.id).where(
+                    Discussion.author == user
+                )
+            ]
+            if user_disc_ids:
+                disc_reply_ids = [
+                    r.id for r in DiscussionReply.select(DiscussionReply.id).where(
+                        DiscussionReply.discussion.in_(user_disc_ids)
+                    )
+                ]
+                if disc_reply_ids:
+                    DiscussionReplyLike.delete().where(
+                        DiscussionReplyLike.reply.in_(disc_reply_ids)
+                    ).execute()
+                    DiscussionReply.delete().where(
+                        DiscussionReply.id.in_(disc_reply_ids)
+                    ).execute()
+                DiscussionLike.delete().where(
+                    DiscussionLike.discussion.in_(user_disc_ids)
+                ).execute()
+                Discussion.delete().where(Discussion.id.in_(user_disc_ids)).execute()
+            DiscussionLike.delete().where(DiscussionLike.user == user).execute()
+            DiscussionReplyLike.delete().where(DiscussionReplyLike.user == user).execute()
 
-        return {'success': True, 'id': user_id}, 200
+            # 2) 题目收藏、比赛参与、学习数据
+            Favorite.delete().where(Favorite.user == user).execute()
+            ContestParticipant.delete().where(ContestParticipant.user == user).execute()
+            LearnFavorite.delete().where(LearnFavorite.user == user).execute()
+            LearnBrowsingHistory.delete().where(
+                LearnBrowsingHistory.user == user
+            ).execute()
+
+            # 3) 用户代码、提交记录解除关联
+            UserCode.delete().where(UserCode.user == user).execute()
+            Submission.update(user=None).where(Submission.user == user).execute()
+
+            user.delete_instance()
+            return {'success': True, 'id': user_id}, 200
+        except Exception as exc:
+            return {'error': f'删除用户失败: {exc}'}, 500

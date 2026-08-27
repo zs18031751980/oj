@@ -371,10 +371,18 @@ class ContestProblemDetailController(Resource):
 
         try:
             problem = ContestProblem.get_by_id(problem_id)
-            problem.delete_instance()
-            return {'success': True}, 200
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
+
+        try:
+            # 先删除该题目的测试用例，避免外键约束冲突
+            ContestTestcase.delete().where(
+                ContestTestcase.contest_problem == problem
+            ).execute()
+            problem.delete_instance()
+            return {'success': True}, 200
+        except Exception as exc:
+            return {'error': f'删除失败: {exc}'}, 500
 
 
 @api.route('/<int:problem_id>/regenerate-testcases')

@@ -218,9 +218,12 @@ md.core.ruler.push('resolve_images', (state) => {
 });
 
 [
+  { name: 'tip', className: 'tip' },
+  { name: 'note', className: 'note' },
   { name: 'warning', className: 'warning' },
   { name: 'danger', className: 'danger' },
-  { name: 'tip', className: 'tip' },
+  { name: 'example', className: 'example' },
+  { name: 'success', className: 'success' },
 ].forEach(({ name, className }) => {
   md.use(markdownItContainer, name, {
     validate: (params: string) => Boolean(params.trim().match(new RegExp(`^${name}\\s+(.*)$`))),
@@ -322,6 +325,15 @@ const processCodeBlocks = () => {
     if (btn && !btn.getAttribute('data-bound')) {
       btn.setAttribute('data-bound', 'true');
     }
+  });
+  // 宽内容容器：表格统一包一层横向滚动容器，避免页面级横向溢出
+  markdownBody.value.querySelectorAll('table').forEach((table) => {
+    const parent = table.parentElement;
+    if (parent && parent.classList.contains('table-wrapper')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrapper';
+    if (table.parentNode) table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
   });
 };
 
@@ -531,7 +543,7 @@ onUnmounted(() => {
 }
 
 .learn-reader-main.no-toc {
-  max-width: 900px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
@@ -742,6 +754,38 @@ onUnmounted(() => {
   color: #94A3B8;
 }
 
+/* ===== 设计令牌（统一 Markdown 内容组件体系） ===== */
+.markdown-content {
+  /* 间距体系：正文 < 标题与正文 < 独立块与正文 */
+  --md-space-sm: 16px;   /* 段落之间 */
+  --md-space-md: 20px;   /* 标题与正文 / 折叠块 */
+  --md-space-lg: 28px;   /* 代码/公式/表格/图片/引用/提示 与正文 */
+  /* 圆角 */
+  --md-radius-sm: 5px;
+  --md-radius-md: 8px;
+  --md-radius-lg: 10px;
+  /* 边框与背景（亮色） */
+  --md-border: #E5E7EB;
+  --md-border-soft: #EEF2F7;
+  --md-tint: #F8FAFC;
+  --md-tint-2: #F1F5F9;
+  /* 文本 */
+  --md-text: #334155;
+  --md-text-strong: #1E293B;
+  --md-text-muted: #64748B;
+  --md-accent: #2563EB;
+}
+:global(html.dark) .markdown-content {
+  --md-border: #334155;
+  --md-border-soft: #1E293B;
+  --md-tint: #0F172A;
+  --md-tint-2: #1E293B;
+  --md-text: #CBD5E1;
+  --md-text-strong: #F1F5F9;
+  --md-text-muted: #94A3B8;
+  --md-accent: #60A5FA;
+}
+
 /* ===== 正文 Markdown 内容 ===== */
 .markdown-content :deep(h1) {
   font-size: 28px;
@@ -884,69 +928,51 @@ onUnmounted(() => {
   list-style-type: lower-alpha;
 }
 
-/* ===== 引用块 ===== */
+/* ===== 引用块（轻强调：左侧强调线 + 轻背景） ===== */
 .markdown-content :deep(blockquote) {
-  margin: 24px 0;
-  padding: 20px 24px;
-  border-left: 3px solid #2563EB;
-  background: #F8FAFC;
-  border-radius: 0 10px 10px 0;
-  color: #475569;
+  margin: var(--md-space-lg) 0;
+  padding: 16px 20px;
+  border-left: 3px solid var(--md-accent);
+  background: var(--md-tint);
+  border-radius: 0 var(--md-radius-md) var(--md-radius-md) 0;
+  color: var(--md-text-muted);
 }
-
 .markdown-content :deep(blockquote p) {
   margin-bottom: 8px;
 }
-
 .markdown-content :deep(blockquote p:last-child) {
   margin-bottom: 0;
 }
-
-:global(html.dark) .markdown-content :deep(blockquote) {
-  background: #0F172A;
-  border-left-color: #3B82F6;
-  color: #94A3B8;
+/* 多级引用：限制视觉层级，超过两层使用更深一级背景而非无限缩进 */
+.markdown-content :deep(blockquote blockquote) {
+  background: var(--md-tint-2);
 }
 
-/* ===== 代码块 ===== */
+/* ===== 代码块（强独立内容：轻边框容器） ===== */
 .markdown-content :deep(.code-block-wrapper) {
-  margin: 20px 0;
-  border-radius: 10px;
+  margin: var(--md-space-lg) 0;
+  border-radius: var(--md-radius-md);
   overflow: hidden;
-  border: 1px solid #E2E8F0;
+  border: 1px solid var(--md-border);
+  background: var(--md-tint);
+  box-shadow: none;
 }
-
-:global(html.dark) .markdown-content :deep(.code-block-wrapper) {
-  border-color: #334155;
-}
-
 .markdown-content :deep(.code-block-header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
-  background: #F1F5F9;
-  border-bottom: 1px solid #E2E8F0;
+  padding: 7px 14px;
+  background: var(--md-tint-2);
+  border-bottom: 1px solid var(--md-border);
 }
-
-:global(html.dark) .markdown-content :deep(.code-block-header) {
-  background: #1E293B;
-  border-color: #334155;
-}
-
 .markdown-content :deep(.code-lang-label) {
   font-size: 12px;
   font-weight: 600;
-  color: #64748B;
+  color: var(--md-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-
-:global(html.dark) .markdown-content :deep(.code-lang-label) {
-  color: #94A3B8;
-}
-
 .markdown-content :deep(.code-copy-btn) {
   display: inline-flex;
   align-items: center;
@@ -957,180 +983,231 @@ onUnmounted(() => {
   background: transparent;
   font-size: 12px;
   font-weight: 600;
-  color: #64748B;
+  color: var(--md-text-muted);
   cursor: pointer;
   transition: all 0.15s;
   font-family: inherit;
 }
-
 .markdown-content :deep(.code-copy-btn:hover) {
-  background: #E2E8F0;
-  color: #334155;
+  background: var(--md-border);
+  color: var(--md-text-strong);
 }
-
 .markdown-content :deep(.code-copy-btn.copied) {
   color: #16A34A;
 }
-
-:global(html.dark) .markdown-content :deep(.code-copy-btn) {
-  color: #94A3B8;
-}
-
-:global(html.dark) .markdown-content :deep(.code-copy-btn:hover) {
-  background: #334155;
-  color: #E5E7EB;
-}
-
 .markdown-content :deep(pre) {
   margin: 0;
-  padding: 16px 20px;
+  padding: 18px 24px;
   font-size: 13.5px;
   line-height: 1.7;
   border-radius: 0;
   border: none;
+  background: transparent;
   overflow-x: auto;
+  white-space: pre;
+  scrollbar-width: thin;
 }
-
 .markdown-content :deep(pre code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13.5px;
+  white-space: pre;
 }
 
-/* ===== 行内代码 ===== */
+/* ===== 行内代码（融入正文，不做成按钮） ===== */
 .markdown-content :deep(code):not(pre code):not(.code-block-wrapper code) {
-  background: #F1F5F9;
-  color: #2563EB;
-  padding: 2px 7px;
-  border-radius: 5px;
+  background: var(--md-tint-2);
+  color: var(--md-accent);
+  padding: 2px 6px;
+  border-radius: var(--md-radius-sm);
   font-size: 0.9em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-weight: 500;
+  word-break: break-word;
 }
 
-:global(html.dark) .markdown-content :deep(code):not(pre code):not(.code-block-wrapper code) {
-  background: #1E293B;
-  color: #60A5FA;
+/* ===== 表格（强独立内容：轻边框容器 + 横向滚动 + 表头吸顶） ===== */
+.markdown-content :deep(.table-wrapper) {
+  margin: var(--md-space-lg) 0;
+  border: 1px solid var(--md-border);
+  border-radius: var(--md-radius-lg);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
-
-/* ===== 表格 ===== */
 .markdown-content :deep(table) {
   width: 100%;
-  margin: 24px 0;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid #E2E8F0;
-  border-radius: 10px;
-  overflow: hidden;
 }
-
-:global(html.dark) .markdown-content :deep(table) {
-  border-color: #334155;
-}
-
 .markdown-content :deep(th) {
-  background: #F8FAFC;
+  position: sticky;
+  top: 0;
+  background: var(--md-tint-2);
   padding: 12px 16px;
   font-size: 13px;
   font-weight: 700;
-  color: #475569;
+  color: var(--md-text-muted);
   text-align: left;
-  border-bottom: 1px solid #E2E8F0;
+  border-bottom: 1px solid var(--md-border);
+  z-index: 1;
 }
-
-:global(html.dark) .markdown-content :deep(th) {
-  background: #1E293B;
-  color: #94A3B8;
-  border-color: #334155;
-}
-
 .markdown-content :deep(td) {
   padding: 12px 16px;
   font-size: 14px;
-  color: #334155;
-  border-bottom: 1px solid #F1F5F9;
+  color: var(--md-text);
+  border-bottom: 1px solid var(--md-border-soft);
 }
-
 .markdown-content :deep(tr:last-child td) {
   border-bottom: none;
 }
-
 .markdown-content :deep(tr:hover td) {
-  background: #F8FAFC;
+  background: var(--md-tint);
 }
 
-:global(html.dark) .markdown-content :deep(td) {
-  color: #CBD5E1;
-  border-color: #1E293B;
-}
-
-:global(html.dark) .markdown-content :deep(tr:hover td) {
-  background: #0F172A;
-}
-
-/* ===== 图片 ===== */
+/* ===== 图片（强独立内容） ===== */
 .markdown-content :deep(img) {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 24px auto;
-  border-radius: 10px;
-  border: 1px solid #E2E8F0;
+  margin: var(--md-space-lg) auto;
+  border-radius: var(--md-radius-md);
+  border: 1px solid var(--md-border-soft);
 }
-
-:global(html.dark) .markdown-content :deep(img) {
-  border-color: #334155;
+.markdown-content :deep(figure) {
+  margin: var(--md-space-lg) 0;
+}
+.markdown-content :deep(figcaption) {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--md-text-muted);
+  text-align: center;
 }
 
 /* ===== 分割线 ===== */
 .markdown-content :deep(hr) {
   border: none;
   height: 1px;
-  background: #E2E8F0;
+  background: var(--md-border);
   margin: 36px 0;
 }
 
-:global(html.dark) .markdown-content :deep(hr) {
-  background: #334155;
+/* ===== 自定义容器（统一结构：左侧强调线 + 极浅底色 + 标题） ===== */
+.markdown-content :deep(.custom-block) {
+  margin: var(--md-space-lg) 0;
+  padding: 14px 18px;
+  border-radius: 0 var(--md-radius-md) var(--md-radius-md) 0;
+  border-left: 3px solid var(--accent, var(--md-accent));
+  background: var(--accent-bg, var(--md-tint));
 }
-
-/* ===== 自定义容器 ===== */
-:deep(.custom-block) {
-  margin: 20px 0;
-  padding: 16px 20px;
-  border-radius: 10px;
-}
-
-:deep(.custom-block-title) {
-  margin-bottom: 8px;
-  font-size: 15px;
+.markdown-content :deep(.custom-block-title) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 14px;
   font-weight: 700;
+  color: var(--accent, var(--md-accent));
+}
+.markdown-content :deep(.custom-block > p) {
+  margin-bottom: 8px;
+  color: var(--md-text);
+}
+.markdown-content :deep(.custom-block > p:last-child) {
+  margin-bottom: 0;
+}
+/* 各语义类型仅通过强调色区分，结构完全统一 */
+.markdown-content :deep(.tip)     { --accent: #06B6D4; --accent-bg: #ECFEFF; }
+.markdown-content :deep(.note)     { --accent: #2563EB; --accent-bg: #EFF6FF; }
+.markdown-content :deep(.warning)  { --accent: #F59E0B; --accent-bg: #FFFBEB; }
+.markdown-content :deep(.danger)   { --accent: #F43F5E; --accent-bg: #FFF1F2; }
+.markdown-content :deep(.example)  { --accent: #8B5CF6; --accent-bg: #F5F3FF; }
+.markdown-content :deep(.success)  { --accent: #16A34A; --accent-bg: #F0FDF4; }
+:global(html.dark) .markdown-content :deep(.tip)    { --accent: #22D3EE; --accent-bg: #083344; }
+:global(html.dark) .markdown-content :deep(.note)   { --accent: #60A5FA; --accent-bg: #172554; }
+:global(html.dark) .markdown-content :deep(.warning){ --accent: #FBBF24; --accent-bg: #422006; }
+:global(html.dark) .markdown-content :deep(.danger) { --accent: #FB7185; --accent-bg: #4C0519; }
+:global(html.dark) .markdown-content :deep(.example){ --accent: #A78BFA; --accent-bg: #2E1065; }
+:global(html.dark) .markdown-content :deep(.success){ --accent: #4ADE80; --accent-bg: #052E16; }
+
+/* ===== 折叠块 / 详情块（紧凑标题行 + 展开动画） ===== */
+.markdown-content :deep(details) {
+  margin: var(--md-space-md) 0;
+  border: 1px solid var(--md-border);
+  border-radius: var(--md-radius-md);
+  padding: 0 16px;
+  background: var(--md-tint);
+}
+.markdown-content :deep(summary) {
+  cursor: pointer;
+  padding: 12px 0;
+  font-weight: 600;
+  color: var(--md-text-strong);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.markdown-content :deep(summary)::-webkit-details-marker { display: none; }
+.markdown-content :deep(summary)::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+.markdown-content :deep(details[open] > summary)::before {
+  transform: rotate(90deg);
+}
+.markdown-content :deep(details > *:not(summary)) {
+  padding-bottom: 14px;
 }
 
-.markdown-content :deep(.warning) {
-  background: #FFFBEB;
-  border-left: 3px solid #F59E0B;
+/* ===== Mermaid / 图表（强独立内容：中性容器 + 横向滚动） ===== */
+.markdown-content :deep(.mermaid) {
+  margin: var(--md-space-lg) 0;
+  padding: 20px;
+  background: var(--md-tint);
+  border: 1px solid var(--md-border-soft);
+  border-radius: var(--md-radius-lg);
+  overflow-x: auto;
+  text-align: center;
+  scrollbar-width: thin;
+}
+.markdown-content :deep(.mermaid svg) {
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
-.markdown-content :deep(.danger) {
-  background: #FFF1F2;
-  border-left: 3px solid #F43F5E;
+/* ===== 公式（块级：轻容器 + 横向滚动；行内：融入正文） ===== */
+.markdown-content :deep(.katex-display),
+.markdown-content :deep(.math-block) {
+  margin: var(--md-space-lg) 0;
+  padding: 16px 20px;
+  background: var(--md-tint);
+  border: 1px solid var(--md-border-soft);
+  border-radius: var(--md-radius-md);
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+  scrollbar-width: thin;
+  cursor: zoom-in;
 }
-
-.markdown-content :deep(.tip) {
-  background: #ECFEFF;
-  border-left: 3px solid #06B6D4;
+.markdown-content :deep(.katex-display > .katex) {
+  font-size: 1.15em;
 }
-
-:global(html.dark) .markdown-content :deep(.warning) {
-  background: #422006;
+.markdown-content :deep(.katex) {
+  color: var(--md-text);
+  font-size: 1.05em;
 }
-
-:global(html.dark) .markdown-content :deep(.danger) {
-  background: #4C0519;
-}
-
-:global(html.dark) .markdown-content :deep(.tip) {
-  background: #083344;
+/* 行内公式：与正文基线一致，不另起样式 */
+.markdown-content :deep(.katex-error) {
+  color: #DC2626;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* ===== 任务列表 ===== */
@@ -1139,22 +1216,21 @@ onUnmounted(() => {
   position: relative;
   padding-left: 4px;
 }
-
 .markdown-content :deep(.task-list-item input) {
   margin-right: 8px;
-  accent-color: #2563EB;
+  accent-color: var(--md-accent);
+}
+.markdown-content :deep(.task-list-item.task-list-item-checked) {
+  color: var(--md-text-muted);
+  text-decoration: line-through;
 }
 
 /* ===== 脚注 ===== */
 .markdown-content :deep(.footnotes) {
   margin-top: 36px;
   padding-top: 24px;
-  border-top: 1px solid #E2E8F0;
+  border-top: 1px solid var(--md-border);
   font-size: 13px;
-}
-
-:global(html.dark) .markdown-content :deep(.footnotes) {
-  border-color: #334155;
 }
 
 /* ===== 移动端适配 ===== */
@@ -1228,20 +1304,6 @@ html:not(.dark) .markdown-article .markdown-content :is(code):not(pre code):not(
 
 html.dark .markdown-article .markdown-content :is(code):not(pre code):not(.code-block-wrapper code) {
   color: #60A5FA;
-}
-
-html:not(.dark) .markdown-article .markdown-content thead,
-html:not(.dark) .markdown-article .markdown-content thead th {
-  color: #475569 !important;
-  border-color: #E2E8F0 !important;
-  background-color: #F8FAFC !important;
-}
-
-html.dark .markdown-article .markdown-content thead,
-html.dark .markdown-article .markdown-content thead th {
-  color: #94A3B8 !important;
-  border-color: #334155 !important;
-  background-color: #1E293B !important;
 }
 
 /* Prism token 色彩覆盖 - 亮色主题 */
