@@ -532,6 +532,28 @@ export interface ProblemDetailData {
 export const getProblem = (id: number) =>
   apiRequest<ProblemDetailData>(`/problems/${id}`, { skipAuth: true });
 
+/**
+ * 将后端返回的样例数据统一归一化为「{ input, output } 对象数组」。
+ * 后端可能返回 JSON 字符串（如 '[{"input":"1","output":"2"}]'）或已解析的数组，
+ * 也可能为空/非法。字符串若被直接交给 v-for 会按字符遍历，导致渲染出大量空样例。
+ */
+export function normalizeSamples(raw: unknown): Array<{ input: string; output: string }> {
+  if (!raw) return [];
+  let arr: unknown = raw;
+  if (typeof raw === 'string') {
+    try {
+      arr = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr.map((s: any) => ({
+    input: typeof s?.input === 'string' ? s.input : '',
+    output: typeof s?.output === 'string' ? s.output : '',
+  }));
+}
+
 export const createContestProblem = (contestId: number, data: {
   problem_index: string;
   title: string;

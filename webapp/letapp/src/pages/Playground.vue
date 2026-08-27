@@ -3,7 +3,7 @@ import {
   computed, defineAsyncComponent, markRaw, onMounted, onUnmounted, ref, watch,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiRequest, getContestProblem, getProblem, type ContestProblemData, type ProblemDetailData } from "../services/api";
+import { apiRequest, getContestProblem, getProblem, normalizeSamples, type ContestProblemData, type ProblemDetailData } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
 
@@ -399,7 +399,7 @@ const loadContestProblem = async () => {
   problemId.value = pid;
   try {
     const data = await getContestProblem(pid);
-    contestProblem.value = data;
+    contestProblem.value = { ...data, samples: normalizeSamples(data.samples) };
   } catch {
     // silently fail
   }
@@ -464,7 +464,7 @@ const mapProblemDetailToContest = (detail: ProblemDetailData): ContestProblemDat
   memory_limit: detail.memoryLimit ?? 256,
   difficulty: detail.difficulty || "简单",
   testcase_count: detail.testCaseCount ?? 0,
-  samples: detail.samples || [],
+  samples: normalizeSamples(detail.samples),
 });
 
 const closeProblemSelector = () => {

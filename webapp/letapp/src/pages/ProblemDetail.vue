@@ -14,6 +14,7 @@ import {
   addFavorite,
   removeFavorite,
   listMySubmissions,
+  normalizeSamples,
 } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useProblemCode } from '../composables/useProblemCode';
@@ -455,6 +456,9 @@ const loadProblem = async () => {
   problem.value = null;
   try {
     problem.value = await apiRequest<Problem>(`/problems/${problemId.value}`, { skipAuth: true });
+  if (problem.value) {
+    problem.value.samples = normalizeSamples(problem.value.samples);
+  }
   } catch (e: any) {
     problemLoadError.value = e?.message || '题目加载失败，请稍后重试。';
   } finally {
