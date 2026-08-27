@@ -16,6 +16,7 @@ contest_problem_result = api.model('ContestProblemResult', {
     'score': fields.Integer(description='本题得分(OI)'),
     'status': fields.String(description='本题最终状态'),
     'submissions': fields.Integer(description='本题提交次数'),
+    'solve_minutes': fields.Integer(description='通过该题距比赛开始的分钟数(ACM)'),
 })
 
 contest_ranking_model = api.model('ContestRanking', {
@@ -37,6 +38,40 @@ contest_rankings_response = api.model('ContestRankingsResponse', {
 })
 
 
+def _as_datetime(v):
+    """将可能为字符串/ datetime 的值统一解析为 datetime；无法解析返回 None。"""
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except Exception:
+            return None
+    return None
+
+
+def _wall_delta_minutes(a, b):
+    """计算两个时间点的墙钟时间差（分钟），与服务器时区无关。
+
+    数据库存储约定：start_time 与 submitted_at 均经 psycopg 的
+    session timezone(Asia/Shanghai) 以「墙钟」形式落地为 naive 值，因此两者
+    处于同一墙钟坐标系。直接按 naive 相减即可得到正确的「距比赛开始的时长」，
+    避免 aware/naive 混用或 .timestamp() 带来的时区偏移。
+    """
+    a = _as_datetime(a)
+    b = _as_datetime(b)
+    if a is None or b is None:
+        return 0
+    if a.tzinfo is not None:
+        a = a.replace(tzinfo=None)
+    if b.tzinfo is not None:
+        b = b.replace(tzinfo=None)
+    try:
+        return int((a - b).total_seconds() / 60)
+    except Exception:
+        return 0
+
+
 def _compute_rankings(contest_id: int):
     """根据比赛模式计算实时排行榜"""
     try:
@@ -45,6 +80,8 @@ def _compute_rankings(contest_id: int):
         return None
 
     mode = 'OI' if 'oi' in (contest.contest_type or '').lower() else 'ACM'
+    # ACM 模式罚时：每道已解题的罚时 = 该题首次 AC 用时(分钟) + 此前失败次数 * 罚时(分钟)
+    penalty_minutes = int(getattr(contest, 'penalty_time', 20) or 20)
 
     # 题目顺序（用于列展示）
     problems = list(
@@ -54,11 +91,8 @@ def _compute_rankings(contest_id: int):
     )
     problem_indexes = [p.problem_index for p in problems]
 
-    start_ts = contest.start_time
-    if start_ts and isinstance(start_ts, datetime):
-        start_ts = start_ts.timestamp()
-    else:
-        start_ts = None
+    # 比赛开始时间（用于计算每题通过时刻距开始的时间段）
+    contest_start = contest.start_time
 
     # 拉取全部提交记录
     rows = list(
@@ -87,6 +121,7 @@ def _compute_rankings(contest_id: int):
             'passed': 0,
             'total': sub.total,
             'status': sub.status,
+            'solve_minutes': 0,
         })
         st['attempts'] += 1
         st['total'] = sub.total
@@ -100,14 +135,12 @@ def _compute_rankings(contest_id: int):
             if is_ac and not st['ac']:
                 st['ac'] = True
                 st['ac_time'] = sub.submitted_at
-            # 记录首次 AC 之前的失败次数（罚时），用已记录尝试数-1（不含本次）
-            if is_ac and st['ac_time'] is not None and st['ac_time'] == sub.submitted_at:
-                failed_before = st['attempts'] - 1
-                if start_ts is not None and sub.submitted_at:
-                    ac_minutes = int((sub.submitted_at.timestamp() - start_ts) / 60)
-                else:
-                    ac_minutes = 0
-                st['penalty_contrib'] = ac_minutes + failed_before * 20
+                # 首次 AC 距比赛开始的分钟数（时间段）
+                failed_before = st['attempts'] - 1  # 本次之前的提交均为未通过
+                ac_minutes = _wall_delta_minutes(sub.submitted_at, contest_start)
+                st['solve_minutes'] = max(ac_minutes, 0)
+                # 本题贡献 = 通过用时 + 未通过次数 * 罚时
+                st['penalty_contrib'] = st['solve_minutes'] + failed_before * penalty_minutes
         else:
             # OI: 取最高分
             if sub_score > st['best_score']:
@@ -141,6 +174,7 @@ def _compute_rankings(contest_id: int):
                     'score': 0,
                     'status': '—',
                     'submissions': 0,
+                    'solve_minutes': None,
                 })
                 continue
             if mode == 'ACM':
@@ -155,6 +189,7 @@ def _compute_rankings(contest_id: int):
                     'score': 0,
                     'status': 'AC' if p['ac'] else p['status'],
                     'submissions': p['attempts'],
+                    'solve_minutes': p.get('solve_minutes', 0) if p['ac'] else None,
                 })
             else:
                 score += p['best_score']

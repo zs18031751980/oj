@@ -138,9 +138,10 @@ onUnmounted(() => {
                 <span
                   v-if="pr.solved"
                   class="ui-badge ui-badge-green"
-                  :title="`状态: ${pr.status}｜通过 ${pr.passed}/${pr.total}｜提交 ${pr.submissions} 次`"
+                  :title="`状态: ${pr.status}｜通过 ${pr.passed}/${pr.total}｜提交 ${pr.submissions} 次｜距比赛开始 ${pr.solve_minutes ?? 0} 分钟`"
                 >
                   {{ isOI() ? pr.score : '✓' }}
+                  <span v-if="!isOI() && pr.solve_minutes != null" class="ml-1 text-[10px] font-normal opacity-80">{{ pr.solve_minutes }}m</span>
                 </span>
                 <span
                   v-else-if="pr.submissions > 0"

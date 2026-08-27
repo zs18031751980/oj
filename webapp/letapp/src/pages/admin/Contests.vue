@@ -28,6 +28,7 @@ const contestForm = ref({
   contest_type: 'ACM',
   start_time: '',
   end_time: '',
+  penalty_time: 20,
 });
 
 // 题目列表
@@ -331,7 +332,7 @@ const saveContest = async () => {
     await createContest(payload);
     message.success('比赛创建成功');
     showContestForm.value = false;
-    contestForm.value = { title: '', description: '', contest_type: 'ACM', start_time: '', end_time: '' };
+    contestForm.value = { title: '', description: '', contest_type: 'ACM', start_time: '', end_time: '', penalty_time: 20 };
     await loadContests();
   } catch (e) {
     message.error(e instanceof Error ? e.message : '创建失败');
@@ -520,6 +521,18 @@ onMounted(loadContests);
               <label class="mb-1 block text-sm font-bold">结束时间</label>
               <input v-model="contestForm.end_time" type="datetime-local" step="60" class="ui-input w-full" />
             </div>
+          </div>
+          <div>
+            <label class="mb-1 block text-sm font-bold">罚时（分钟）</label>
+            <input
+              v-model.number="contestForm.penalty_time"
+              type="number"
+              min="0"
+              step="1"
+              class="ui-input w-full"
+              placeholder="ACM 模式：每次未通过提交计入的罚时，默认 20"
+            />
+            <p class="mt-1 text-xs text-[#94A3B8]">ACM 模式生效：本题罚时 = 首次通过用时(分钟) + 未通过次数 × 罚时。</p>
           </div>
         </div>
         <div class="mt-6 flex justify-end gap-3">

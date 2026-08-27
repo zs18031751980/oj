@@ -77,27 +77,128 @@ def _detect_language(code: str) -> str:
     return 'python'
 
 
-def _generate_testcases(correct_answer: str, count: int = 100) -> list[dict]:
+def _run_reference_twice(
+    code: str, language: str, stdin: str, timeout: int, memory_limit: int | None
+) -> tuple[str | None, bool]:
+    """
+    运行参考代码两次并返回 (输出, 是否自洽)。
+
+    - 仅编译一次（cpp/java），执行两次，保证性能与一致性；
+    - 若任一运行编译/运行/超时/内存出错（输出为 None），返回 (None, False)；
+    - 若两次运行输出不一致（非确定性），返回 (输出, False)；
+    - 否则返回 (去尾空白后的输出, True)。
+    这样既保证参考代码在比赛限制内稳定通过，又能过滤掉非确定性用例。
+    """
+    try:
+        if language == 'cpp':
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
+                f.write(code)
+                f.flush()
+                src = f.name
+            exe_path = src + '.exe'
+            try:
+                compile_result = subprocess.run(
+                    ['g++', '-o', exe_path, src],
+                    capture_output=True, text=True, timeout=max(timeout, 10),
+                )
+                if compile_result.returncode != 0:
+                    return (None, False)
+                r1 = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
+                if r1[0] is None:
+                    return (None, False)
+                r2 = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
+                if r2[0] is None:
+                    return (None, False)
+                return (r1[0].strip(), r1[0] == r2[0])
+            finally:
+                os.unlink(src)
+                if os.path.exists(exe_path):
+                    os.unlink(exe_path)
+
+        elif language == 'java':
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
+                f.write(code)
+                f.flush()
+                java_src = f.name
+            try:
+                class_dir = os.path.dirname(java_src)
+                compile_result = subprocess.run(
+                    ['javac', java_src],
+                    capture_output=True, text=True, timeout=max(timeout, 10),
+                )
+                if compile_result.returncode != 0:
+                    return (None, False)
+                r1 = _interpret(
+                    _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
+                    is_compiled=True,
+                )
+                if r1[0] is None:
+                    return (None, False)
+                r2 = _interpret(
+                    _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
+                    is_compiled=True,
+                )
+                if r2[0] is None:
+                    return (None, False)
+                return (r1[0].strip(), r1[0] == r2[0])
+            finally:
+                try:
+                    if os.path.exists(java_src):
+                        os.unlink(java_src)
+                    class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
+                    if os.path.exists(class_file):
+                        os.unlink(class_file)
+                except Exception:
+                    pass
+
+        else:
+            r1 = _run_code(code, language, stdin, timeout, memory_limit)
+            if r1[0] is None:
+                return (None, False)
+            r2 = _run_code(code, language, stdin, timeout, memory_limit)
+            if r2[0] is None:
+                return (None, False)
+            return (r1[0].strip(), r1[0] == r2[0])
+    except Exception:
+        return (None, False)
+
+
+def _generate_testcases(
+    correct_answer: str,
+    count: int = 100,
+    time_limit_ms: int = 1000,
+    memory_limit_mb: int = 256,
+) -> list[dict]:
     """
     根据正确答案生成测试用例。
-    策略：生成随机输入，运行正确代码获取输出，保存为测试用例。
+
+    关键自洽性保证：生成时使用与正式比赛判题完全相同的
+    time_limit / memory_limit，并且对每个随机输入运行参考代码两次：
+      - 若参考代码在该输入下编译/运行/超时/内存出错（输出为 None），丢弃该用例；
+      - 若两次运行输出不一致（非确定性），丢弃该用例。
+    这样生成的每个测试用例都一定能被“正确答案”在比赛限制内稳定通过，
+    避免“新建题目时输入的答案，在正式比赛提交时却过不了样例”的问题。
     """
     language = _detect_language(correct_answer)
+    timeout_sec = max((int(time_limit_ms) or 1000) / 1000.0, 1)
+    memory_limit = int(memory_limit_mb) if memory_limit_mb else None
+
     testcases = []
-
-    for i in range(count):
-        # 生成随机输入（简单策略：随机数字/字符串）
-        input_data = _generate_random_input(i)
-
-        # 运行正确代码获取输出
-        output, output_err = _run_code(correct_answer, language, input_data)
-        if output is not None:
+    seed = 0
+    # 多尝试一些随机种子，补齐足够的有效用例
+    while len(testcases) < count and seed < count * 3:
+        input_data = _generate_random_input(seed)
+        output, verified = _run_reference_twice(
+            correct_answer, language, input_data, timeout_sec, memory_limit
+        )
+        if output is not None and verified:
             testcases.append({
                 'input_data': input_data,
-                'expected_output': output.strip(),
-                'is_sample': i < 3,  # 前3个作为样例
-                'sort_order': i,
+                'expected_output': output,
+                'is_sample': len(testcases) < 3,  # 前3个作为样例
+                'sort_order': len(testcases),
             })
+        seed += 1
 
     return testcases
 
@@ -366,8 +467,11 @@ class ContestProblemListController(Resource):
             sort_order=data.get('sort_order', 0),
         )
 
-        # 自动生成100组测试用例
-        testcases = _generate_testcases(data['correct_answer'], 100)
+        # 自动生成测试用例：使用与正式比赛判题一致的时限/内存限制
+        testcases = _generate_testcases(
+            data['correct_answer'], 100,
+            data.get('time_limit', 1000), data.get('memory_limit', 256),
+        )
         for tc in testcases:
             ContestTestcase.create(
                 contest_problem=problem,
@@ -478,8 +582,11 @@ class RegenerateTestcasesController(Resource):
             ContestTestcase.contest_problem == problem
         ).execute()
 
-        # 生成新测试用例
-        testcases = _generate_testcases(problem.correct_answer, 100)
+        # 生成新测试用例：使用与正式比赛判题一致的时限/内存限制
+        testcases = _generate_testcases(
+            problem.correct_answer, 100,
+            problem.time_limit or 1000, problem.memory_limit or 256,
+        )
         for tc in testcases:
             ContestTestcase.create(
                 contest_problem=problem,

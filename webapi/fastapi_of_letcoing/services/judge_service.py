@@ -12,6 +12,7 @@ import asyncio
 import json
 import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
@@ -343,6 +344,7 @@ class JudgeWorker:
                     total=total,
                     score=score,
                     language=language,
+                    submitted_at=datetime.now(timezone.utc),
                 )
         except Exception as exc:
             self.logger.error("保存比赛提交记录失败", exc)

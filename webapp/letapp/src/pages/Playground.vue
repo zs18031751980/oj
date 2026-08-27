@@ -807,9 +807,11 @@ watch(selectedLanguage, (lang) => {
                     v-for="(d, i) in submitResult.details"
                     :key="i"
                     :class="[getJudgeStatus(d.status).badge]"
+                    :title="`#${i + 1}：${getJudgeStatus(d.status).label}`"
                   >
                     <span class="ide-submit-detail-idx">#{{ i + 1 }}</span>
-                    <span class="ide-submit-detail-status">{{ getJudgeStatus(d.status).short }}</span>
+                    <span class="ide-submit-detail-status">{{ getJudgeStatus(d.status).label }}</span>
+                    <span class="ide-submit-detail-short">{{ getJudgeStatus(d.status).short }}</span>
                   </li>
                 </ul>
               </div>

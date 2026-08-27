@@ -330,6 +330,7 @@ class Contest(BaseModel):
     end_time = DateTimeField(null=True, verbose_name="结束时间")
     created_by = IntegerField(null=True, verbose_name="创建者ID")
     is_public = BooleanField(default=True, verbose_name="是否公开")
+    penalty_time = IntegerField(default=20, verbose_name="罚时(分钟, ACM 模式)")
 
     class Meta:
         table_name = "contests"
@@ -590,9 +591,9 @@ _SCHEMA_MIGRATIONS = [
             "updated_at TIMESTAMP DEFAULT now());",
         ],
     ),
-    (
-        "0003_contest_problems_testcases",
-        [
+        (
+            "0003_contest_problems_testcases",
+            [
             # contest_problems 表
             "CREATE TABLE IF NOT EXISTS contest_problems ("
             "id SERIAL PRIMARY KEY, "
@@ -711,6 +712,13 @@ _SCHEMA_MIGRATIONS = [
             "created_at TIMESTAMP DEFAULT now());",
             "CREATE INDEX IF NOT EXISTS idx_contest_submissions_contest "
             "ON contest_submissions(contest_id, user_id);",
+        ],
+    ),
+    (
+        "0010_contest_penalty_time",
+        [
+            # 比赛增加可配置的罚时（分钟），用于 ACM 模式排行榜罚时计算
+            "ALTER TABLE contests ADD COLUMN IF NOT EXISTS penalty_time INTEGER DEFAULT 20;",
         ],
     ),
 ]

@@ -389,6 +389,7 @@ export interface ContestData {
   status: string;
   start_time: string | null;
   end_time: string | null;
+  penalty_time: number;
   participants_count: number;
   created_at: string;
 }
@@ -399,9 +400,15 @@ export const listContests = (status?: string) =>
 export const getContest = (id: number) =>
   apiRequest<ContestData>(`/contests/${id}`);
 
-export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string }) =>
+export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; penalty_time?: number }) =>
   apiRequest<ContestData>('/contests/', {
     method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+export const updateContest = (id: number, data: Partial<{ title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; penalty_time?: number; status?: string }>) =>
+  apiRequest<ContestData>(`/contests/${id}`, {
+    method: 'PUT',
     body: JSON.stringify(data),
   });
 
@@ -531,6 +538,7 @@ export interface ContestProblemResult {
   score: number;
   status: string;
   submissions: number;
+  solve_minutes?: number | null;
 }
 
 export interface ContestRankingData {

@@ -25,6 +25,7 @@ contest_input = api.model('ContestInput', {
     'contest_type': fields.String(default='ACM', description='比赛类型'),
     'start_time': fields.String(description='开始时间'),
     'end_time': fields.String(description='结束时间'),
+    'penalty_time': fields.Integer(default=20, description='罚时(分钟, ACM 模式)'),
 })
 
 
@@ -151,6 +152,7 @@ class ContestListController(Resource):
             start_time=start_time,
             end_time=end_time,
             created_by=user.id,
+            penalty_time=int(data.get('penalty_time', 20) or 20),
         )
         return _contest_to_dict(contest), 201
 
@@ -195,6 +197,11 @@ class ContestDetailController(Resource):
             parsed = _parse_dt(data['end_time'])
             if parsed is not None:
                 contest.end_time = parsed
+        if 'penalty_time' in data:
+            try:
+                contest.penalty_time = int(data['penalty_time'] or 20)
+            except (ValueError, TypeError):
+                pass
         contest.save()
         return _contest_to_dict(contest), 200
 
