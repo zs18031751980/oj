@@ -59,7 +59,7 @@ const defaultProblemForm = () => ({
   memory_limit: 256,
   difficulty: '中等',
   language: 'cpp',
-  samples: [{ input: '', output: '' }] as { input: string; output: string }[],
+  samples: [] as { input: string; output: string }[],
 });
 
 const problemForm = ref(defaultProblemForm());
@@ -182,10 +182,6 @@ const addSample = () => {
   problemForm.value.samples.push({ input: '', output: '' });
 };
 const removeSample = (index: number) => {
-  if (problemForm.value.samples.length <= 1) {
-    problemForm.value.samples = [{ input: '', output: '' }];
-    return;
-  }
   if (!confirm(`确认删除样例 ${index + 1}？`)) return;
   problemForm.value.samples.splice(index, 1);
 };
@@ -328,7 +324,7 @@ const openProblemForm = (problem?: any) => {
     editingProblemId.value = problem.id;
     const samples = Array.isArray(problem.samples) && problem.samples.length
       ? problem.samples
-      : [{ input: '', output: '' }];
+      : [];
     problemForm.value = {
       problem_index: problem.problem_index,
       title: problem.title,
@@ -796,6 +792,10 @@ onMounted(loadContests);
                         <div class="problem-sample-count">{{ sample.output.length }} / 2000</div>
                       </div>
                     </div>
+                  </div>
+                  <div v-if="problemForm.samples.length === 0" class="problem-sample-empty">
+                    <Icon icon="material-symbols:science-outline" class="h-5 w-5" />
+                    <span>尚未添加样例，点击下方按钮新增标准输入/输出</span>
                   </div>
                   <button class="problem-add-sample" @click="addSample">
                     <Icon icon="material-symbols:add" class="h-4 w-4" />
@@ -1681,6 +1681,21 @@ onMounted(loadContests);
 }
 :global(.dark) .problem-add-sample {
   background: #151B23;
+  border-color: #27313D;
+}
+.problem-sample-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #98A2B3;
+  background: #F8FAFC;
+  border: 1px dashed #E2E8F0;
+  border-radius: 10px;
+}
+:global(.dark) .problem-sample-empty {
+  background: #10151C;
   border-color: #27313D;
 }
 
