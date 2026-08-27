@@ -3,7 +3,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase
 from core.di_container import inject
-from interfaces.service_interfaces import IJWTService
+from interfaces.service_interfaces import IJWTService, IRedisService
 
 api = Namespace('contests', description='比赛管理接口')
 
