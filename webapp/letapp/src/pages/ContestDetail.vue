@@ -43,7 +43,7 @@ const loadData = async () => {
 };
 
 const openProblem = (problemId: number) => {
-  router.push(`/contests/${contestId}/problems/${problemId}`);
+  router.push(`/playground?contest=${contestId}&problem=${problemId}`);
 };
 
 onMounted(loadData);
