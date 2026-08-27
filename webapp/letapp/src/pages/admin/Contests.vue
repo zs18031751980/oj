@@ -629,8 +629,8 @@ onMounted(loadContests);
                   </div>
                 </div>
                 <div class="problem-section-body">
-                  <div class="problem-grid-12">
-                    <div class="problem-col-3">
+                  <div class="problem-basic-row">
+                    <div class="problem-field">
                       <label class="problem-label">题目编号 <span class="problem-required">*</span></label>
                       <input
                         v-model="problemForm.problem_index"
@@ -640,33 +640,36 @@ onMounted(loadContests);
                         maxlength="10"
                         @blur="validateField('problem_index')"
                       />
-                      <span v-if="formErrors.problem_index" class="problem-form-error">{{ formErrors.problem_index }}</span>
+                      <span class="problem-form-error">{{ formErrors.problem_index }}</span>
                     </div>
-                    <div class="problem-col-3">
+                    <div class="problem-field">
                       <label class="problem-label">难度</label>
                       <select v-model="problemForm.difficulty" class="problem-input">
                         <option value="简单">简单</option>
                         <option value="中等">中等</option>
                         <option value="困难">困难</option>
                       </select>
+                      <span class="problem-form-error"></span>
                     </div>
-                    <div class="problem-col-3">
+                    <div class="problem-field">
                       <label class="problem-label">时间限制</label>
                       <div class="problem-input-with-unit">
                         <input v-model.number="problemForm.time_limit" type="number" class="problem-input" min="100" max="10000" />
                         <span class="problem-input-unit">ms</span>
                       </div>
+                      <span class="problem-form-error"></span>
                     </div>
-                    <div class="problem-col-3">
+                    <div class="problem-field">
                       <label class="problem-label">内存限制</label>
                       <div class="problem-input-with-unit">
                         <input v-model.number="problemForm.memory_limit" type="number" class="problem-input" min="64" max="1024" />
                         <span class="problem-input-unit">MB</span>
                       </div>
+                      <span class="problem-form-error"></span>
                     </div>
                   </div>
-                  <div class="problem-grid-12">
-                    <div class="problem-col-12">
+                  <div class="problem-basic-row">
+                    <div class="problem-field problem-field-full">
                       <label class="problem-label">题目标题 <span class="problem-required">*</span></label>
                       <input
                         v-model="problemForm.title"
@@ -675,7 +678,7 @@ onMounted(loadContests);
                         placeholder="请输入题目标题，例如：两数之和"
                         @blur="validateField('title')"
                       />
-                      <span v-if="formErrors.title" class="problem-form-error">{{ formErrors.title }}</span>
+                      <span class="problem-form-error">{{ formErrors.title }}</span>
                     </div>
                   </div>
                 </div>
@@ -713,14 +716,14 @@ onMounted(loadContests);
                         <span class="problem-hint">{{ descCharCount }} / 10,000</span>
                       </div>
                     </div>
-                    <span v-if="formErrors.description" class="problem-form-error">{{ formErrors.description }}</span>
+                    <span class="problem-form-error">{{ formErrors.description }}</span>
                   </div>
-                  <div class="problem-grid-12">
-                    <div class="problem-col-6">
+                  <div class="problem-basic-row">
+                    <div class="problem-field">
                       <label class="problem-label">输入格式</label>
                       <textarea v-model="problemForm.input_desc" class="problem-textarea" rows="4" placeholder="第一行包含..."></textarea>
                     </div>
-                    <div class="problem-col-6">
+                    <div class="problem-field">
                       <label class="problem-label">输出格式</label>
                       <textarea v-model="problemForm.output_desc" class="problem-textarea" rows="4" placeholder="输出一个整数..."></textarea>
                     </div>
@@ -847,7 +850,7 @@ onMounted(loadContests);
                         @scroll="onCodeScroll"
                       ></textarea>
                     </div>
-                    <span v-if="formErrors.correct_answer" class="problem-form-error">{{ formErrors.correct_answer }}</span>
+                    <span class="problem-form-error">{{ formErrors.correct_answer }}</span>
                   </div>
                 </div>
               </section>
@@ -1307,15 +1310,24 @@ onMounted(loadContests);
   gap: 18px;
 }
 
-/* 12 列网格 */
-.problem-grid-12 {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
+/* === 对齐相关：统一字段行（flex 布局，同行底部对齐） === */
+.problem-basic-row {
+  display: flex;
+  align-items: flex-end;   /* 同行控件垂直底部对齐 */
   gap: 16px;
+  flex-wrap: wrap;
 }
-.problem-col-3 { grid-column: span 3; }
-.problem-col-6 { grid-column: span 6; }
-.problem-col-12 { grid-column: span 12; }
+.problem-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 150px;
+}
+.problem-field-full {
+  flex: 1 1 100%;
+  min-width: 0;
+}
 
 /* 表单字段 */
 .problem-form-field {
@@ -1324,9 +1336,12 @@ onMounted(loadContests);
   gap: 6px;
 }
 .problem-label {
+  display: block;
   font-size: 13px;
   font-weight: 600;
+  line-height: 18px;
   color: #344054;
+  text-align: left;
 }
 :global(.dark) .problem-label {
   color: #D0D5DD;
@@ -1338,9 +1353,11 @@ onMounted(loadContests);
 
 /* 输入框 */
 .problem-input {
+  width: 100%;
   height: 44px;
   padding: 0 14px;
   font-size: 14px;
+  line-height: 44px;
   color: #1E293B;
   background: #FFFFFF;
   border: 1px solid #D9E0E8;
@@ -1372,9 +1389,11 @@ onMounted(loadContests);
 .problem-input-with-unit {
   display: flex;
   align-items: center;
+  width: 100%;
 }
 .problem-input-with-unit .problem-input {
   flex: 1;
+  width: auto;
   border-radius: 8px 0 0 8px;
   border-right: none;
 }
@@ -1447,12 +1466,13 @@ onMounted(loadContests);
   background: #10151C;
   border-color: #27313D;
 }
+/* === 对齐相关：工具栏/底栏与编辑区左边缘对齐 === */
 .problem-md-toolbar {
   display: flex;
   align-items: center;
   gap: 2px;
   height: 40px;
-  padding: 0 8px;
+  padding: 0 14px;
   background: #F8FAFC;
   border-bottom: 1px solid #E5EAF0;
 }
@@ -1498,7 +1518,7 @@ onMounted(loadContests);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: #F8FAFC;
   border-top: 1px solid #E5EAF0;
 }
@@ -1854,10 +1874,13 @@ onMounted(loadContests);
 .problem-input-error:focus {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
 }
+/* === 对齐相关：错误提示常驻占位，避免报错时撑开同行控件 === */
 .problem-form-error {
   display: block;
+  min-height: 16px;
   margin-top: 4px;
   font-size: 12px;
+  line-height: 16px;
   color: #EF4444;
 }
 
@@ -2163,13 +2186,13 @@ onMounted(loadContests);
   color: #94A3B8;
 }
 
-/* 底部操作栏 */
+/* 底部操作栏：左下状态、右下按钮组，统一底部对齐 */
 .problem-modal-footer {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   height: 80px;
-  padding: 0 28px;
+  padding: 0 28px 18px;
   border-top: 1px solid #E5EAF0;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.88);
