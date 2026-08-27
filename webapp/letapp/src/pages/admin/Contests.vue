@@ -1269,7 +1269,7 @@ onMounted(loadContests);
   border: 1px solid #E5EAF0;
   border-radius: 16px;
   padding: 4px 28px;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 :global(.dark) .problem-editor-surface {
   background: #151B23;
