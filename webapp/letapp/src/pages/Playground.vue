@@ -7,6 +7,8 @@ import { apiRequest, getContestProblem, getProblem, normalizeSamples, type Conte
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
 import { getJudgeStatus } from "../utils/judgeStatus";
+import { Icon } from "@iconify/vue";
+import { useProblemStats } from "../composables/useProblemStats";
 
 const MarkdownComponent = defineAsyncComponent(
   () => import("../components/MarkdownComponent.vue"),
@@ -239,6 +241,7 @@ const submitCode = async () => {
           body: JSON.stringify({ code: source, language: selectedLanguage.value }),
         },
       );
+      incrementSubmissions(contestProblem.value!.id);
       let detail: any = null;
       for (let i = 0; i < 40; i++) {
         await new Promise((r) => setTimeout(r, 800));
@@ -248,6 +251,9 @@ const submitCode = async () => {
         if (detail && detail.status && detail.status !== "Pending" && detail.status !== "Judging") {
           break;
         }
+      }
+      if (detail?.status === "AC") {
+        incrementAccepted(contestProblem.value!.id);
       }
       submitResult.value = {
         status: detail?.status || "Pending",
@@ -475,6 +481,33 @@ const closeProblemSelector = () => {
 const difficultyClass = (d: string) =>
   d === "简单" ? "diff-easy" : d === "中等" ? "diff-mid" : "diff-hard";
 
+// 与题库题目渲染保持一致的难度标签配色
+const difficultyTagClass = (d: string) =>
+  d === "简单"
+    ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"
+    : d === "中等"
+      ? "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+      : "bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400";
+
+const copyText = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    /* ignore */
+  }
+};
+
+const runThisSample = (sample: { input: string; output: string }) => {
+  stdin.value = sample.input;
+  expectedOutput.value = sample.output;
+  activeBottomTab.value = "testcase";
+  void runCode();
+};
+
+// 题目提交/通过统计（与题库题目渲染保持一致的统计组件）
+const { getStats, incrementSubmissions, incrementAccepted } = useProblemStats();
+const problemStats = computed(() => getStats(contestProblem.value?.id ?? -1));
+
 onMounted(() => {
   const languageParam = route.query.language as string | undefined;
   if (languageParam && languages.some((lang) => lang.value === languageParam)) {
@@ -567,48 +600,79 @@ watch(selectedLanguage, (lang) => {
             </div>
             <div class="ide-panel-body">
               <div v-if="activeLeftTab === 'problem'" class="ide-problem-content">
-                <div class="ide-problem-header">
-                  <h2>{{ contestProblem.title }}</h2>
-                  <div class="ide-problem-meta">
-                    <span :class="difficultyClass(contestProblem.difficulty)">{{ contestProblem.difficulty }}</span>
-                    <span>⏱ {{ contestProblem.time_limit }}ms</span>
-                    <span>💾 {{ contestProblem.memory_limit }}MB</span>
+                <div class="problem-info">
+                  <div class="problem-info-head">
+                    <span class="problem-no-lg">#{{ contestProblem.problem_index }}</span>
+                    <h1 class="problem-title">{{ contestProblem.title }}</h1>
+                    <span class="diff-tag" :class="difficultyTagClass(contestProblem.difficulty)">{{ contestProblem.difficulty }}</span>
+                  </div>
+                  <div class="problem-meta">
+                    <span class="meta-item"><Icon icon="material-symbols:timer" class="h-4 w-4" />{{ contestProblem.time_limit }}ms</span>
+                    <span class="meta-item"><Icon icon="material-symbols:memory" class="h-4 w-4" />{{ contestProblem.memory_limit }}MB</span>
+                  </div>
+                  <div v-if="(contestProblem as any).tags?.length" class="problem-tags">
+                    <span v-for="tag in (contestProblem as any).tags" :key="tag" class="tag-pill">{{ tag }}</span>
+                  </div>
+                  <div class="problem-stat">
+                    <span>本题提交 <b>{{ problemStats.submissions }}</b> 次</span>
+                    <span class="dot">·</span>
+                    <span>通过 <b>{{ problemStats.accepted }}</b> 次</span>
+                    <span v-if="problemStats.submissions" class="dot">·</span>
+                    <span v-if="problemStats.submissions">通过率 <b>{{ Math.round((problemStats.accepted / problemStats.submissions) * 100) }}%</b></span>
                   </div>
                 </div>
-                <div v-if="contestProblem.description" class="ide-problem-desc">
-                  <MarkdownComponent :content="{ content: contestProblem.description }" :show-nav="false" :show-heading-links="false" />
-                </div>
-                <div v-if="contestProblem.input_desc" class="mt-4">
-                  <h3>输入格式</h3>
-                  <div class="ide-sample"><pre>{{ contestProblem.input_desc }}</pre></div>
-                </div>
-                <div v-if="contestProblem.output_desc" class="mt-4">
-                  <h3>输出格式</h3>
-                  <div class="ide-sample"><pre>{{ contestProblem.output_desc }}</pre></div>
-                </div>
-                <div v-if="contestProblem.samples && contestProblem.samples.length" class="mt-4">
-                  <h3>样例</h3>
-                  <div
-                    v-for="(s, idx) in contestProblem.samples"
-                    :key="idx"
-                    class="ide-sample-block"
-                  >
-                    <div class="ide-sample-label">示例 {{ idx + 1 }} 输入</div>
-                    <div class="ide-sample"><pre>{{ s.input }}</pre></div>
-                    <div class="ide-sample-label">示例 {{ idx + 1 }} 输出</div>
-                    <div class="ide-sample"><pre>{{ s.output }}</pre></div>
+
+                <section class="md-section">
+                  <div class="md-head">题目描述</div>
+                  <div class="md-body markdown-body text-sm leading-7">
+                    <MarkdownComponent :content="{ content: contestProblem.description }" :show-nav="false" :show-heading-links="false" />
                   </div>
-                </div>
+                </section>
+
+                <section class="md-section" v-if="contestProblem.input_desc">
+                  <div class="md-head">输入格式</div>
+                  <p class="md-body whitespace-pre-line text-sm leading-7 text-slate-700 dark:text-slate-300">{{ contestProblem.input_desc }}</p>
+                </section>
+
+                <section class="md-section" v-if="contestProblem.output_desc">
+                  <div class="md-head">输出格式</div>
+                  <p class="md-body whitespace-pre-line text-sm leading-7 text-slate-700 dark:text-slate-300">{{ contestProblem.output_desc }}</p>
+                </section>
+
+                <section class="md-section" v-if="contestProblem.samples && contestProblem.samples.length">
+                  <div class="md-head">样例</div>
+                  <div class="sample-list space-y-4">
+                    <div v-for="(sample, i) in contestProblem.samples" :key="i" class="sample-card">
+                      <div class="sample-head">
+                        <span>样例 #{{ i + 1 }}</span>
+                        <button class="sample-run" @click="runThisSample(sample)">
+                          <Icon icon="material-symbols:play-arrow" class="h-4 w-4" />运行此样例
+                        </button>
+                      </div>
+                      <div class="sample-io-row">
+                        <div class="sample-io">
+                          <div class="sample-io-head">输入<button class="copy-btn" @click="copyText(sample.input)">复制</button></div>
+                          <pre class="sample-io-body">{{ sample.input }}</pre>
+                        </div>
+                        <div class="sample-io-divider"></div>
+                        <div class="sample-io">
+                          <div class="sample-io-head">输出<button class="copy-btn" @click="copyText(sample.output)">复制</button></div>
+                          <pre class="sample-io-body">{{ sample.output }}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
                 <div class="mt-4">
                   <button class="ide-change-problem-btn" @click="openProblemSelector">更换题目</button>
                 </div>
               </div>
               <div v-else-if="activeLeftTab === 'submissions'" class="ide-submissions">
-                <p class="ide-empty-hint">暂无提交记录</p>
+                <p class="ide-empty-hint">还没有提交记录</p>
               </div>
               <div v-else class="ide-hints">
-                <div class="ide-hint-card">可以使用哈希表来优化查找过程</div>
-                <div class="ide-hint-card">时间复杂度要求 O(n)</div>
+                <div class="ide-empty-hint">本题暂无额外提示</div>
               </div>
             </div>
           </template>
@@ -1373,4 +1437,204 @@ html.dark .ide-problem-item-title { color: #E5E7EB; }
 /* ===== 弹窗过渡 ===== */
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+
+/* ===== 题目面板（与题库题目渲染保持一致） ===== */
+.problem-info { margin-bottom: 1.25rem; }
+.problem-info-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.problem-no-lg {
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+:global(.dark) .problem-no-lg { color: #64748b; }
+.problem-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.3;
+  color: #1e293b;
+}
+:global(.dark) .problem-title { color: #e2e8f0; }
+.diff-tag {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+}
+.problem-meta {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.6rem;
+}
+.meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+}
+:global(.dark) .meta-item { color: #94a3b8; }
+.problem-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+}
+.tag-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  transition: background 0.15s, color 0.15s;
+}
+:global(.dark) .tag-pill {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+.problem-stat {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+:global(.dark) .problem-stat { color: #94a3b8; }
+.problem-stat b { color: #1e293b; }
+:global(.dark) .problem-stat b { color: #e2e8f0; }
+.problem-stat .dot { color: #cbd5e1; }
+
+.md-section { margin-bottom: 1.25rem; }
+.md-head {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1e293b;
+  padding-left: 0.6rem;
+  border-left: 3px solid #2563eb;
+  margin-bottom: 0.6rem;
+}
+:global(.dark) .md-head { color: #e2e8f0; }
+.md-body { color: #334155; }
+:global(.dark) .md-body { color: #cbd5e1; }
+
+.sample-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+:global(.dark) .sample-card { border-color: #1e293b; }
+.sample-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #475569;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+:global(.dark) .sample-head {
+  background: #1e293b;
+  color: #cbd5e1;
+  border-color: #1e293b;
+}
+.sample-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #2563eb;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.5rem;
+  transition: background 0.15s;
+}
+.sample-run:hover { background: #eff6ff; }
+:global(.dark) .sample-run { color: #60a5fa; }
+:global(.dark) .sample-run:hover { background: #172554; }
+.sample-io-row { display: flex; min-height: 6rem; }
+.sample-io-row .sample-io {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sample-io-row .sample-io-body { flex: 1; }
+.sample-io-divider { width: 1px; background: #e2e8f0; align-self: stretch; }
+:global(.dark) .sample-io-divider { background: #1e293b; }
+@media (max-width: 480px) {
+  .sample-io-row { flex-direction: column; min-height: auto; }
+  .sample-io-divider { width: 100%; height: 1px; }
+}
+.sample-io {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.sample-io-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #64748b;
+  background: #f1f5f9;
+}
+:global(.dark) .sample-io-head { background: #1e293b; color: #94a3b8; }
+.sample-io-body {
+  margin: 0;
+  padding: 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f1f5f9;
+  color: #334155;
+  overflow: auto;
+}
+:global(.dark) .sample-io-body { background: #0f172a; color: #6ee7b7; }
+.copy-btn {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.35rem;
+  transition: background 0.15s;
+}
+.copy-btn:hover { background: #e2e8f0; }
+:global(.dark) .copy-btn { color: #94a3b8; }
+:global(.dark) .copy-btn:hover { background: #334155; }
+
+/* markdown 正文代码块/表格（与题库题目渲染保持一致） */
+.markdown-body :deep(pre) {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 0.6rem;
+  padding: 0.8rem;
+  overflow: auto;
+}
+.markdown-body :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+}
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 0.6rem;
+}
 </style>

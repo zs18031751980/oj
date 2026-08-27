@@ -409,9 +409,9 @@ const runThisSample = (sample: TestCase) => {
   selfTestStatus.value = '';
   selfTestVerdict.value = null;
   selfTestOutput.value = '';
-  activeResultTab.value = 'testcases';
+  activeResultTab.value = 'run';
   resultVisible.value = true;
-  message.info('已将样例输入/输出填入测试区');
+  void runSelfTest();
 };
 
 /* ============ 复制 ============ */

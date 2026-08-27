@@ -12,6 +12,8 @@ import mdMark from 'markdown-it-mark';
 import markdownItAnchor from 'markdown-it-anchor';
 import markdownItContainer from 'markdown-it-container';
 import markdownItMermaid from '@jsonlee_12138/markdown-it-mermaid';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-bash';
 import 'prismjs/components/prism-c';
@@ -142,6 +144,88 @@ md.use(mdExpandTabs)
   .use(mdSup)
   .use(mdMark)
   .use(markdownItMermaid({ delay: 100 }));
+
+// 公式渲染：行内 $...$ 与块级 $$...$$ 交由 KaTeX 处理
+const renderKatex = (md: any): void => {
+  // 块级公式 $$...$$
+  md.block.ruler.before('fence', 'katex_block', (state: any, startLine: number, endLine: number, silent: boolean) => {
+    const startPos = state.bMarks[startLine] + state.tShift[startLine];
+    const maxPos = state.eMarks[startLine];
+    if (startPos + 1 >= maxPos) return false;
+    if (state.src.slice(startPos, startPos + 2) !== '$$') return false;
+
+    let content = '';
+    let found = false;
+    let lastLine = startLine;
+    const firstLine = state.src.slice(startPos + 2, maxPos);
+    if (firstLine.trim().endsWith('$$')) {
+      content = firstLine.trim().slice(0, -2).trim();
+      found = true;
+    } else {
+      content = firstLine;
+      for (let line = startLine + 1; line < endLine; line++) {
+        const ls = state.bMarks[line] + state.tShift[line];
+        const le = state.eMarks[line];
+        const text = state.src.slice(ls, le);
+        if (text.trim().endsWith('$$')) {
+          content += '\n' + text.trim().slice(0, -2);
+          lastLine = line;
+          found = true;
+          break;
+        }
+        content += '\n' + text;
+        lastLine = line;
+      }
+    }
+    if (!found) return false;
+    if (!silent) {
+      const token = state.push('katex_block', 'math', 0);
+      token.block = true;
+      token.content = content.trim();
+      token.map = [startLine, lastLine + 1];
+    }
+    state.line = lastLine + 1;
+    return true;
+  });
+
+  md.renderer.rules['katex_block'] = (tokens: any, idx: number) =>
+    safeKatex(tokens[idx].content, true);
+
+  // 行内公式 $...$（\$ 转义不参与解析；$$ 交给块级规则）
+  md.inline.ruler.before('escape', 'katex_inline', (state: any, silent: boolean) => {
+    const start = state.pos;
+    if (state.src[start] !== '$') return false;
+    if (start > 0 && state.src[start - 1] === '\\') return false;
+    if (state.src[start + 1] === '$') return false;
+    const end = state.src.indexOf('$', start + 1);
+    if (end === -1 || end === start + 1) return false;
+    const content = state.src.slice(start + 1, end);
+    if (!content.trim()) return false;
+    if (!silent) {
+      const token = state.push('katex_inline', 'math', 0);
+      token.content = content;
+    }
+    state.pos = end + 1;
+    return true;
+  });
+
+  md.renderer.rules['katex_inline'] = (tokens: any, idx: number) =>
+    safeKatex(tokens[idx].content, false);
+};
+
+const safeKatex = (content: string, displayMode: boolean): string => {
+  try {
+    return katex.renderToString(content, {
+      displayMode,
+      throwOnError: false,
+      errorColor: '#DC2626',
+    });
+  } catch {
+    return `<span class="katex-error">${escapeHtml(content)}</span>`;
+  }
+};
+
+md.use(renderKatex);
 
 const resolveMdLink = (href: string, baseDir: string): string | null => {
   if (!href || href.startsWith('#') || href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('javascript:')) {
