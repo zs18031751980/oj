@@ -276,6 +276,13 @@
   :where(.dark) .ui-btn-ghost {
     @apply text-[#94A3B8] hover:bg-[#1E293B];
   }
+  /* 置灰按钮：不在比赛时间范围内时禁用“进入比赛” */
+  .ui-btn-disabled {
+    @apply cursor-not-allowed bg-[#E2E8F0] text-[#94A3B8];
+  }
+  :where(.dark) .ui-btn-disabled {
+    @apply bg-[#1E293B] text-[#64748B];
+  }
   .ui-btn-lg { @apply h-11 px-6 text-base; }
   .ui-btn-md { @apply h-10 px-4; }
   .ui-btn-sm { @apply h-8 px-3 text-xs; }

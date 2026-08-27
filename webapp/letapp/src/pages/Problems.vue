@@ -72,10 +72,19 @@ const categoryLabelMap: Record<string, string> = {
 };
 const categoryDisplayName = (key: string) => categoryLabelMap[key] || key;
 
-const categories = computed(() => {
-  const set = new Set<string>();
-  problems.value.forEach((p) => p.category && set.add(p.category));
-  return Array.from(set);
+interface CategoryOption {
+  key: string;
+  label: string;
+}
+const categories = computed<CategoryOption[]>(() => {
+  const seen = new Map<string, string>();
+  for (const p of problems.value) {
+    if (!p.category) continue;
+    if (!seen.has(p.category)) {
+      seen.set(p.category, p.categoryLabel || categoryDisplayName(p.category));
+    }
+  }
+  return Array.from(seen, ([key, label]) => ({ key, label }));
 });
 
 const filteredProblems = computed(() => {
@@ -238,12 +247,12 @@ onMounted(() => {
                 <button class="filter-item" :class="{ active: categoryFilter === '' }" @click="categoryFilter = ''">全部分类</button>
                 <button
                   v-for="c in categories"
-                  :key="c"
+                  :key="c.key"
                   class="filter-item"
-                  :class="{ active: categoryFilter === c }"
-                  @click="categoryFilter = categoryFilter === c ? '' : c"
+                  :class="{ active: categoryFilter === c.key }"
+                  @click="categoryFilter = categoryFilter === c.key ? '' : c.key"
                 >
-                  {{ categoryDisplayName(c) }}
+                  {{ c.label }}
                 </button>
               </div>
             </div>

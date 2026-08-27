@@ -43,17 +43,23 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
         config_service = get_container().resolve(IConfigService)
         db_config = config_service.get_database_config()
 
-        db = PooledPostgresqlExtDatabase(
-            db_config["database"],
+        connect_kwargs = dict(
+            database=db_config["database"],
             user=db_config["username"],
             password=db_config["password"],
             host=db_config["host"],
             port=db_config["port"],
             max_connections=db_config["max_connections"],
             stale_timeout=db_config["stale_timeout"],
-            options="-c timezone=Asia/Shanghai"
+            options="-c timezone=Asia/Shanghai",
         )
-        print(f"[DB] 数据库连接已创建: {db_config['host']}:{db_config['port']}/{db_config['database']}")
+        # 仅在需要时使用 SSL（如 Zeabur DATABASE_URL 含 ?sslmode=require）
+        if db_config.get("ssl"):
+            connect_kwargs["ssl"] = True
+
+        db = PooledPostgresqlExtDatabase(**connect_kwargs)
+        print(f"[DB] 数据库连接已创建: {db_config['host']}:{db_config['port']}/{db_config['database']}"
+              f"{' (ssl)' if db_config.get('ssl') else ''}")
         return db
     except Exception:
         config = DatabaseConfig()
@@ -415,10 +421,29 @@ class ContestProblem(BaseModel):
     difficulty = CharField(max_length=20, default="中等", verbose_name="难度")
     language = CharField(max_length=20, default="cpp", verbose_name="参考代码语言")
     samples = TextField(default="[]", verbose_name="样例输入输出(JSON)")
+    score = IntegerField(default=100, verbose_name="题目满分(OI模式计分用)")
     sort_order = IntegerField(default=0, verbose_name="排序序号")
 
     class Meta:
         table_name = "contest_problems"
+
+
+class ContestSubmission(BaseModel):
+    """比赛提交记录（用于实时排行榜统计，按比赛模式计分）"""
+    id = AutoField(primary_key=True, verbose_name="提交ID")
+    contest = ForeignKeyField(Contest, backref="submissions", verbose_name="所属比赛")
+    user = ForeignKeyField(User, backref="contest_submissions", verbose_name="提交用户")
+    contest_problem = ForeignKeyField(ContestProblem, backref="submissions", verbose_name="所属比赛题目")
+    problem_index = CharField(max_length=10, default="", verbose_name="题目编号")
+    status = CharField(max_length=20, default="WA", verbose_name="结果(AC/Partial/WA)")
+    passed = IntegerField(default=0, verbose_name="通过用例数")
+    total = IntegerField(default=0, verbose_name="用例总数")
+    score = IntegerField(default=0, verbose_name="本题得分(OI模式)")
+    language = CharField(max_length=20, default="cpp", verbose_name="提交语言")
+    submitted_at = DateTimeField(default=datetime.now, verbose_name="提交时间")
+
+    class Meta:
+        table_name = "contest_submissions"
 
 
 class ContestTestcase(BaseModel):
@@ -468,8 +493,7 @@ class LearnBrowsingHistory(BaseModel):
 # 所有已注册模型的列表（用于表创建和删除操作）
 MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
           Contest, ContestParticipant, Discussion, DiscussionReply,
-          DiscussionLike, DiscussionReplyLike,
-          ContestProblem, ContestTestcase, LearnFavorite, LearnBrowsingHistory]
+          ContestProblem, ContestTestcase, ContestSubmission, LearnFavorite, LearnBrowsingHistory]
 
 
 def create_tables():
@@ -664,6 +688,29 @@ _SCHEMA_MIGRATIONS = [
         [
             "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS language VARCHAR(20) DEFAULT 'cpp';",
             "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS samples TEXT DEFAULT '[]';",
+        ],
+    ),
+    (
+        "0009_contest_submissions_and_score",
+        [
+            # contest_problems 增加满分字段（OI 模式计分用）
+            "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS score INTEGER DEFAULT 100;",
+            # contest_submissions 表（实时排行榜数据源）
+            "CREATE TABLE IF NOT EXISTS contest_submissions ("
+            "id SERIAL PRIMARY KEY, "
+            "contest_id INTEGER REFERENCES contests(id) ON DELETE CASCADE, "
+            "user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, "
+            "contest_problem_id INTEGER REFERENCES contest_problems(id) ON DELETE CASCADE, "
+            "problem_index VARCHAR(10) DEFAULT '', "
+            "status VARCHAR(20) DEFAULT 'WA', "
+            "passed INTEGER DEFAULT 0, "
+            "total INTEGER DEFAULT 0, "
+            "score INTEGER DEFAULT 0, "
+            "language VARCHAR(20) DEFAULT 'cpp', "
+            "submitted_at TIMESTAMP DEFAULT now(), "
+            "created_at TIMESTAMP DEFAULT now());",
+            "CREATE INDEX IF NOT EXISTS idx_contest_submissions_contest "
+            "ON contest_submissions(contest_id, user_id);",
         ],
     ),
 ]

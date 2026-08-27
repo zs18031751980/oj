@@ -18,8 +18,13 @@ from pathlib import Path  # 用于跨平台路径操作
 
 # 统一后端时间基准为 UTC+8（Asia/Shanghai）：模型默认 created_at/updated_at 使用
 # datetime.now()，若线上主机时区非 UTC+8 会导致与数据库 now() 不一致。固定进程时区，
+# 强制将进程时区固定为 Asia/Shanghai（UTC+8）。
+# 注意：必须使用赋值而非 setdefault——Zeabur 等平台默认注入 TZ=UTC，
+# 若用 setdefault 则无法覆盖，会导致 datetime.now() 返回 UTC，而数据库会话(session)
+# 时区为 Asia/Shanghai，二者不一致将产生 8 小时偏差（created_at/submitted_at/
+# 比赛开始结束时间/排行榜罚时等全部错位）。
 # 配合数据库连接会话的 timezone=Asia/Shanghai，保证全链路时间统一为 UTC+8。
-os.environ.setdefault('TZ', 'Asia/Shanghai')
+os.environ['TZ'] = 'Asia/Shanghai'
 try:
     time.tzset()
 except Exception:
@@ -47,6 +52,7 @@ from controllers.favorite_controller import api as favorite_api
 from controllers.contest_controller import api as contest_api
 from controllers.discussion_controller import api as discussion_api
 from controllers.rankings_controller import api as rankings_api
+from controllers.contest_rankings_controller import api as contest_rankings_api
 from controllers.contest_problem_controller import api as contest_problem_api
 from controllers.learn_favorite_controller import api as learn_favorite_api
 from controllers.learn_history_controller import api as learn_history_api
@@ -514,6 +520,7 @@ api.add_namespace(favorite_api, path='/favorites')
 api.add_namespace(contest_api, path='/contests')
 api.add_namespace(discussion_api, path='/discussions')
 api.add_namespace(rankings_api, path='/rankings')
+api.add_namespace(contest_rankings_api, path='/contests')
 api.add_namespace(contest_problem_api, path='/admin/contests')
 api.add_namespace(learn_favorite_api, path='/learn-favorites')
 api.add_namespace(learn_history_api, path='/learn-history')

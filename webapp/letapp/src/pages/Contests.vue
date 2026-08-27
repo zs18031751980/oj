@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { listContests, joinContest, type ContestData } from '../services/api';
 import { useMessage } from 'naive-ui';
 import { useAuthStore } from '../stores/auth';
-import { formatDateTime } from '../utils/time';
+import { formatDateTime, isWithinTimeRange } from '../utils/time';
 
 const router = useRouter();
 const message = useMessage();
@@ -20,6 +20,19 @@ const goManage = () => {
 const contests = ref<ContestData[]>([]);
 const isLoading = ref(false);
 const error = ref('');
+
+// 定时刷新“当前时间”，使按钮的可用/置灰状态随时间实时切换
+const now = ref(Date.now());
+let timer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  timer = setInterval(() => { now.value = Date.now(); }, 30_000);
+});
+onUnmounted(() => {
+  if (timer) clearInterval(timer);
+});
+
+const isContestOpen = (c: ContestData) =>
+  isWithinTimeRange(c.start_time, c.end_time, now.value);
 
 const filteredContests = computed(() =>
   contests.value.filter(c => c.status === activeTab.value)
@@ -48,21 +61,19 @@ const formatTimeRange = (start?: string | null, end?: string | null) => {
 };
 
 const enterContest = async (c: ContestData) => {
-  if (c.status === 'ongoing') {
-    try {
-      await joinContest(c.id);
-    } catch (e: any) {
-      const msg = e?.message || '';
-      if (!msg.includes('already') && !msg.includes('已加入')) {
-        message.warning('加入比赛失败：' + (msg || '请稍后重试'));
-      }
-    }
-    router.push(`/contests/${c.id}`);
-  } else if (c.status === 'upcoming') {
-    router.push(`/contests/${c.id}`);
-  } else {
-    router.push(`/contests/${c.id}`);
+  if (!isWithinTimeRange(c.start_time, c.end_time)) {
+    message.warning(c.status === 'upcoming' ? '比赛尚未开始，暂不能进入' : '比赛已结束，不能进入');
+    return;
   }
+  try {
+    await joinContest(c.id);
+  } catch (e: any) {
+    const msg = e?.message || '';
+    if (!msg.includes('already') && !msg.includes('已加入')) {
+      message.warning('加入比赛失败：' + (msg || '请稍后重试'));
+    }
+  }
+  router.push(`/contests/${c.id}`);
 };
 
 const loadData = async () => {
@@ -141,10 +152,12 @@ onMounted(loadData);
           <p class="mb-3 text-xs text-[#94A3B8]">{{ c.participants_count }} 人参与</p>
           <button
             class="w-full ui-btn"
-            :class="c.status === 'ongoing' ? 'ui-btn-primary' : c.status === 'upcoming' ? 'ui-btn-secondary' : 'ui-btn-ghost'"
+            :class="isContestOpen(c) ? 'ui-btn-primary' : 'ui-btn-disabled'"
+            :disabled="!isContestOpen(c)"
+            :title="isContestOpen(c) ? '' : (c.status === 'upcoming' ? '比赛尚未开始' : '比赛已结束')"
             @click="enterContest(c)"
           >
-            {{ c.status === 'ongoing' ? '🚀 进入比赛' : c.status === 'upcoming' ? '查看比赛' : '查看结果' }}
+            {{ isContestOpen(c) ? '🚀 进入比赛' : (c.status === 'upcoming' ? '未开始' : '已结束') }}
           </button>
         </div>
       </div>

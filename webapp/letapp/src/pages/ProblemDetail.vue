@@ -15,6 +15,9 @@ import {
   removeFavorite,
   listMySubmissions,
   normalizeSamples,
+  submitLibraryProblem,
+  getLibrarySubmission,
+  type SubmissionResponse,
 } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
 import { useProblemCode } from '../composables/useProblemCode';
@@ -44,6 +47,10 @@ interface Problem {
   timeLimit: number;
   memoryLimit: number;
   learningMaterial?: string;
+  isLibrary?: boolean;
+  contestProblemId?: number;
+  contestId?: number;
+  contestTitle?: string;
 }
 interface SubmissionHistoryItem {
   id: number;
@@ -54,14 +61,6 @@ interface SubmissionHistoryItem {
   status: string;
   time_used: number | null;
   created_at: string | null;
-}
-interface SubmissionResponse {
-  id: number;
-  status: string;
-  testcase_results?: any[];
-  fail_testcase_index?: number | null;
-  time_used?: number;
-  compile_error?: string;
 }
 interface TestResult {
   testCaseIndex: number;
@@ -248,30 +247,43 @@ const submitCode = async () => {
   currentResultPage.value = 0;
   judgePhase.value = 'received';
   try {
-    const created = await apiRequest<SubmissionResponse>('/submissions', {
-      method: 'POST',
-      body: JSON.stringify({
-        problem_id: p.id,
-        code: code.value,
-        language: language.value,
-      }),
-    });
+    const isLibrary = !!p.isLibrary && !!p.contestProblemId;
+    const createdId: number = isLibrary
+      ? (await submitLibraryProblem({
+          contest_problem_id: p.contestProblemId!,
+          code: code.value,
+          language: language.value,
+        })).submission_id
+      : (await apiRequest<SubmissionResponse>('/submissions', {
+          method: 'POST',
+          body: JSON.stringify({
+            problem_id: p.id,
+            code: code.value,
+            language: language.value,
+          }),
+        })).id;
+    const pollUrl = isLibrary
+      ? () => getLibrarySubmission(createdId)
+      : () => apiRequest<SubmissionResponse>(`/submissions/${createdId}`);
     incrementSubmissions(p.id);
     judgePhase.value = 'judging';
-    if (created.status === 'Pending' || created.status === 'Running') {
-      let judged = false;
+    let judged = false;
+    const settle = (res: SubmissionResponse) => {
+      if (judged) return;
+      if (res.status !== 'Pending' && res.status !== 'Running') {
+        judged = true;
+        if (pollTimer.value) {
+          clearInterval(pollTimer.value);
+          pollTimer.value = null;
+        }
+        _handleJudgeResult(res, p);
+      }
+    };
+    if (createdId != null) {
       pollTimer.value = setInterval(async () => {
         try {
-          const res = await apiRequest<SubmissionResponse>(`/submissions/${created.id}`);
-          if (judged) return;
-          if (res.status !== 'Pending' && res.status !== 'Running') {
-            judged = true;
-            if (pollTimer.value) {
-              clearInterval(pollTimer.value);
-              pollTimer.value = null;
-            }
-            _handleJudgeResult(res, p);
-          }
+          const res = await pollUrl();
+          settle(res);
         } catch {
           if (judged) return;
           judged = true;
@@ -284,8 +296,6 @@ const submitCode = async () => {
           message.error('查询判题结果失败');
         }
       }, 1000);
-    } else {
-      _handleJudgeResult(created, p);
     }
   } catch (e: any) {
     message.error(e?.message || '提交失败');
@@ -301,7 +311,7 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
       results.push({
         testCaseIndex: tr.testCaseIndex ?? 0,
         passed: tr.passed,
-        actualOutput: tr.actualOutput || tr.stdout || '',
+        actualOutput: tr.stdout || '',
         input: tr.input || '',
         expected: tr.expected || '',
       });
@@ -329,7 +339,7 @@ const _handleJudgeResult = (res: SubmissionResponse, p: Problem) => {
     compileErrorMsg.value = res.compile_error || '';
     currentResultPage.value = 0;
   } else {
-    submitResult.value = 'WA';
+    submitResult.value = res.status === 'WA' ? 'WA' : res.status;
     const fi = res.fail_testcase_index ?? 0;
     failedTestCaseIndex.value = fi;
     currentResultPage.value = fi;
@@ -720,8 +730,8 @@ const statusInfo: Record<string, { label: string; cls: string }> = {
   Running: { label: '判题中', cls: 'text-cyan-600 dark:text-cyan-400' },
   Pending: { label: '排队中', cls: 'text-slate-500 dark:text-slate-400' },
 };
-const getStatus = (s: string) =>
-  statusInfo[s] ?? { label: s || '未知', cls: 'text-slate-500 dark:text-slate-400' };
+const getStatus = (s: string | null) =>
+  statusInfo[s ?? ''] ?? { label: s || '未知', cls: 'text-slate-500 dark:text-slate-400' };
 
 const difficultyClass = (d: string) =>
   d === '简单'
@@ -1122,7 +1132,7 @@ onUnmounted(() => {
                   </template>
                   <template v-else>
                     <Icon :icon="submitResult === 'AC' ? 'material-symbols:check-circle' : 'material-symbols:cancel'" class="h-5 w-5" />
-                    {{ submitResult === 'AC' ? 'Accepted · 全部通过' : submitResult === 'CE' ? 'Compile Error · 编译错误' : 'Wrong Answer · 答案错误' }}
+                    {{ submitResult === 'AC' ? 'Accepted · 全部通过' : submitResult === 'CE' ? 'Compile Error · 编译错误' : getStatus(submitResult).label }}
                   </template>
                 </div>
 

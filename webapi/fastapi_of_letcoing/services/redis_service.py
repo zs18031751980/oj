@@ -59,15 +59,25 @@ class RedisService(IRedisService, Injectable):
             redis_password = self._config_service.get_config('REDIS_PASSWORD')
             redis_timeout = self._config_service.get_config('REDIS_TIMEOUT', 5)
 
-            self._client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                db=redis_db,
-                password=redis_password,
-                decode_responses=True,          # 自动解码响应为字符串
-                socket_timeout=redis_timeout,    # Socket 超时
-                socket_connect_timeout=redis_timeout  # 连接超时
-            )
+            # 兼容 Zeabur 等平台：若提供了 REDIS_URL 则优先解析（覆盖单项配置）
+            redis_url = self._config_service.get_config('REDIS_URL')
+            if redis_url:
+                self._client = redis.Redis.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    socket_timeout=redis_timeout,
+                    socket_connect_timeout=redis_timeout,
+                )
+            else:
+                self._client = redis.Redis(
+                    host=redis_host,
+                    port=redis_port,
+                    db=redis_db,
+                    password=redis_password,
+                    decode_responses=True,          # 自动解码响应为字符串
+                    socket_timeout=redis_timeout,    # Socket 超时
+                    socket_connect_timeout=redis_timeout  # 连接超时
+                )
 
             # 通过 ping 测试连接
             self._client.ping()

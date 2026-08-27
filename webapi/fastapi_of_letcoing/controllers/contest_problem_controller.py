@@ -90,7 +90,7 @@ def _generate_testcases(correct_answer: str, count: int = 100) -> list[dict]:
         input_data = _generate_random_input(i)
 
         # 运行正确代码获取输出
-        output = _run_code(correct_answer, language, input_data)
+        output, output_err = _run_code(correct_answer, language, input_data)
         if output is not None:
             testcases.append({
                 'input_data': input_data,
@@ -111,47 +111,117 @@ def _generate_random_input(seed: int) -> str:
     return ' '.join(nums)
 
 
-def _run_code(code: str, language: str, stdin: str, timeout: int = 5) -> str | None:
-    """运行代码并返回输出"""
+def _build_preexec(memory_mb: int | None):
+    """构造 preexec_fn：限制子进程虚拟内存（用于检测 MLE）"""
+    if not memory_mb or memory_mb <= 0:
+        return None
+    try:
+        import resource
+
+        limit = int(memory_mb) * 1024 * 1024
+
+        def _limit():
+            try:
+                resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+            except Exception:
+                pass
+
+        return _limit
+    except Exception:
+        return None
+
+
+def _exec_command(cmd: list, stdin: str, timeout: int, memory_mb: int | None):
+    """
+    执行命令并返回 (stdout, stderr, returncode, timed_out, mem_exceeded)。
+    通过 preexec_fn 限制内存，可区分 TLE 与 MLE。
+    """
+    preexec = _build_preexec(memory_mb)
+    try:
+        result = subprocess.run(
+            cmd,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            preexec_fn=preexec,
+        )
+        if memory_mb and result.returncode != 0 and result.stderr and 'MemoryError' in result.stderr:
+            # RLIMIT_AS 触发 Python 内存错误：标记为内存超限
+            return (result.stdout, result.stderr, result.returncode, False, True)
+        return (result.stdout, result.stderr, result.returncode, False, False)
+    except subprocess.TimeoutExpired:
+        return (None, None, None, True, False)
+    except (MemoryError, OSError) as exc:
+        # setrlimit 生效时可能抛出 MemoryError / OSError(12, 'Cannot allocate memory')
+        if isinstance(exc, MemoryError) or (isinstance(exc, OSError) and exc.errno == 12):
+            return (None, None, None, False, True)
+        return (None, None, None, False, False)
+    except Exception:
+        return (None, None, None, False, False)
+
+
+def _interpret(result, is_compiled: bool):
+    """
+    将执行结果转换为 (stdout, error_type)。
+    error_type ∈ {None, 'RE', 'TLE', 'MLE'}。
+    编译阶段错误由调用方单独判定为 'CE'。
+    """
+    stdout, stderr, returncode, timed_out, mem_exceeded = result
+    if timed_out:
+        return (None, 'TLE')
+    if mem_exceeded:
+        return (None, 'MLE')
+    if returncode != 0:
+        # 已编译语言此处仅可能是运行时错误；脚本语言运行失败也归为 RE
+        return (None, 'RE')
+    return (stdout, None)
+
+
+def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_limit: int | None = None) -> tuple[str | None, str | None]:
+    """
+    运行代码并返回 (stdout, error_type)。
+    error_type ∈ {None, 'CE', 'TLE', 'RE', 'MLE'}：
+      - None: 正常运行且有输出
+      - 'CE': 编译错误（cpp/java/go）
+      - 'TLE': 超时
+      - 'RE': 运行时错误（非零退出码）
+      - 'MLE': 内存超出限制
+    """
     try:
         if language == 'python':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                 f.write(code)
                 f.flush()
-                result = subprocess.run(
-                    ['python3', f.name],
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
-                os.unlink(f.name)
-                if result.returncode == 0:
-                    return result.stdout
+                src = f.name
+            try:
+                result = _exec_command(['python3', src], stdin, timeout, memory_limit)
+            finally:
+                os.unlink(src)
+            return _interpret(result, is_compiled=False)
+
         elif language == 'cpp':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
                 f.write(code)
                 f.flush()
-                exe_path = f.name + '.exe'
+                src = f.name
+            exe_path = f.name + '.exe'
+            try:
                 compile_result = subprocess.run(
-                    ['g++', '-o', exe_path, f.name],
+                    ['g++', '-o', exe_path, src],
                     capture_output=True,
                     text=True,
-                    timeout=timeout,
+                    timeout=max(timeout, 10),
                 )
-                os.unlink(f.name)
                 if compile_result.returncode != 0:
-                    return None
-                result = subprocess.run(
-                    [exe_path],
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
-                os.unlink(exe_path)
-                if result.returncode == 0:
-                    return result.stdout
+                    return (None, 'CE')
+                result = _exec_command([exe_path], stdin, timeout, memory_limit)
+            finally:
+                os.unlink(src)
+                if os.path.exists(exe_path):
+                    os.unlink(exe_path)
+            return _interpret(result, is_compiled=True)
+
         elif language == 'java':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
                 f.write(code)
@@ -163,21 +233,13 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5) -> str | N
                     ['javac', java_src],
                     capture_output=True,
                     text=True,
-                    timeout=timeout,
+                    timeout=max(timeout, 10),
                 )
                 if compile_result.returncode != 0:
-                    return None
-                result = subprocess.run(
-                    ['java', '-cp', class_dir, 'Main'],
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
+                    return (None, 'CE')
+                result = _exec_command(
+                    ['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit
                 )
-                if result.returncode == 0:
-                    return result.stdout
-            except (subprocess.TimeoutExpired, Exception):
-                return None
             finally:
                 try:
                     if os.path.exists(java_src):
@@ -187,55 +249,52 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5) -> str | N
                         os.unlink(class_file)
                 except Exception:
                     pass
+            return _interpret(result, is_compiled=True)
+
         elif language == 'go':
             with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
                 f.write(code)
                 f.flush()
                 go_src = f.name
             try:
-                result = subprocess.run(
-                    ['go', 'run', go_src],
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=max(timeout, 15),
+                result = _exec_command(
+                    ['go', 'run', go_src], stdin, max(timeout, 15), memory_limit
                 )
-                if result.returncode == 0:
-                    return result.stdout
-            except (subprocess.TimeoutExpired, Exception):
-                return None
             finally:
                 try:
                     if os.path.exists(go_src):
                         os.unlink(go_src)
                 except Exception:
                     pass
+            # go run 同时完成编译与运行，非零退出码统一视为编译错误之外归为 RE
+            stdout, stderr, returncode, timed_out, mem_exceeded = result
+            if timed_out:
+                return (None, 'TLE')
+            if mem_exceeded:
+                return (None, 'MLE')
+            if returncode != 0:
+                # go 无独立编译阶段，编译失败也归为 CE 以便前端区分
+                return (None, 'CE')
+            return (stdout, None)
+
         elif language in ('javascript', 'js', 'node'):
             with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
                 f.write(code)
                 f.flush()
                 js_src = f.name
             try:
-                result = subprocess.run(
-                    ['node', js_src],
-                    input=stdin,
-                    capture_output=True,
-                    text=True,
-                    timeout=timeout,
-                )
-                if result.returncode == 0:
-                    return result.stdout
-            except (subprocess.TimeoutExpired, Exception):
-                return None
+                result = _exec_command(['node', js_src], stdin, timeout, memory_limit)
             finally:
                 try:
                     if os.path.exists(js_src):
                         os.unlink(js_src)
                 except Exception:
                     pass
+            return _interpret(result, is_compiled=False)
+
     except (subprocess.TimeoutExpired, Exception):
         pass
-    return None
+    return (None, 'RE')
 
 
 def _problem_to_dict(p: ContestProblem) -> dict:

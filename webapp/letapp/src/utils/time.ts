@@ -45,3 +45,15 @@ export function formatTime(value: unknown, options?: Intl.DateTimeFormatOptions)
   if (!d) return '';
   return d.toLocaleTimeString('zh-CN', { timeZone: TIME_ZONE, ...options });
 }
+
+// 判断当前时间是否处于比赛设定的时间范围内（开始时间 <= 现在 <= 结束时间）。
+// 仅设置开始时间：开始后可进入；仅设置结束时间：结束前可进入；
+// 两者都未设置：视为无时间限制，允许进入。
+// 传入 nowMs 可基于指定时刻判定（用于随时间实时刷新）。
+export function isWithinTimeRange(start?: string | null, end?: string | null, nowMs: number = Date.now()): boolean {
+  const s = toDate(start)?.getTime();
+  const e = toDate(end)?.getTime();
+  if (s != null && nowMs < s) return false;
+  if (e != null && nowMs > e) return false;
+  return true;
+}

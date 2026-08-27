@@ -1,0 +1,19 @@
+# Zeabur 部署构建配置
+# 判题服务（judge_service / contest_problem_controller）通过子进程调用下列
+# 编译器/运行时来编译与运行用户提交的代码，Zeabur 默认 Python 镜像并不包含它们，
+# 需在构建阶段通过 apt 安装，否则比赛题目的判题（含排行榜数据源）在线上无法工作。
+[phases.setup]
+aptPkgs = ["g++", "nodejs", "openjdk-17-jdk", "golang-go"]
+
+# 确保 python3 可用（judge 以 subprocess 调用 `python3`）
+[phases.install]
+cmds = ["python3 -m pip install --upgrade pip"]
+
+# 启动命令：直接运行 main.py。start_judge_worker() 在模块导入时即启动（位于
+# `if __name__ == '__main__'` 之外），因此无论 Zeabur 用 python3 还是 gunicorn
+# 启动，后台判题 Worker 都会随之拉起；main.py 已读取环境变量 PORT 并绑定 0.0.0.0。
+[phases.start]
+cmd = "python3 main.py"
+
+# 将 pip 依赖安装作为独立阶段由 Nixpacks 默认处理，这里仅声明运行时需要暴露的端口由
+# 启动命令读取环境变量 PORT（main.py 已支持），无需额外配置。

@@ -63,6 +63,12 @@ const routes = [
         component: () => import('./pages/ContestProblemDetail.vue'),
       },
       {
+        path: '/contests/:id/rankings',
+        name: 'ContestRankings',
+        meta: { title: '比赛排行榜 - Let Coding' },
+        component: () => import('./pages/ContestRankings.vue'),
+      },
+      {
         path: '/rankings',
         name: 'Rankings',
         meta: { title: '排行榜 - Let Coding' },

@@ -6,6 +6,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiRequest, getContestProblem, getProblem, normalizeSamples, type ContestProblemData, type ProblemDetailData } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
+import { getJudgeStatus } from "../utils/judgeStatus";
 
 const MarkdownComponent = defineAsyncComponent(
   () => import("../components/MarkdownComponent.vue"),
@@ -726,16 +727,25 @@ watch(selectedLanguage, (lang) => {
                 {{ submitResult.message }}
               </div>
               <div v-else class="ide-submit-summary">
-                <div class="ide-submit-verdict" :class="submitResult.status === 'AC' ? 'pass' : (submitResult.status === 'Partial' ? 'partial' : 'failed')">
-                  {{ submitResult.status === 'AC' ? '✓ 全部通过' : submitResult.status === 'Partial' ? '◑ 部分通过' : '✗ 未通过' }}
+                <div
+                  class="ide-submit-verdict"
+                  :class="[getJudgeStatus(submitResult.status).badge, getJudgeStatus(submitResult.status).text]"
+                >
+                  <span class="ide-submit-verdict-dot" :class="getJudgeStatus(submitResult.status).dot"></span>
+                  {{ getJudgeStatus(submitResult.status).solved ? '✓ ' : '✗ ' }}{{ getJudgeStatus(submitResult.status).label }}
+                  <span class="ide-submit-verdict-short">{{ getJudgeStatus(submitResult.status).short }}</span>
                 </div>
                 <p v-if="submitResult.total != null" class="ide-submit-count">
                   通过 {{ submitResult.passed }} / {{ submitResult.total }} 组测试用例
                 </p>
                 <ul v-if="submitResult.details && submitResult.details.length" class="ide-submit-details">
-                  <li v-for="(d, i) in submitResult.details" :key="i" :class="{ pass: d.passed, fail: !d.passed }">
+                  <li
+                    v-for="(d, i) in submitResult.details"
+                    :key="i"
+                    :class="[getJudgeStatus(d.status).badge]"
+                  >
                     <span class="ide-submit-detail-idx">#{{ i + 1 }}</span>
-                    <span class="ide-submit-detail-status">{{ d.status }}</span>
+                    <span class="ide-submit-detail-status">{{ getJudgeStatus(d.status).short }}</span>
                   </li>
                 </ul>
               </div>
@@ -1205,6 +1215,17 @@ html.dark .ide-io-textarea { border-color: #374151; background: #1F2937; color: 
 .ide-submit-details li.fail { background: #FEE2E2; color: #DC2626; }
 .ide-submit-detail-idx { opacity: 0.7; }
 .ide-submit-detail-status { font-family: 'JetBrains Mono', monospace; }
+
+.ide-submit-verdict {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 12px; border-radius: 6px;
+  font-size: 14px; font-weight: 800;
+}
+.ide-submit-verdict-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.ide-submit-verdict-short {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 700; opacity: 0.85;
+}
 
 /* ===== 底部操作栏 ===== */
 .ide-action-bar {

@@ -12,6 +12,7 @@ import asyncio
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from core.di_container import get_container
@@ -213,11 +214,14 @@ class JudgeWorker:
 
     def _process_contest_task(self, task: dict):
         """处理比赛题目判题任务（本地执行，对比题目存储的测试用例）"""
-        from models.db_models import ContestProblem, ContestTestcase
+        from models.db_models import (
+            Contest, ContestProblem, ContestTestcase, ContestSubmission, User,
+        )
 
         submission_id = task.get("submission_id")
         contest_id = task.get("contest_id")
         problem_id = task.get("problem_id")
+        user_id = task.get("user_id")
         code = task.get("code", "")
         language = task.get("language", "cpp")
 
@@ -231,6 +235,10 @@ class JudgeWorker:
                 "status": "Error", "passed": 0, "total": 0, "details": [],
             })
             return
+
+        # 按题目的运行时长与内存限制进行判题（time_limit 单位 ms → 秒，至少 1s）
+        time_limit_sec = max((problem.time_limit or 1000) / 1000.0, 1)
+        memory_limit = problem.memory_limit or None
 
         testcases = list(
             ContestTestcase.select()
@@ -251,10 +259,18 @@ class JudgeWorker:
 
         def _judge_one(tc):
             expected = (tc.expected_output or "").strip()
-            output = _run_code(code, language, tc.input_data, timeout=3)
-            if output is None:
-                return {"passed": False, "status": "RE", "expected": expected, "actual": None}
-            actual = output.strip()
+            output, err_type = _run_code(
+                code, language, tc.input_data,
+                timeout=time_limit_sec, memory_limit=memory_limit,
+            )
+            if err_type is not None:
+                return {
+                    "passed": False,
+                    "status": err_type,
+                    "expected": expected,
+                    "actual": None,
+                }
+            actual = (output or "").strip()
             passed = actual == expected
             return {
                 "passed": passed,
@@ -269,19 +285,67 @@ class JudgeWorker:
 
         passed = sum(1 for d in details if d["passed"])
         total = len(details)
-        status = "AC" if passed == total else ("Partial" if passed > 0 else "WA")
+        status_set = {d["status"] for d in details}
+
+        # 综合判定（ACM 风格）：优先识别编译/运行/时限/内存错误
+        if passed == total:
+            status = "AC"
+        elif "CE" in status_set:
+            status = "CE"
+        elif "TLE" in status_set:
+            status = "TLE"
+        elif "MLE" in status_set:
+            status = "MLE"
+        elif "RE" in status_set:
+            status = "RE"
+        elif passed > 0:
+            status = "Partial"
+        else:
+            status = "WA"
+
+        # 计算本题得分（OI 模式按通过用例比例计分，满分取题目配置的分值）
+        problem_score = getattr(problem, "score", 100) or 100
+        if total > 0:
+            # 四舍五入取整，Partial 时按比例折算
+            score = int(round(passed / total * problem_score))
+        else:
+            score = 0
 
         self._save_contest_result(submission_id, {
             "problem_id": problem_id,
             "contest_id": contest_id,
+            "user_id": user_id,
             "status": status,
             "passed": passed,
             "total": total,
+            "score": score,
             "details": details,
         })
         self.logger.info(
             f"Contest submission {submission_id} done: {status} (passed {passed}/{total})"
         )
+
+        # 持久化提交记录，供实时排行榜聚合（失败不阻塞判题结果返回）
+        # library 提交（比赛结束后在题库中做题）不计入比赛排行榜
+        try:
+            if (
+                not task.get("library")
+                and user_id is not None
+                and contest_id is not None
+            ):
+                ContestSubmission.create(
+                    contest_id=contest_id,
+                    user_id=user_id,
+                    contest_problem_id=problem_id,
+                    problem_index=problem.problem_index or "",
+                    status=status,
+                    passed=passed,
+                    total=total,
+                    score=score,
+                    language=language,
+                )
+        except Exception as exc:
+            self.logger.error("保存比赛提交记录失败", exc)
 
     def _judge_single(self, code: str, language: str, stdin: str, expected: str) -> dict:
         """执行单个测试点并对比输出"""

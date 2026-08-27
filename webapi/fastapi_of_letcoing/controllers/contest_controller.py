@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase
+from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
 
@@ -52,6 +52,52 @@ def _contest_to_dict(contest):
     return data
 
 
+def _parse_dt(value):
+    """将 ISO 时间字符串解析为「UTC aware」datetime。
+
+    约定数据库中的 start_time/end_time 以 Asia/Shanghai（UTC+8）墙钟存储，而
+    连接已强制 session timezone=Asia/Shanghai，因此 psycopg 会把 aware 时间按
+    该时区落地为墙钟；这里统一归一化为 UTC（保留时区信息），使存储结果与服务器
+    本地时区无关（Zeabur 默认 UTC 也能得到正确的 UTC+8 墙钟），且便于与
+    datetime.now(timezone.utc) 直接比较。
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+        return dt
+    except Exception:
+        return None
+
+
+def _contest_time_error(contest):
+    """返回当前时间不在比赛设定范围内时的错误提示，否则返回 None。
+
+    数据库 start_time/end_time 为 timestamp without time zone，按项目约定以
+    Asia/Shanghai（UTC+8）墙钟存储/传输；读出时为 naive 值，这里统一当作 UTC+8
+    解释再与 UTC 当前时间比较，避免被误当作 UTC 而产生时区偏移。
+    """
+    cst = timezone(timedelta(hours=8))
+    now = datetime.now(timezone.utc)
+
+    def _aware(dt):
+        if dt is None:
+            return None
+        return dt.replace(tzinfo=cst) if dt.tzinfo is None else dt.astimezone(cst)
+
+    start = _aware(contest.start_time)
+    end = _aware(contest.end_time)
+    if start is not None and now < start:
+        return '比赛尚未开始'
+    if end is not None and now > end:
+        return '比赛已结束'
+    return None
+
+
 @api.route('/')
 class ContestListController(Resource):
     @api.doc('list_contests')
@@ -83,21 +129,11 @@ class ContestListController(Resource):
         if not description:
             return {'error': '比赛简介不能为空'}, 400
 
-        start_time = None
-        end_time = None
-        if data.get('start_time'):
-            try:
-                start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
-            except Exception:
-                pass
-        if data.get('end_time'):
-            try:
-                end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00'))
-            except Exception:
-                pass
+        start_time = _parse_dt(data.get('start_time'))
+        end_time = _parse_dt(data.get('end_time'))
 
-        # 自动推断状态
-        now = datetime.now()
+        # 自动推断状态（与 _contest_time_error 一致，使用 UTC now）
+        now = datetime.now(timezone.utc)
         status = 'upcoming'
         if start_time and end_time:
             if now < start_time:
@@ -152,15 +188,13 @@ class ContestDetailController(Resource):
         if 'status' in data:
             contest.status = data['status']
         if 'start_time' in data and data['start_time']:
-            try:
-                contest.start_time = datetime.fromisoformat(data['start_time'].replace('Z', '+00:00'))
-            except Exception:
-                pass
+            parsed = _parse_dt(data['start_time'])
+            if parsed is not None:
+                contest.start_time = parsed
         if 'end_time' in data and data['end_time']:
-            try:
-                contest.end_time = datetime.fromisoformat(data['end_time'].replace('Z', '+00:00'))
-            except Exception:
-                pass
+            parsed = _parse_dt(data['end_time'])
+            if parsed is not None:
+                contest.end_time = parsed
         contest.save()
         return _contest_to_dict(contest), 200
 
@@ -214,8 +248,9 @@ class ContestJoinController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
 
-        if contest.status == 'past':
-            return {'error': '比赛已结束'}, 400
+        time_error = _contest_time_error(contest)
+        if time_error:
+            return {'error': time_error}, 400
 
         exists = ContestParticipant.select().where(
             ContestParticipant.contest == contest,
@@ -246,6 +281,10 @@ class ContestProblemSubmitController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
 
+        time_error = _contest_time_error(contest)
+        if time_error:
+            return {'error': time_error}, 400
+
         try:
             problem = ContestProblem.get_by_id(problem_id)
         except ContestProblem.DoesNotExist:
@@ -272,6 +311,7 @@ class ContestProblemSubmitController(Resource):
             {
                 'problem_id': problem_id,
                 'contest_id': contest_id,
+                'user_id': user.id,
                 'status': 'Pending',
                 'passed': 0,
                 'total': 0,
@@ -286,6 +326,7 @@ class ContestProblemSubmitController(Resource):
                 'submission_id': submission_id,
                 'contest_id': contest_id,
                 'problem_id': problem_id,
+                'user_id': user.id,
                 'code': code,
                 'language': language,
             },
@@ -320,6 +361,35 @@ class ContestProblemListPublicController(Resource):
             return [p.to_dict() for p in problems], 200
         except Exception as e:
             return {'error': str(e)}, 500
+
+
+@api.route('/<int:contest_id>/statuses')
+@api.param('contest_id', '比赛ID')
+class ContestProblemStatusesController(Resource):
+    def get(self, contest_id: int):
+        """获取当前用户在该比赛各题的最新判题状态（用于题目列表着色）"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
+        try:
+            subs = (
+                ContestSubmission.select()
+                .where(
+                    ContestSubmission.contest == contest_id,
+                    ContestSubmission.user == user,
+                )
+                .order_by(ContestSubmission.submitted_at.desc())
+            )
+            best: dict = {}
+            for s in subs:
+                pid = s.contest_problem_id
+                if pid not in best:
+                    best[pid] = {'status': s.status, 'solved': s.status == 'AC'}
+                elif not best[pid]['solved'] and s.status == 'AC':
+                    best[pid] = {'status': 'AC', 'solved': True}
+            return best, 200
+        except Exception:
+            return {}, 200
 
 
 @api.route('/<int:contest_id>/problems/<int:problem_id>')

@@ -1,22 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getContest, listContestProblems, joinContest, type ContestData, type ContestProblemData } from '../services/api';
-import { formatDateTime as formatCSTDateTime } from '../utils/time';
+import { getContest, listContestProblems, joinContest, getContestStatuses, type ContestData, type ContestProblemData, type ContestProblemStatus } from '../services/api';
+import { formatDateTime as formatCSTDateTime, isWithinTimeRange } from '../utils/time';
+import { useMessage } from 'naive-ui';
+import { getJudgeStatus } from '../utils/judgeStatus';
+import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
+const message = useMessage();
 const contestId = Number(route.params.id);
 
 const contest = ref<ContestData | null>(null);
 const problems = ref<ContestProblemData[]>([]);
+const statuses = ref<Record<string, ContestProblemStatus>>({});
 const isLoading = ref(true);
 const error = ref('');
+
+const isContestOpen = computed(() =>
+  contest.value ? isWithinTimeRange(contest.value.start_time, contest.value.end_time) : false
+);
 
 const difficultyClass = (d: string) =>
   d === '简单' ? 'ui-diff ui-diff-easy'
   : d === '中等' ? 'ui-diff ui-diff-mid'
   : 'ui-diff ui-diff-hard';
+
+const statusMetaOf = (problemId: number) => {
+  const s = statuses.value[String(problemId)];
+  return s ? getJudgeStatus(s.status) : null;
+};
 
 const formatTime = (dateStr?: string | null) => {
   if (!dateStr) return '待定';
@@ -35,6 +50,12 @@ const loadData = async () => {
     contest.value = c;
     problems.value = p;
     try { await joinContest(contestId); } catch {}
+    if (authStore.isAuthenticated) {
+      try {
+        const s = await getContestStatuses(contestId);
+        statuses.value = s || {};
+      } catch {}
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败';
   } finally {
@@ -43,6 +64,10 @@ const loadData = async () => {
 };
 
 const openProblem = (problemId: number) => {
+  if (!isContestOpen.value) {
+    message.warning(contest.value?.status === 'upcoming' ? '比赛尚未开始，暂不能进入' : '比赛已结束，不能进入');
+    return;
+  }
   router.push(`/playground?contest=${contestId}&problem=${problemId}`);
 };
 
@@ -80,6 +105,12 @@ onMounted(loadData);
               </div>
               <p v-if="contest.description" class="mt-2 text-sm text-[#64748B] dark:text-[#94A3B8]">{{ contest.description }}</p>
             </div>
+            <button
+              class="ui-btn ui-btn-primary ui-btn-sm shrink-0"
+              @click="router.push(`/contests/${contestId}/rankings`)"
+            >
+              🏆 排行榜
+            </button>
           </div>
           <div class="mt-4 flex items-center gap-6 text-sm text-[#64748B] dark:text-[#94A3B8]">
             <span>🏆 {{ contest.contest_type }}</span>
@@ -87,6 +118,14 @@ onMounted(loadData);
             <span>👥 {{ contest.participants_count }} 人参与</span>
             <span>📝 {{ problems.length }} 道题目</span>
           </div>
+        </div>
+
+        <!-- 不在比赛时间范围内时提示，并禁止进入答题 -->
+        <div
+          v-if="contest && !isContestOpen"
+          class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300"
+        >
+          {{ contest.status === 'upcoming' ? '比赛尚未开始，开始后即可进入答题。' : '比赛已结束，不能再进入答题。' }}
         </div>
 
         <!-- 题目列表（类似题库） -->
@@ -105,14 +144,26 @@ onMounted(loadData);
           </div>
 
           <div v-else class="divide-y divide-[#F1F5F9] dark:divide-[#1E293B]">
-            <button
-              v-for="p in problems"
-              :key="p.id"
-              class="grid w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-left transition hover:bg-[#EFF6FF] dark:hover:bg-[#172554] sm:grid-cols-[3rem_minmax(0,1fr)_6rem_6rem_6rem]"
-              @click="openProblem(p.id)"
-            >
+             <button
+               v-for="p in problems"
+               :key="p.id"
+               class="grid w-full grid-cols-[3rem_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-left transition hover:bg-[#EFF6FF] dark:hover:bg-[#172554] sm:grid-cols-[3rem_minmax(0,1fr)_6rem_6rem_6rem]"
+               :class="[
+                 statusMetaOf(p.id) ? [statusMetaOf(p.id)!.bg, 'contest-row-statused'] : '',
+                 isContestOpen ? '' : 'cursor-not-allowed opacity-60 hover:bg-transparent dark:hover:bg-transparent',
+               ]"
+               :disabled="!isContestOpen"
+               @click="openProblem(p.id)"
+             >
               <span class="text-center text-sm font-black text-[#2563EB] dark:text-[#60A5FA]">{{ p.problem_index }}</span>
-              <span class="min-w-0 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="min-w-0 truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
+                <span
+                  v-if="statusMetaOf(p.id)"
+                  class="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold"
+                  :class="statusMetaOf(p.id)!.badge"
+                >{{ statusMetaOf(p.id)!.short }}</span>
+              </span>
               <span class="hidden justify-center sm:flex">
                 <span :class="difficultyClass(p.difficulty)">{{ p.difficulty }}</span>
               </span>

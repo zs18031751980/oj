@@ -62,6 +62,18 @@ const defaultProblemForm = () => ({
   samples: [] as { uid: string; input: string; output: string }[],
 });
 
+// 将任意时间值规范为 datetime-local 可绑定的「YYYY-MM-DDTHH:MM」（精确到分钟），
+// 避免后端返回的秒/毫秒导致输入框空白或精度丢失。
+const toLocalInputValue = (value: unknown): string => {
+  if (!value) return '';
+  const s = String(value).trim().replace(' ', 'T');
+  const m = s.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/i,
+  );
+  if (!m) return '';
+  return `${m[1]}T${m[2]}:${m[3]}`;
+};
+
 const problemForm = ref(defaultProblemForm());
 const isGeneratingTestcases = ref(false);
 
@@ -311,7 +323,12 @@ const saveContest = async () => {
     return;
   }
   try {
-    await createContest(contestForm.value);
+    const payload = {
+      ...contestForm.value,
+      start_time: toLocalInputValue(contestForm.value.start_time),
+      end_time: toLocalInputValue(contestForm.value.end_time),
+    };
+    await createContest(payload);
     message.success('比赛创建成功');
     showContestForm.value = false;
     contestForm.value = { title: '', description: '', contest_type: 'ACM', start_time: '', end_time: '' };
@@ -497,11 +514,11 @@ onMounted(loadContests);
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="mb-1 block text-sm font-bold">开始时间</label>
-              <input v-model="contestForm.start_time" type="datetime-local" class="ui-input w-full" />
+              <input v-model="contestForm.start_time" type="datetime-local" step="60" class="ui-input w-full" />
             </div>
             <div>
               <label class="mb-1 block text-sm font-bold">结束时间</label>
-              <input v-model="contestForm.end_time" type="datetime-local" class="ui-input w-full" />
+              <input v-model="contestForm.end_time" type="datetime-local" step="60" class="ui-input w-full" />
             </div>
           </div>
         </div>

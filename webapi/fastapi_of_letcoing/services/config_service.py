@@ -8,6 +8,7 @@
 """
 
 import os
+import urllib.parse
 from typing import Any, Optional
 
 from interfaces.service_interfaces import IConfigService
@@ -71,15 +72,47 @@ class ConfigService(IConfigService):
         """
         获取完整的数据库连接配置
 
+        兼容 Zeabur 等平台：若未显式设置 DB_HOST 但提供了 DATABASE_URL
+        （如 Zeabur PostgreSQL 插件默认注入），则自动解析 DATABASE_URL。
+
         Returns:
             包含所有数据库连接参数的字典
         """
+        # Zeabur 等平台可能直接提供 DATABASE_URL，优先在缺少 DB_HOST 时使用
+        if not os.environ.get("DB_HOST"):
+            database_url = os.environ.get("DATABASE_URL")
+            if database_url:
+                try:
+                    parsed = urllib.parse.urlparse(database_url)
+                    # 解析查询参数（如 Zeabur 常见的 ?sslmode=require）
+                    query = urllib.parse.parse_qs(parsed.query)
+                    sslmode = (query.get("sslmode", [""])[0] or "").lower()
+                    use_ssl = sslmode in (
+                        "require", "prefer", "verify-ca", "verify-full",
+                        "on", "true", "1",
+                    )
+                    # 数据库名不能包含查询串，否则连接会失败
+                    db_name = (parsed.path or "").lstrip("/").split("?")[0] or "postgres"
+                    return {
+                        "host": parsed.hostname or "localhost",
+                        "port": parsed.port or 5432,
+                        "database": db_name,
+                        "username": parsed.username or "postgres",
+                        "password": parsed.password or "",
+                        "ssl": use_ssl,
+                        "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
+                        "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
+                    }
+                except Exception:
+                    pass
+
         return {
             "host": self.get_config("DB_HOST", "localhost"),
             "port": self.get_config("DB_PORT", 5432),
             "database": self.get_config("DB_NAME", "letcoding"),
             "username": self.get_config("DB_USER", "postgres"),
             "password": self.get_config("DB_PASSWORD", ""),
+            "ssl": False,
             "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
             "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
         }

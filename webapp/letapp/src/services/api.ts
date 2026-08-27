@@ -510,8 +510,49 @@ export interface ContestProblemData {
 export const listContestProblems = (contestId: number) =>
   apiRequest<ContestProblemData[]>(`/contests/${contestId}/problems`);
 
+export interface ContestProblemStatus {
+  status: string;
+  solved: boolean;
+}
+
+export const getContestStatuses = (contestId: number) =>
+  apiRequest<Record<string, ContestProblemStatus>>(`/contests/${contestId}/statuses`);
+
 export const getContestProblem = (id: number) =>
   apiRequest<ContestProblemData>(`/contests/problems/${id}`);
+
+// ---------- 比赛实时排行榜 ----------
+
+export interface ContestProblemResult {
+  problem_index: string;
+  solved: boolean;
+  passed: number;
+  total: number;
+  score: number;
+  status: string;
+  submissions: number;
+}
+
+export interface ContestRankingData {
+  rank: number;
+  user_id: number;
+  username: string;
+  avatar_url: string;
+  solved_count: number;
+  penalty: number;
+  score: number;
+  problems: ContestProblemResult[];
+}
+
+export interface ContestRankingsData {
+  mode: string;
+  contest_type: string;
+  problem_indexes: string[];
+  rankings: ContestRankingData[];
+}
+
+export const listContestRankings = (contestId: number) =>
+  apiRequest<ContestRankingsData>(`/contests/${contestId}/rankings`);
 
 export interface ProblemDetailData {
   id: number;
@@ -527,10 +568,54 @@ export interface ProblemDetailData {
   categoryLabel?: string;
   tags?: string[];
   testCaseCount?: number;
+  isLibrary?: boolean;
+  contestProblemId?: number;
+  contestId?: number;
+  contestTitle?: string;
 }
 
 export const getProblem = (id: number) =>
   apiRequest<ProblemDetailData>(`/problems/${id}`, { skipAuth: true });
+
+export interface LibrarySubmitResponse {
+  submission_id: number;
+  status: string;
+}
+
+/** 提交已结束比赛并入题库的题目（复用比赛判题队列） */
+export const submitLibraryProblem = (data: {
+  contest_problem_id: number;
+  code: string;
+  language: string;
+}) => apiRequest<LibrarySubmitResponse>(`/problems/library/submit`, {
+  method: 'POST',
+  body: JSON.stringify(data),
+});
+
+/** 比赛题库题目判题结果结构（与通用提交结果一致） */
+export interface SubmissionResponse {
+  id: number;
+  status: string;
+  time_used: number | null;
+  memory_used: number | null;
+  testcase_results: Array<{
+    testCaseIndex: number;
+    passed: boolean;
+    stdout: string;
+    stderr: string;
+    expected: string;
+    input: string;
+    actualOutput?: string;
+  }>;
+  fail_testcase_index: number | null;
+  compile_error: string | null;
+}
+
+/** 轮询比赛题库题目的判题结果 */
+export const getLibrarySubmission = (submissionId: number) =>
+  apiRequest<SubmissionResponse>(`/problems/library/submission/${submissionId}`, {
+    skipAuth: true,
+  });
 
 /**
  * 将后端返回的样例数据统一归一化为「{ input, output } 对象数组」。
