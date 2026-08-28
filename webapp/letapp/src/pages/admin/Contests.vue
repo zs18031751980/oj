@@ -3,7 +3,7 @@ import { ref, computed, nextTick, watch, defineAsyncComponent, onMounted } from 
 import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import {
-  listContests, createContest, getContest,
+  listContests, createContest, updateContest, getContest,
   type ContestData
 } from '../../services/api';
 import { apiRequest } from '../../services/api';
@@ -22,6 +22,7 @@ const selectedContest = ref<ContestData | null>(null);
 
 // 比赛表单
 const showContestForm = ref(false);
+const editingContestId = ref<number | null>(null);
 const contestForm = ref({
   title: '',
   description: '',
@@ -30,6 +31,39 @@ const contestForm = ref({
   end_time: '',
   penalty_time: 20,
 });
+
+const emptyContestForm = () => ({
+  title: '',
+  description: '',
+  contest_type: 'ACM',
+  start_time: '',
+  end_time: '',
+  penalty_time: 20,
+});
+
+// 打开比赛表单（创建 / 编辑）
+const openContestForm = (contest?: ContestData) => {
+  if (contest) {
+    editingContestId.value = contest.id;
+    contestForm.value = {
+      title: contest.title || '',
+      description: contest.description || '',
+      contest_type: contest.contest_type || 'ACM',
+      start_time: toLocalInputValue(contest.start_time),
+      end_time: toLocalInputValue(contest.end_time),
+      penalty_time: contest.penalty_time ?? 20,
+    };
+  } else {
+    editingContestId.value = null;
+    contestForm.value = emptyContestForm();
+  }
+  showContestForm.value = true;
+};
+
+const closeContestForm = () => {
+  showContestForm.value = false;
+  editingContestId.value = null;
+};
 
 // 题目列表
 const problems = ref<any[]>([]);
@@ -329,13 +363,21 @@ const saveContest = async () => {
       start_time: toLocalInputValue(contestForm.value.start_time),
       end_time: toLocalInputValue(contestForm.value.end_time),
     };
-    await createContest(payload);
-    message.success('比赛创建成功');
-    showContestForm.value = false;
-    contestForm.value = { title: '', description: '', contest_type: 'ACM', start_time: '', end_time: '', penalty_time: 20 };
+    const editingId = editingContestId.value;
+    if (editingId) {
+      await updateContest(editingId, payload);
+      message.success('比赛信息已更新');
+    } else {
+      await createContest(payload);
+      message.success('比赛创建成功');
+    }
+    closeContestForm();
     await loadContests();
+    if (editingId && selectedContestId.value === editingId) {
+      selectedContest.value = await getContest(editingId);
+    }
   } catch (e) {
-    message.error(e instanceof Error ? e.message : '创建失败');
+    message.error(e instanceof Error ? e.message : '保存失败');
   }
 };
 
@@ -521,16 +563,16 @@ onMounted(loadContests);
         <h1 class="admin-header-title">比赛管理</h1>
         <p class="admin-header-desc">创建与管理所有比赛</p>
       </div>
-      <button class="admin-btn-primary" @click="showContestForm = true">
+      <button class="admin-btn-primary" @click="openContestForm()">
         <Icon icon="material-symbols:add-rounded" class="admin-btn-icon" />
         创建比赛
       </button>
     </header>
 
-    <!-- 创建比赛弹窗 -->
+    <!-- 创建/编辑比赛弹窗 -->
     <div v-if="showContestForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div class="ui-card w-full max-w-lg p-6">
-        <h2 class="mb-4 text-lg font-bold">创建比赛</h2>
+        <h2 class="mb-4 text-lg font-bold">{{ editingContestId ? '编辑比赛' : '创建比赛' }}</h2>
         <div class="space-y-4">
           <div>
             <label class="mb-1 block text-sm font-bold">比赛标题 *</label>
@@ -575,8 +617,8 @@ onMounted(loadContests);
           </div>
         </div>
         <div class="mt-6 flex justify-end gap-3">
-          <button class="ui-btn ui-btn-ghost" @click="showContestForm = false">取消</button>
-          <button class="ui-btn ui-btn-primary" @click="saveContest">创建</button>
+          <button class="ui-btn ui-btn-ghost" @click="closeContestForm">取消</button>
+          <button class="ui-btn ui-btn-primary" @click="saveContest">{{ editingContestId ? '保存修改' : '创建' }}</button>
         </div>
       </div>
     </div>
@@ -611,6 +653,10 @@ onMounted(loadContests);
             <p class="mt-1 text-sm text-[#64748B]">{{ c.participants_count || 0 }} 人参与</p>
           </div>
           <div class="flex items-center gap-2">
+            <button
+              class="ui-btn ui-btn-ghost ui-btn-sm"
+              @click.stop="openContestForm(c)"
+            >编辑</button>
             <button
               class="ui-btn ui-btn-ghost ui-btn-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
               @click.stop="deleteContest(c.id, c.title)"

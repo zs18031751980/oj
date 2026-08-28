@@ -53,23 +53,26 @@ def _contest_to_dict(contest):
     return data
 
 
-def _parse_dt(value):
-    """将 ISO 时间字符串解析为「UTC aware」datetime。
+_CST = timezone(timedelta(hours=8))
 
-    约定数据库中的 start_time/end_time 以 Asia/Shanghai（UTC+8）墙钟存储，而
-    连接已强制 session timezone=Asia/Shanghai，因此 psycopg 会把 aware 时间按
-    该时区落地为墙钟；这里统一归一化为 UTC（保留时区信息），使存储结果与服务器
-    本地时区无关（Zeabur 默认 UTC 也能得到正确的 UTC+8 墙钟），且便于与
-    datetime.now(timezone.utc) 直接比较。
+
+def _parse_dt(value):
+    """将 ISO 时间字符串解析为 aware datetime（Asia/Shanghai UTC+8 墙钟）。
+
+    约定数据库中的 start_time/end_time 以 Asia/Shanghai（UTC+8）墙钟存储：
+    无时区的输入（如前端 datetime-local 的 "YYYY-MM-DDTHH:MM"）直接按 UTC+8
+    解释，带时区的输入则统一换算到 UTC+8，使「传入墙钟 == 存储墙钟 == 读回墙钟」，
+    消除重复编辑保存时的逐次 +8h 偏移。连接已强制 session timezone=Asia/Shanghai，
+    因此 psycopg 会按该时区将 aware 值落地为墙钟。
     """
     if not value:
         return None
     try:
         dt = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=_CST)
         else:
-            dt = dt.astimezone(timezone.utc)
+            dt = dt.astimezone(_CST)
         return dt
     except Exception:
         return None
@@ -82,13 +85,12 @@ def _contest_time_error(contest):
     Asia/Shanghai（UTC+8）墙钟存储/传输；读出时为 naive 值，这里统一当作 UTC+8
     解释再与 UTC 当前时间比较，避免被误当作 UTC 而产生时区偏移。
     """
-    cst = timezone(timedelta(hours=8))
     now = datetime.now(timezone.utc)
 
     def _aware(dt):
         if dt is None:
             return None
-        return dt.replace(tzinfo=cst) if dt.tzinfo is None else dt.astimezone(cst)
+        return dt.replace(tzinfo=_CST) if dt.tzinfo is None else dt.astimezone(_CST)
 
     start = _aware(contest.start_time)
     end = _aware(contest.end_time)
