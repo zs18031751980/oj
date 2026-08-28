@@ -350,8 +350,10 @@ class JudgeWorker:
             })
             return
 
-        # 按题目的运行时长与内存限制进行判题（time_limit 单位 ms → 秒，至少 1s）
-        time_limit_sec = max((problem.time_limit or 1000) / 1000.0, 1)
+        # 按题目的运行时长与内存限制进行判题（time_limit 单位 ms → 秒）。
+        # 不设 1s 下限，使“卡时间限制”的用例真正生效：生成时即按该时限校准
+        # 用例规模，判题时也按该时限执行，二者一致。
+        time_limit_sec = max((problem.time_limit or 1000) / 1000.0, 0.05)
         memory_limit = problem.memory_limit or None
 
         testcases = list(

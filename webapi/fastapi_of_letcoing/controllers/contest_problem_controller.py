@@ -146,100 +146,108 @@ def _sleep_to_next_second():
 
 def _run_reference_twice(
     code: str, language: str, stdin: str, timeout: int, memory_limit: int | None
-) -> tuple[str | None, bool]:
+) -> tuple[str | None, bool, int]:
     """
-    运行参考代码两次（两次处于**不同墙钟秒**）并返回 (输出, 是否自洽)。
+    运行参考代码三次（两次之间强制跨秒）并返回 (输出, 是否自洽, 首次运行耗时ms)。
 
     这是「答案代码在比赛提交时却过不了部分用例」的根因修复关键：
       - 编译型语言每次运行都是独立进程（ASLR 不同），可捕捉未初始化变量/UB/容器遍历序
         等非确定性；
       - 两次运行强制跨秒（见 `_sleep_to_next_second`），可捕捉 time(NULL)/chrono 按秒
         播种等非确定性——这是原题「新建时答案能过、正式比赛（另一时刻运行）却 WA」的主因；
-      - 任意一次编译/运行/超时/内存出错（输出为 None）→ 返回 (None, False)；
-      - 两次原始输出不一致 → 视为非确定性，返回 (输出, False)；
-      - 两次完全一致 → 返回 (去尾空白后的输出, True)。
-    后续 `_generate_testcases` 会用 `len(testcases) < count` 判定参考代码是否不可靠，
-    不可靠则拒绝生成，倒逼修正参考代码（使其确定性）。
+      - 任意一次编译/运行/超时/内存出错（输出为 None）→ 返回 (None, False, 0)；
+      - 三次原始输出不一致 → 视为非确定性，返回 (输出, False, 0)；
+      - 三次完全一致 → 返回 (去尾空白后的输出, True, 首次运行耗时ms)。
+    耗时 ms 用于「确保用例在时间限制内」与「卡时间限制」的规模校准。
     """
     try:
-        if language == 'cpp':
-            outputs = []
-            for i in range(3):
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
-                    f.write(code)
-                    f.flush()
-                    src = f.name
-                exe_path = src + '.exe'
-                try:
-                    compile_result = subprocess.run(
-                        ['g++', '-o', exe_path, src],
-                        capture_output=True, text=True, timeout=max(timeout, 10),
-                    )
-                    if compile_result.returncode != 0:
-                        return (None, False)
-                    res = _interpret(_exec_command([exe_path], stdin, timeout, memory_limit), is_compiled=True)
-                    if res[0] is None:
-                        return (None, False)
-                    outputs.append(res[0])
-                finally:
-                    try:
-                        os.unlink(src)
-                        if os.path.exists(exe_path):
-                            os.unlink(exe_path)
-                    except Exception:
-                        pass
-                if i < 2:
-                    _sleep_to_next_second()
-            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
-
-        elif language == 'java':
-            outputs = []
-            for i in range(3):
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
-                    f.write(code)
-                    f.flush()
-                    java_src = f.name
-                try:
-                    class_dir = os.path.dirname(java_src)
-                    compile_result = subprocess.run(
-                        ['javac', java_src],
-                        capture_output=True, text=True, timeout=max(timeout, 10),
-                    )
-                    if compile_result.returncode != 0:
-                        return (None, False)
-                    res = _interpret(
-                        _exec_command(['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit),
-                        is_compiled=True,
-                    )
-                    if res[0] is None:
-                        return (None, False)
-                    outputs.append(res[0])
-                finally:
-                    try:
-                        if os.path.exists(java_src):
-                            os.unlink(java_src)
-                        class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
-                        if os.path.exists(class_file):
-                            os.unlink(class_file)
-                    except Exception:
-                        pass
-                if i < 2:
-                    _sleep_to_next_second()
-            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
-
-        else:
-            outputs = []
-            for i in range(3):
-                out, err_type, _, _ = _run_code(code, language, stdin, timeout, memory_limit)
-                if err_type is not None or out is None:
-                    return (None, False)
-                outputs.append(out)
-                if i == 0:
-                    _sleep_to_next_second()
-            return (outputs[0].strip(), all(o == outputs[0] for o in outputs))
+        outputs = []
+        times = []
+        for i in range(3):
+            out, err_type, time_used_ms, _ = _run_code(
+                code, language, stdin, timeout, memory_limit
+            )
+            if err_type is not None or out is None:
+                return (None, False, 0)
+            outputs.append(out)
+            times.append(time_used_ms)
+            if i < 2:
+                _sleep_to_next_second()
+        return (outputs[0].strip(), all(o == outputs[0] for o in outputs), times[0])
     except Exception:
-        return (None, False)
+        return (None, False, 0)
 
+
+
+def _measure_reference_runtime(
+    code: str, language: str, size: int, seed: int, timeout_sec: float, memory_limit: int | None
+) -> int | None:
+    """单次运行参考代码并返回耗时 ms；编译/运行/TLE/MLE/RE 时返回 None。"""
+    stdin = _generate_random_input(seed, size)
+    out, err_type, time_used_ms, _ = _run_code(
+        code, language, stdin, timeout_sec, memory_limit
+    )
+    if err_type is not None or out is None:
+        return None
+    return time_used_ms
+
+
+def _find_max_feasible_size(
+    code: str, language: str, timeout_sec: float, memory_limit: int | None, target_ms: float
+) -> int:
+    """倍增 + 二分，求出「运行时长最接近但不超过 target_ms」的最大输入规模。
+
+    参考代码复杂度未知（O(n)/O(n log n)/O(n²)…），因此直接用实测运行时长驱动搜索，
+    对任意时间限制都能自适应地求出可用的最大规模——时间限制越大，得到的规模越大，
+    从而保证「卡时限」用例对不同的 time_limit 都成立。
+    """
+    last_ok = 1
+    size = 1
+    while size <= _MAX_INPUT_ELEMENTS:
+        rt = _measure_reference_runtime(code, language, size, seed=size, timeout_sec=timeout_sec, memory_limit=memory_limit)
+        if rt is None:
+            # 当前规模运行出错/超时：以最后一个可用规模为下界，进入二分
+            break
+        if rt >= target_ms:
+            break
+        last_ok = size
+        size *= 2
+
+    if size > _MAX_INPUT_ELEMENTS:
+        # 达到规模上限仍未触及目标（如 O(1) 快速实现）：直接以上限作为最大规模
+        return _MAX_INPUT_ELEMENTS
+
+    # 二分：在 (last_ok, size] 间找运行时长 < target 的最大规模
+    lo, hi = last_ok, size
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        rt = _measure_reference_runtime(code, language, mid, seed=mid, timeout_sec=timeout_sec, memory_limit=memory_limit)
+        if rt is None or rt >= target_ms:
+            hi = mid - 1
+        else:
+            lo = mid
+    return max(lo, 1)
+
+
+def _build_size_plan(max_size: int, count: int) -> list[int]:
+    """构造 count 个用例的规模计划：
+      - 前 3 个为小规模样例；
+      - 中部约 3/4 为中等规模（分布偏向更小，保证绝大多数用例轻量稳定）；
+      - 末段约 1/4 为「卡时间限制」的大规模（用于卡掉暴力解法）。
+    规模均不超过 max_size，即参考代码运行时长不超过时间限制。
+    """
+    plan = [1, 2, 3]
+    if count <= 3:
+        return plan[:count]
+    mid = int((count - 3) * 0.75)
+    for i in range(mid):
+        f = i / max(mid - 1, 1)
+        plan.append(max(1, int(max_size * (0.05 + 0.45 * (f ** 0.7)))))
+    tight = count - len(plan)
+    for i in range(tight):
+        f = i / max(tight - 1, 1)
+        plan.append(max(1, int(max_size * (0.7 + 0.25 * f))))
+    return plan
 
 
 def _generate_testcases(
@@ -252,42 +260,59 @@ def _generate_testcases(
     根据正确答案生成测试用例。
 
     关键自洽性保证：生成时使用与正式比赛判题完全相同的
-    time_limit / memory_limit，并且对每个随机输入运行参考代码两次：
+    time_limit / memory_limit，并且对每个随机输入运行参考代码多次：
       - 若参考代码在该输入下编译/运行/超时/内存出错（输出为 None），丢弃该用例；
-      - 若两次运行输出不一致（非确定性），丢弃该用例。
-    这样生成的每个测试用例都一定能被“正确答案”在比赛限制内稳定通过，
-    避免“新建题目时输入的答案，在正式比赛提交时却过不了样例”的问题。
+      - 若多次运行输出不一致（非确定性），丢弃该用例；
+      - 若首次运行耗时超过时间限制（保留 2% 余量），丢弃该用例。
+    这样生成的每个测试用例都一定能在时间限制内被参考代码稳定通过。
+
+    时间限制自适应：先用「倍增 + 二分」实测求出参考代码在时间限制内能处理的最大
+    输入规模（对任意复杂度/任意 time_limit 均自适应），再按规模计划生成用例——
+    其中末段约 1/4 为贴近时间限制的大规模用例，用于在正式比赛中卡掉暴力解法。
     """
     language = _detect_language(correct_answer)
-    timeout_sec = max((int(time_limit_ms) or 1000) / 1000.0, 1)
+    limit_ms = max(int(time_limit_ms or 1000), 50)
+    timeout_sec = limit_ms / 1000.0
     memory_limit = int(memory_limit_mb) if memory_limit_mb else None
 
+    # 找「卡时限」规模：运行时长 ≈ 85% × 时间限制，留足判题机波动的余量
+    target_ms = 0.85 * limit_ms
+    max_size = _find_max_feasible_size(
+        correct_answer, language, timeout_sec, memory_limit, target_ms=target_ms,
+    )
+    plan = _build_size_plan(max_size, count)
+
     testcases = []
-    seed = 0
-    # 多尝试一些随机种子，补齐足够的有效用例
-    while len(testcases) < count and seed < count * 3:
-        input_data = _generate_random_input(seed)
-        output, verified = _run_reference_twice(
-            correct_answer, language, input_data, timeout_sec, memory_limit
-        )
-        if output is not None and verified:
-            testcases.append({
-                'input_data': input_data,
-                'expected_output': output,
-                'is_sample': len(testcases) < 3,  # 前3个作为样例
-                'sort_order': len(testcases),
-            })
-        seed += 1
+    for idx, size in enumerate(plan):
+        # 每个规模最多尝试多个随机种子，直到拿到一个自洽且不超时的用例
+        for attempt in range(20):
+            input_data = _generate_random_input(1000 + idx * 1000 + attempt, size)
+            output, verified, time_ms = _run_reference_twice(
+                correct_answer, language, input_data, timeout_sec, memory_limit
+            )
+            if output is not None and verified and 0 < time_ms <= limit_ms * 0.98:
+                testcases.append({
+                    'input_data': input_data,
+                    'expected_output': output,
+                    'is_sample': len(testcases) < 3,  # 前3个作为样例
+                    'sort_order': len(testcases),
+                })
+                break
 
     return testcases
 
 
-def _generate_random_input(seed: int) -> str:
-    """生成随机输入数据"""
+# 单个测试用例的元素个数上限（约 300KB 输入），避免用例体积失控
+_MAX_INPUT_ELEMENTS = 50000
+
+
+def _generate_random_input(seed: int, size: int = 1) -> str:
+    """生成随机输入数据；size 控制元素个数（规模），用于把参考代码运行时长推向时间限制。"""
     random.seed(seed)
-    # 生成简单的随机输入：随机整数
-    n = random.randint(1, 10)
-    nums = [str(random.randint(-100, 100)) for _ in range(n)]
+    n = max(1, size)
+    # 值域随规模适度放大，让大规模用例的数值分布也更有区分度
+    bound = max(1, min(size, 1000))
+    nums = [str(random.randint(-bound, bound)) for _ in range(n)]
     return ' '.join(nums)
 
 
@@ -713,14 +738,19 @@ class TestcaseGenerationStatusController(Resource):
         redis_service = inject(IRedisService)
         status = redis_service.get(f"testcase_gen:{problem_id}")
         if not status:
-            # 无记录：可能已生成完成且缓存过期，回查数据库实际数量
+            # 无记录：可能是任务刚入队、worker 尚未写入 generating（存在竞态窗口），
+            # 也可能是生成完成且缓存已过期。以数据库实际用例数区分，避免把“尚未开始”
+            # 误报为“已完成 0 组”，导致前端提前停止轮询、误显示生成了 0 组。
             try:
                 from models.db_models import ContestTestcase
                 count = ContestTestcase.select().where(
                     ContestTestcase.contest_problem == problem_id
                 ).count()
-                status = {'status': 'done', 'generated': count, 'total': count}
+                if count == 0:
+                    status = {'status': 'pending', 'generated': 0, 'total': 0}
+                else:
+                    status = {'status': 'done', 'generated': count, 'total': count}
             except Exception:
-                status = {'status': 'unknown'}
+                status = {'status': 'pending', 'generated': 0, 'total': 0}
         return status, 200
 
