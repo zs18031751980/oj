@@ -269,7 +269,7 @@ class ContestJoinController(Resource):
             ContestParticipant.user == user,
         ).exists()
         if exists:
-            return {'error': '已参加该比赛'}, 400
+            return {'success': True, 'message': '已参加比赛', 'already_joined': True}, 200
 
         ContestParticipant.create(
             contest=contest,

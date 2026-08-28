@@ -7,6 +7,7 @@
 
 import aiohttp
 import asyncio
+import base64
 import json
 from typing import Dict, Optional
 
@@ -131,16 +132,16 @@ class GlotService(ICodeExecutionService, Injectable):
 
         url = f"{JUDGE0_BASE_URL}/submissions"
         params = {
-            "base64_encoded": "false",
+            "base64_encoded": "true",
             "wait": "true",
             "fields": "stdout,stderr,status,compile_output",
         }
         payload = {
-            "source_code": code,
+            "source_code": base64.b64encode(code.encode("utf-8")).decode("ascii"),
             "language_id": language_id,
         }
         if stdin:
-            payload["stdin"] = stdin
+            payload["stdin"] = base64.b64encode(stdin.encode("utf-8")).decode("ascii")
 
         try:
             async with self._get_session().post(url, json=payload, params=params) as response:
@@ -158,9 +159,17 @@ class GlotService(ICodeExecutionService, Injectable):
 
                 resp_json = json.loads(resp_text)
 
-                stdout = resp_json.get("stdout", "") or ""
-                stderr = resp_json.get("stderr", "") or ""
-                compile_output = resp_json.get("compile_output", "") or ""
+                def _b64_decode(s) -> str:
+                    if not s:
+                        return ""
+                    try:
+                        return base64.b64decode(s).decode("utf-8", errors="replace")
+                    except Exception:
+                        return s
+
+                stdout = _b64_decode(resp_json.get("stdout", ""))
+                stderr = _b64_decode(resp_json.get("stderr", ""))
+                compile_output = _b64_decode(resp_json.get("compile_output", ""))
                 status = resp_json.get("status", {})
 
                 if compile_output:
