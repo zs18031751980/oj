@@ -57,16 +57,17 @@ export default defineConfig({
         cssMinify: 'esbuild',
         sourcemap: false,
         reportCompressedSize: false,
-        chunkSizeWarningLimit: 500,
+        chunkSizeWarningLimit: 4000,
         rollupOptions: {
             output: {
-                manualChunks: {
-                    'vendor-vue': ['vue', 'vue-router', 'pinia'],
-                    'vendor-naive': ['naive-ui'],
-                    'vendor-markdown': ['markdown-it', 'markdown-it-anchor', 'markdown-it-attrs', 'markdown-it-container', 'markdown-it-footnote', 'markdown-it-mark', 'markdown-it-sup', 'markdown-it-task-lists', 'markdown-it-expand-tabs'],
-                    'vendor-icons': ['@iconify/vue'],
-                    'vendor-prism': ['prismjs'],
-                    'vendor-mermaid': ['mermaid'],
+                manualChunks(id) {
+                    if (!id.includes('node_modules')) return
+                    if (id.includes('vue-router') || id.includes('pinia') || id.includes('/vue/')) return 'vendor-vue'
+                    if (id.includes('naive-ui')) return 'vendor-naive'
+                    if (id.includes('markdown-it')) return 'vendor-markdown'
+                    if (id.includes('@iconify')) return 'vendor-icons'
+                    if (id.includes('prismjs')) return 'vendor-prism'
+                    if (id.includes('mermaid')) return 'vendor-mermaid'
                 },
             },
         },
