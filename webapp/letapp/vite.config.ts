@@ -62,8 +62,8 @@ export default defineConfig({
             output: {
                 manualChunks(id) {
                     if (!id.includes('node_modules')) return
-                    if (id.includes('vue-router') || id.includes('pinia') || id.includes('/vue/')) return 'vendor-vue'
                     if (id.includes('naive-ui')) return 'vendor-naive'
+                    if (id.includes('vue-router') || id.includes('pinia') || id.includes('/vue/')) return 'vendor-vue'
                     if (id.includes('markdown-it')) return 'vendor-markdown'
                     if (id.includes('@iconify')) return 'vendor-icons'
                     if (id.includes('prismjs')) return 'vendor-prism'
