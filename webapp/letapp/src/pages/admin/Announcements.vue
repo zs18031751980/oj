@@ -40,10 +40,10 @@ const EMPTY_FORM: AnnouncementForm = {
 };
 
 const announcementCategories = [
-  { value: '系统公告', label: '系统公告', emoji: '📢' },
-  { value: '比赛公告', label: '比赛公告', emoji: '🏆' },
-  { value: '更新公告', label: '更新公告', emoji: '🔄' },
-  { value: '活动通知', label: '活动通知', emoji: '🎉' },
+  { value: '系统公告', label: '系统公告', icon: 'material-symbols:campaign' },
+  { value: '比赛公告', label: '比赛公告', icon: 'material-symbols:emoji-events' },
+  { value: '更新公告', label: '更新公告', icon: 'material-symbols:sync' },
+  { value: '活动通知', label: '活动通知', icon: 'material-symbols:celebration' },
 ];
 
 const authStore = useAuthStore();
@@ -247,7 +247,7 @@ onMounted(loadList);
           :disabled="saving"
           @click="form.category = cat.value"
         >
-          <span class="cat-btn-emoji">{{ cat.emoji }}</span>
+           <Icon :icon="cat.icon" class="cat-btn-icon" />
           {{ cat.label }}
         </button>
       </div>
@@ -503,7 +503,7 @@ onMounted(loadList);
   background: #172554;
   border-color: #2563eb;
 }
-.cat-btn-emoji {
+.cat-btn-icon {
   font-size: 0.875rem;
 }
 </style>

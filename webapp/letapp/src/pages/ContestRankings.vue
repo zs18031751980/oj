@@ -9,6 +9,7 @@ import {
   type ContestRankingData,
 } from '../services/api';
 import { formatDateTime as formatCSTDateTime } from '../utils/time';
+import { Icon } from '@iconify/vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -19,8 +20,6 @@ const data = ref<ContestRankingsData | null>(null);
 const rankings = ref<ContestRankingData[]>([]);
 const isLoading = ref(true);
 const error = ref('');
-
-const rankEmojis = ['🥇', '🥈', '🥉'];
 
 const formatTime = (dateStr?: string | null) => {
   if (!dateStr) return '待定';
@@ -75,7 +74,7 @@ onUnmounted(() => {
             <span class="ui-badge ui-badge-blue">
               {{ isOI() ? 'OI（按得分）' : 'ACM（解题数 + 罚时）' }}
             </span>
-            <span v-if="contest">🕐 {{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
+             <span v-if="contest" class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
             <span class="text-[#94A3B8]">每 10 秒自动刷新</span>
           </div>
         </div>
@@ -88,7 +87,7 @@ onUnmounted(() => {
 
       <!-- 错误 -->
       <div v-else-if="error" class="ui-empty">
-        <span class="mb-2 text-5xl">❌</span>
+        <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
         <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
       </div>
@@ -119,13 +118,13 @@ onUnmounted(() => {
               :class="row.rank <= 3 ? 'ring-2 ring-inset ring-amber-200 dark:ring-amber-800' : ''"
             >
               <td class="px-4 py-3">
-                <span v-if="row.rank <= 3" class="text-2xl">{{ rankEmojis[row.rank - 1] }}</span>
+                 <Icon v-if="row.rank <= 3" icon="material-symbols:military-tech" class="h-8 w-8 text-amber-500" />
                 <span v-else class="text-lg font-black text-[#64748B] dark:text-[#94A3B8]">#{{ row.rank }}</span>
               </td>
               <td class="px-4 py-3">
                 <div class="flex items-center gap-2">
                   <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]">
-                    👤
+                     <Icon icon="material-symbols:person-rounded" class="h-5 w-5" />
                   </div>
                   <span class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ row.username }}</span>
                 </div>
@@ -167,7 +166,7 @@ onUnmounted(() => {
 
       <!-- 空态 -->
       <div v-else class="ui-empty mt-6">
-        <span class="mb-2 text-5xl">📊</span>
+        <Icon icon="material-symbols:leaderboard-rounded" class="mb-2 h-12 w-12 text-slate-400" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无排名数据</p>
         <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">参赛并提交代码后即可上榜</p>
       </div>

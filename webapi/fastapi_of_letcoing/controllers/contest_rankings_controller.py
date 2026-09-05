@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from flask import request
 from flask_restx import Namespace, Resource, fields
@@ -7,6 +7,7 @@ from models.db_models import (
 )
 
 api = Namespace('contest_rankings', description='比赛实时排行榜接口')
+_CST = timezone(timedelta(hours=8))
 
 contest_problem_result = api.model('ContestProblemResult', {
     'problem_index': fields.String(description='题目编号(A/B/C...)'),
@@ -63,9 +64,9 @@ def _wall_delta_minutes(a, b):
     if a is None or b is None:
         return 0
     if a.tzinfo is not None:
-        a = a.replace(tzinfo=None)
+        a = a.astimezone(_CST).replace(tzinfo=None)
     if b.tzinfo is not None:
-        b = b.replace(tzinfo=None)
+        b = b.astimezone(_CST).replace(tzinfo=None)
     try:
         return int((a - b).total_seconds() / 60)
     except Exception:
@@ -218,8 +219,16 @@ def _compute_rankings(contest_id: int):
     else:
         results.sort(key=lambda x: -x['score'])
 
-    for i, r in enumerate(results, 1):
-        r['rank'] = i
+    # 同分（OI）或同解题数且同罚时（ACM）使用并列名次，不能因 Worker 并发
+    # 完成顺序不同而影响名次。
+    previous_key = None
+    current_rank = 0
+    for position, r in enumerate(results, 1):
+        ranking_key = (-r['solved_count'], r['penalty']) if mode == 'ACM' else (-r['score'],)
+        if ranking_key != previous_key:
+            current_rank = position
+            previous_key = ranking_key
+        r['rank'] = current_rank
 
     return {
         'mode': mode,

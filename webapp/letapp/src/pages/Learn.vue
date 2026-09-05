@@ -281,12 +281,6 @@ function countFiles(node: TreeNode | null): number {
   if (!node.children) return 0;
   return node.children.reduce((sum, c) => sum + countFiles(c), 0);
 }
-const totalFiles = computed(() => countFiles(treeData.value));
-const totalCategories = computed(() => {
-  if (!treeData.value?.children) return 0;
-  return treeData.value.children.filter((c) => c.type === 'folder').length;
-});
-
 /** ====== 中间区域内容 ====== */
 const currentBrowseNode = computed(() => getNodeByPath(browsePath.value));
 const breadcrumb = computed(() => buildBreadcrumb(browsePath.value));
@@ -511,26 +505,6 @@ onUnmounted(() => {
     <!-- 移动端遮罩 -->
     <div v-if="mobileSidebarOpen" class="sidebar-overlay" @click="mobileSidebarOpen = false" />
 
-    <!-- ===== 页面标题区 ===== -->
-    <header class="learn-header">
-      <div class="learn-header-left">
-        <button v-if="windowWidth < 768" class="header-menu-btn" @click="toggleMobileSidebar">
-          <Icon icon="material-symbols:menu" class="h-5 w-5" />
-        </button>
-        <div>
-          <h1 class="learn-title">学习资源</h1>
-          <p class="learn-subtitle">路径、资料、练习连成一条线</p>
-        </div>
-      </div>
-      <div class="learn-stats">
-        <span class="learn-stats-num">{{ totalFiles }}</span>
-        <span class="learn-stats-unit">篇资料</span>
-        <span class="learn-stats-divider">·</span>
-        <span class="learn-stats-num">{{ totalCategories }}</span>
-        <span class="learn-stats-unit">个分类</span>
-      </div>
-    </header>
-
     <!-- ===== 主体三栏 ===== -->
     <div class="learn-body">
 
@@ -600,6 +574,9 @@ onUnmounted(() => {
           <!-- 工具栏 -->
           <div class="main-toolbar">
             <div class="toolbar-left">
+              <button v-if="windowWidth < 768" class="header-menu-btn" aria-label="打开资料目录" @click="toggleMobileSidebar">
+                <Icon icon="material-symbols:menu" class="h-5 w-5" />
+              </button>
               <Icon icon="material-symbols:folder" class="toolbar-folder-icon" />
               <h2 class="toolbar-title">目录结构</h2>
               <span class="toolbar-count">{{ currentFolderFileCount }} 个文件</span>
@@ -862,9 +839,9 @@ onUnmounted(() => {
   min-width: 280px;
   flex-shrink: 0;
   position: sticky;
-  top: 92px;
+  top: 0;
   align-self: stretch;
-  height: calc(100vh - 92px);
+  height: 100vh;
   overflow-y: auto;
 }
 .learn-main-col {
@@ -876,8 +853,8 @@ onUnmounted(() => {
   width: 320px;
   flex-shrink: 0;
   position: sticky;
-  top: 92px;
-  height: calc(100vh - 92px);
+  top: 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1219,6 +1196,11 @@ onUnmounted(() => {
 }
 .file-row:hover { background: #f1f5f9; }
 :global(html.dark) .file-row:hover { background: #1e293b; }
+.file-row:focus-visible,
+.dir-group-header:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
 .file-icon { width: 18px; height: 18px; flex-shrink: 0; }
 .file-name {
   flex: 1;
@@ -1327,8 +1309,6 @@ onUnmounted(() => {
   .learn-recent-col.is-collapsed { width: 44px; }
 }
 @media (max-width: 767px) {
-  .learn-header { padding: 16px 16px 14px; min-height: 72px; }
-  .learn-title { font-size: 24px; }
   .learn-body { padding: 0 12px 24px; }
   .learn-main-col { padding: 0; }
   .learn-sidebar-col {
@@ -1348,5 +1328,10 @@ onUnmounted(() => {
   .learn-sidebar-col.is-open { transform: translateX(0); }
   .toolbar-search { max-width: none; }
   .detail-path { display: none; }
+  .main-toolbar { align-items: stretch; flex-wrap: wrap; }
+  .toolbar-left { width: 100%; }
+  .toolbar-search { order: 3; width: 100%; }
+  .toolbar-action { margin-left: auto; }
+  .file-meta { display: none; }
 }
 </style>

@@ -418,13 +418,62 @@ class RedisService(IRedisService, Injectable):
         """从列表右侧弹出元素（自动反序列化）"""
         if not self.is_connected():
             return None
-
         try:
             value = self._client.rpop(key)
             return json.loads(value) if value else None
         except Exception as ex:
             self._logger_service.error(f"Redis 列表弹出失败: {key}", ex)
             return None
+
+    def list_claim(self, key: str, processing_key: str) -> Any:
+        """使用 RPOPLPUSH 原子认领任务，Worker 崩溃后任务不会丢失。"""
+        if not self.is_connected():
+            return None
+        try:
+            receipt = self._client.rpoplpush(key, processing_key)
+            if receipt is None:
+                return None
+            return {'payload': json.loads(receipt), 'receipt': receipt}
+        except Exception as ex:
+            self._logger_service.error(f"Redis 认领队列任务失败: {key}", ex)
+            return None
+
+    def list_ack(self, processing_key: str, receipt: str) -> bool:
+        """仅删除当前 receipt，避免并发 Worker 误确认其他任务。"""
+        if not self.is_connected():
+            return False
+        try:
+            return self._client.lrem(processing_key, 1, receipt) == 1
+        except Exception as ex:
+            self._logger_service.error(f"Redis 确认队列任务失败: {processing_key}", ex)
+            return False
+
+    def list_recover(self, processing_key: str, key: str) -> int:
+        """恢复没有 ack 的任务（例如 Worker 进程崩溃或发布重启）。"""
+        if not self.is_connected():
+            return 0
+        recovered = 0
+        try:
+            while self._client.rpoplpush(processing_key, key) is not None:
+                recovered += 1
+            return recovered
+        except Exception as ex:
+            self._logger_service.error(f"Redis 恢复队列任务失败: {processing_key}", ex)
+            return recovered
+
+    def enqueue_with_state(self, state_key: str, state: Any, ttl: int, queue_key: str, task: Any) -> bool:
+        """通过 Redis 事务原子完成“提交已接收 + 任务入队”。"""
+        if not self.is_connected():
+            return False
+        try:
+            with self._client.pipeline(transaction=True) as pipe:
+                pipe.setex(state_key, ttl, json.dumps(state, ensure_ascii=False))
+                pipe.lpush(queue_key, json.dumps(task, ensure_ascii=False))
+                pipe.execute()
+            return True
+        except Exception as ex:
+            self._logger_service.error(f"Redis 原子入队失败: {queue_key}", ex)
+            return False
 
     def list_length(self, key: str) -> int:
         """获取列表长度"""

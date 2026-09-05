@@ -4,8 +4,11 @@ from flask_restx import Namespace, Resource, fields
 from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
+from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
 
 api = Namespace('contests', description='比赛管理接口')
+
+SUPPORTED_CONTEST_MODES = {'ACM', 'OI'}
 
 contest_model = api.model('Contest', {
     'id': fields.Integer(description='比赛ID'),
@@ -47,6 +50,7 @@ def _get_current_user():
 def _contest_to_dict(contest):
     """转换比赛为字典，包含参与人数"""
     data = contest.to_dict()
+    data['status'] = _contest_status(contest)
     data['participants_count'] = ContestParticipant.select().where(
         ContestParticipant.contest == contest
     ).count()
@@ -101,6 +105,47 @@ def _contest_time_error(contest):
     return None
 
 
+def _contest_status(contest):
+    """基于当前时间返回实时状态，不依赖创建时写入的过期状态字段。"""
+    error = _contest_time_error(contest)
+    if error == '比赛尚未开始':
+        return 'upcoming'
+    if error == '比赛已结束':
+        return 'past'
+    return 'ongoing'
+
+
+def _require_participant(contest, user):
+    """比赛中的题目与提交只允许已报名参赛者访问。"""
+    return ContestParticipant.select().where(
+        ContestParticipant.contest == contest,
+        ContestParticipant.user == user,
+    ).exists()
+
+
+def _public_problem_data(problem):
+    """对参赛者返回题面，不暴露参考答案或任何隐藏测试数据。"""
+    data = problem.to_dict()
+    data.pop('correct_answer', None)
+    return data
+
+
+def _safe_submission_result(result):
+    """移除隐藏测试数据，保留前端展示判题状态所需的最小信息。"""
+    safe = dict(result)
+    details = safe.get('details')
+    if isinstance(details, list):
+        safe['details'] = [
+            {
+                'passed': bool(item.get('passed')),
+                'status': item.get('status', 'Error'),
+                'time_used': item.get('time_used', 0),
+            }
+            for item in details if isinstance(item, dict)
+        ]
+    return safe
+
+
 @api.route('/')
 class ContestListController(Resource):
     @api.doc('list_contests')
@@ -134,6 +179,11 @@ class ContestListController(Resource):
 
         start_time = _parse_dt(data.get('start_time'))
         end_time = _parse_dt(data.get('end_time'))
+        if start_time and end_time and end_time <= start_time:
+            return {'error': '结束时间必须晚于开始时间'}, 400
+        contest_type = str(data.get('contest_type', 'ACM')).upper()
+        if contest_type not in SUPPORTED_CONTEST_MODES:
+            return {'error': '比赛模式仅支持 ACM 或 OI'}, 400
 
         # 自动推断状态（与 _contest_time_error 一致，使用 UTC now）
         now = datetime.now(timezone.utc)
@@ -149,7 +199,7 @@ class ContestListController(Resource):
         contest = Contest.create(
             title=title,
             description=description,
-            contest_type=data.get('contest_type', 'ACM'),
+            contest_type=contest_type,
             status=status,
             start_time=start_time,
             end_time=end_time,
@@ -188,7 +238,10 @@ class ContestDetailController(Resource):
         if 'description' in data:
             contest.description = data['description']
         if 'contest_type' in data:
-            contest.contest_type = data['contest_type']
+            contest_type = str(data['contest_type']).upper()
+            if contest_type not in SUPPORTED_CONTEST_MODES:
+                return {'error': '比赛模式仅支持 ACM 或 OI'}, 400
+            contest.contest_type = contest_type
         if 'status' in data:
             contest.status = data['status']
         if 'start_time' in data and data['start_time']:
@@ -199,6 +252,8 @@ class ContestDetailController(Resource):
             parsed = _parse_dt(data['end_time'])
             if parsed is not None:
                 contest.end_time = parsed
+        if contest.start_time and contest.end_time and contest.end_time <= contest.start_time:
+            return {'error': '结束时间必须晚于开始时间'}, 400
         if 'penalty_time' in data:
             try:
                 contest.penalty_time = int(data['penalty_time'] or 20)
@@ -273,10 +328,11 @@ class ContestJoinController(Resource):
         if exists:
             return {'success': True, 'message': '已参加比赛', 'already_joined': True}, 200
 
-        ContestParticipant.create(
-            contest=contest,
-            user=user,
-        )
+        try:
+            ContestParticipant.create(contest=contest, user=user)
+        except Exception:
+            # 并发报名时唯一索引可能先于本次请求写入；按幂等成功处理。
+            return {'success': True, 'message': '已参加比赛', 'already_joined': True}, 200
         return {'success': True, 'message': '已参加比赛'}, 201
 
 
@@ -284,6 +340,8 @@ class ContestJoinController(Resource):
 @api.param('contest_id', '比赛ID')
 @api.param('problem_id', '比赛题目ID')
 class ContestProblemSubmitController(Resource):
+    @AuthMiddleware.require_auth
+    @RateLimitMiddleware.rate_limit(max_requests=12, window_seconds=60)
     def post(self, contest_id: int, problem_id: int):
         """提交比赛题目代码进行判题（异步入队，返回 submission_id 供轮询）"""
         user = _get_current_user()
@@ -298,6 +356,8 @@ class ContestProblemSubmitController(Resource):
         time_error = _contest_time_error(contest)
         if time_error:
             return {'error': time_error}, 400
+        if not _require_participant(contest, user):
+            return {'error': '请先参加比赛'}, 403
 
         try:
             problem = ContestProblem.get_by_id(problem_id)
@@ -318,9 +378,12 @@ class ContestProblemSubmitController(Resource):
         if submission_id is None:
             import time as _time
             submission_id = int(_time.time() * 1000)
+        # 排行榜罚时以用户提交进入系统的时刻为准，绝不能使用 Worker 排队完成时刻。
+        submitted_at = datetime.now(_CST).replace(tzinfo=None).isoformat()
 
-        # 初始化判题结果（Pending），由后台 Worker 完成后覆盖
-        redis_service.set(
+        # 状态与任务必须原子写入：若进程在两条独立 Redis 命令之间退出，用户会看到
+        # 永久 Pending 或 Worker 收到没有状态的任务。事务确保二者同时成功或同时失败。
+        if not redis_service.enqueue_with_state(
             f'contest_submission:{submission_id}',
             {
                 'problem_id': problem_id,
@@ -332,9 +395,6 @@ class ContestProblemSubmitController(Resource):
                 'details': [],
             },
             3600,
-        )
-
-        redis_service.list_push(
             'contest_judge_queue',
             {
                 'submission_id': submission_id,
@@ -343,8 +403,10 @@ class ContestProblemSubmitController(Resource):
                 'user_id': user.id,
                 'code': code,
                 'language': language,
+                'submitted_at': submitted_at,
             },
-        )
+        ):
+            return {'error': '判题队列暂不可用，请稍后重试'}, 503
 
         return {'submission_id': submission_id, 'status': 'Pending'}, 202
 
@@ -356,11 +418,20 @@ class ContestProblemSubmitController(Resource):
 class ContestProblemSubmissionResultController(Resource):
     def get(self, contest_id: int, problem_id: int, submission_id: int):
         """轮询比赛题目判题结果"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
         redis_service = inject(IRedisService)
         result = redis_service.get(f'contest_submission:{submission_id}')
         if not result:
             return {'error': '提交记录不存在或已过期'}, 404
-        return result, 200
+        if (
+            result.get('user_id') != user.id
+            or result.get('contest_id') != contest_id
+            or result.get('problem_id') != problem_id
+        ):
+            return {'error': '无权访问该提交'}, 403
+        return _safe_submission_result(result), 200
 
 
 @api.route('/<int:contest_id>/problems')
@@ -372,7 +443,7 @@ class ContestProblemListPublicController(Resource):
             problems = ContestProblem.select().where(
                 ContestProblem.contest_id == contest_id
             ).order_by(ContestProblem.problem_index)
-            return [p.to_dict() for p in problems], 200
+            return [_public_problem_data(p) for p in problems], 200
         except Exception as e:
             return {'error': str(e)}, 500
 
@@ -386,6 +457,9 @@ class ContestProblemStatusesController(Resource):
         if not user:
             return {'error': '请先登录'}, 401
         try:
+            contest = Contest.get_by_id(contest_id)
+            if not _require_participant(contest, user):
+                return {'error': '请先参加比赛'}, 403
             subs = (
                 ContestSubmission.select()
                 .where(
@@ -402,6 +476,8 @@ class ContestProblemStatusesController(Resource):
                 elif not best[pid]['solved'] and s.status == 'AC':
                     best[pid] = {'status': 'AC', 'solved': True}
             return best, 200
+        except Contest.DoesNotExist:
+            return {'error': '比赛不存在'}, 404
         except Exception:
             return {}, 200
 
@@ -416,9 +492,14 @@ class ContestProblemDetailPublicController(Resource):
             problem = ContestProblem.get_by_id(problem_id)
             if not problem or problem.contest_id != contest_id:
                 return {'error': '题目不存在'}, 404
-            data = problem.to_dict()
-            data.pop('correct_answer', None)
-            return data, 200
+            contest = Contest.get_by_id(contest_id)
+            time_error = _contest_time_error(contest)
+            if time_error:
+                return {'error': time_error}, 403
+            user = _get_current_user()
+            if not user or not _require_participant(contest, user):
+                return {'error': '请先参加比赛'}, 403
+            return _public_problem_data(problem), 200
         except Exception as e:
             return {'error': str(e)}, 500
 
@@ -427,13 +508,5 @@ class ContestProblemDetailPublicController(Resource):
 @api.param('problem_id', '比赛题目ID')
 class ContestProblemByIdPublicController(Resource):
     def get(self, problem_id: int):
-        """根据题目ID获取比赛题目详情（公开接口）"""
-        try:
-            problem = ContestProblem.get_by_id(problem_id)
-            if not problem:
-                return {'error': '题目不存在'}, 404
-            data = problem.to_dict()
-            data.pop('correct_answer', None)
-            return data, 200
-        except Exception as e:
-            return {'error': str(e)}, 500
+        """废弃无比赛上下文的题目读取接口，避免绕过时间与报名校验。"""
+        return {'error': '请通过比赛题目地址访问'}, 410

@@ -271,6 +271,26 @@ class IRedisService(ABC):
         pass
 
     @abstractmethod
+    def list_claim(self, key: str, processing_key: str) -> Any:
+        """原子地将队列任务转入处理中队列，并返回含 receipt 的任务。"""
+        pass
+
+    @abstractmethod
+    def list_ack(self, processing_key: str, receipt: str) -> bool:
+        """确认已完成的可靠队列任务。"""
+        pass
+
+    @abstractmethod
+    def list_recover(self, processing_key: str, key: str) -> int:
+        """将意外中断 Worker 遗留的处理中任务放回待处理队列。"""
+        pass
+
+    @abstractmethod
+    def enqueue_with_state(self, state_key: str, state: Any, ttl: int, queue_key: str, task: Any) -> bool:
+        """原子写入任务初始状态并入队，避免 Pending 状态与队列消息断链。"""
+        pass
+
+    @abstractmethod
     def list_length(self, key: str) -> int:
         """获取列表（List）的长度"""
         pass

@@ -2,6 +2,7 @@
 import { ref, defineAsyncComponent, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getContestProblem, type ContestProblemData } from '../services/api';
+import { Icon } from '@iconify/vue';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
@@ -25,7 +26,7 @@ const loadData = async () => {
   isLoading.value = true;
   error.value = '';
   try {
-    problem.value = await getContestProblem(problemId);
+    problem.value = await getContestProblem(contestId, problemId);
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败';
   } finally {
@@ -53,7 +54,7 @@ onMounted(loadData);
       </div>
 
       <div v-else-if="error" class="ui-empty">
-        <span class="mb-2 text-5xl">❌</span>
+        <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
         <p class="font-bold">{{ error }}</p>
         <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
       </div>
@@ -67,8 +68,8 @@ onMounted(loadData);
           </div>
           <div class="mt-3 flex flex-wrap items-center gap-3">
             <span :class="difficultyClass(problem.difficulty)">{{ problem.difficulty }}</span>
-            <span class="text-sm text-[#64748B] dark:text-[#94A3B8]">⏱ {{ problem.time_limit }}ms</span>
-            <span class="text-sm text-[#64748B] dark:text-[#94A3B8]">💾 {{ problem.memory_limit }}MB</span>
+             <span class="inline-flex items-center gap-1 text-sm text-[#64748B] dark:text-[#94A3B8]"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ problem.time_limit }}ms</span>
+             <span class="inline-flex items-center gap-1 text-sm text-[#64748B] dark:text-[#94A3B8]"><Icon icon="material-symbols:memory" class="h-4 w-4" />{{ problem.memory_limit }}MB</span>
           </div>
         </div>
 
@@ -96,7 +97,7 @@ onMounted(loadData);
         <!-- 提交按钮 -->
         <div class="mt-8 flex justify-center">
           <button class="ui-btn ui-btn-primary px-8 py-3 text-base" @click="openEditor">
-            🚀 开始答题
+             <span class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:code-rounded" class="h-5 w-5" />开始答题</span>
           </button>
         </div>
       </template>

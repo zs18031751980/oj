@@ -40,6 +40,24 @@ const authStore = useAuthStore();
 const problems = shallowRef<Problem[]>([]);
 const favoriteIds = ref<Set<number>>(new Set());
 
+// 统一处理空格和常见分隔符，让 "binary search"、"binary-search" 等写法都能命中。
+const normalizeSearchText = (value: string) =>
+  value.toLocaleLowerCase().replace(/[\s\-_./\\()[\]{}:：,，。]+/g, '');
+
+const fuzzyMatch = (value: string, query: string) => {
+  const text = normalizeSearchText(value);
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  if (text.includes(normalizedQuery)) return true;
+
+  let queryIndex = 0;
+  for (const character of text) {
+    if (character === normalizedQuery[queryIndex]) queryIndex += 1;
+    if (queryIndex === normalizedQuery.length) return true;
+  }
+  return false;
+};
+
 const loadProblems = async () => {
   isLoading.value = true;
   loadError.value = '';
@@ -88,7 +106,7 @@ const categories = computed<CategoryOption[]>(() => {
 });
 
 const filteredProblems = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
+  const q = searchQuery.value.trim();
   return problems.value
     .filter((p) => {
       if (categoryFilter.value && p.category !== categoryFilter.value) return false;
@@ -100,9 +118,10 @@ const filteredProblems = computed(() => {
       if (statusFilter.value === 'favorite' && !favoriteIds.value.has(p.id)) return false;
       if (q) {
         return (
-          p.title.toLowerCase().includes(q) ||
-          p.tags.some((t) => t.toLowerCase().includes(q)) ||
-          String(p.id).includes(q)
+          fuzzyMatch(p.title, q) ||
+          p.tags.some((t) => fuzzyMatch(t, q)) ||
+          fuzzyMatch(p.categoryLabel || p.category, q) ||
+          fuzzyMatch(String(p.sourceNumber || p.id), q)
         );
       }
       return true;

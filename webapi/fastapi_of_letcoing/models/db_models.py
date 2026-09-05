@@ -441,6 +441,8 @@ class ContestSubmission(BaseModel):
     total = IntegerField(default=0, verbose_name="用例总数")
     score = IntegerField(default=0, verbose_name="本题得分(OI模式)")
     language = CharField(max_length=20, default="cpp", verbose_name="提交语言")
+    code = TextField(default="", verbose_name="提交源代码(审计/复判用)")
+    judge_submission_id = CharField(max_length=64, null=True, unique=True, verbose_name="异步判题任务ID")
     submitted_at = DateTimeField(default=datetime.now, verbose_name="提交时间")
 
     class Meta:
@@ -719,6 +721,20 @@ _SCHEMA_MIGRATIONS = [
         [
             # 比赛增加可配置的罚时（分钟），用于 ACM 模式排行榜罚时计算
             "ALTER TABLE contests ADD COLUMN IF NOT EXISTS penalty_time INTEGER DEFAULT 20;",
+        ],
+    ),
+    (
+        "0011_contest_submission_code",
+        [
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS code TEXT DEFAULT '';",
+        ],
+    ),
+    (
+        "0012_contest_submission_idempotency",
+        [
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS judge_submission_id VARCHAR(64);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_submissions_judge_submission_id "
+            "ON contest_submissions(judge_submission_id) WHERE judge_submission_id IS NOT NULL;",
         ],
     ),
 ]

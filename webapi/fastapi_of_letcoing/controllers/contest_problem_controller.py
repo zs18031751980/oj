@@ -5,6 +5,8 @@ import string
 import subprocess
 import tempfile
 import os
+import shutil
+import signal
 import time
 from datetime import datetime
 from flask import request
@@ -46,6 +48,7 @@ contest_problem_input = api.model('ContestProblemInput', {
     'difficulty': fields.String(default='中等', description='难度'),
     'language': fields.String(default='cpp', description='参考代码语言'),
     'samples': fields.String(description='样例输入输出(JSON)'),
+    'testcases': fields.List(fields.Raw, description='测试数据列表，每项含 input/output/is_sample'),
 })
 
 
@@ -336,27 +339,42 @@ def _build_preexec(memory_mb: int | None):
         return None
 
 
-def _exec_command(cmd: list, stdin: str, timeout: int, memory_mb: int | None):
+def _exec_command(cmd: list, stdin: str, timeout: float, memory_mb: int | None, cwd: str | None = None):
     """
     执行命令并返回 (stdout, stderr, returncode, timed_out, mem_exceeded)。
     通过 preexec_fn 限制内存，可区分 TLE 与 MLE。
     """
     preexec = _build_preexec(memory_mb)
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             cmd,
-            input=stdin,
-            capture_output=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             preexec_fn=preexec,
+            start_new_session=True,
+            cwd=cwd,
+            # 运行用户代码时不传递数据库、JWT 等服务进程环境变量。
+            env={'PATH': os.environ.get('PATH', ''), 'LANG': 'C.UTF-8'},
         )
+        try:
+            stdout, stderr = process.communicate(input=stdin, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # 终止整个进程组，防止提交代码 fork 后子进程继续占用主机资源。
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate()
+            return (None, None, None, True, False)
+        result = type('ExecutionResult', (), {
+            'stdout': stdout, 'stderr': stderr, 'returncode': process.returncode,
+        })()
         if memory_mb and result.returncode != 0 and result.stderr and 'MemoryError' in result.stderr:
             # RLIMIT_AS 触发 Python 内存错误：标记为内存超限
             return (result.stdout, result.stderr, result.returncode, False, True)
         return (result.stdout, result.stderr, result.returncode, False, False)
-    except subprocess.TimeoutExpired:
-        return (None, None, None, True, False)
     except (MemoryError, OSError) as exc:
         # setrlimit 生效时可能抛出 MemoryError / OSError(12, 'Cannot allocate memory')
         if isinstance(exc, MemoryError) or (isinstance(exc, OSError) and exc.errno == 12):
@@ -364,6 +382,100 @@ def _exec_command(cmd: list, stdin: str, timeout: int, memory_mb: int | None):
         return (None, None, None, False, False)
     except Exception:
         return (None, None, None, False, False)
+
+
+class PreparedProgram:
+    """一次编译、多次执行的受限程序。
+
+    比赛判题会对同一提交运行多组数据；将编译移出测试点循环可显著降低
+    C++/Java/Go 的队列耗时，也保证 Java 的 ``public class Main`` 使用正确文件名。
+    这不是安全沙箱：生产环境必须在容器执行器中运行本对象。
+    """
+
+    def __init__(self, command: list[str], workdir: str, language: str):
+        self.command = command
+        self.workdir = workdir
+        self.language = language
+
+    def run(self, stdin: str, timeout: float, memory_limit: int | None):
+        started = time.perf_counter()
+        command, os_memory_limit = self.command, memory_limit
+        if self.language == 'java' and memory_limit:
+            # JVM 会预留远大于 Java 堆的虚拟地址空间，RLIMIT_AS 会导致其在
+            # 业务代码执行前启动失败。改为限制堆，并保留进程级时间/PID 控制。
+            heap_mb = max(int(memory_limit) - 64, 16)
+            command = ['java', '-Xms16m', f'-Xmx{heap_mb}m', *self.command[1:]]
+            os_memory_limit = None
+        result = _exec_command(command, stdin, timeout, os_memory_limit, cwd=self.workdir)
+        elapsed = int((time.perf_counter() - started) * 1000)
+        stdout, error_type, stderr = _interpret(result, is_compiled=True)
+        return stdout, error_type, elapsed, stderr
+
+    def close(self):
+        shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+def _prepare_program(code: str, language: str, compile_timeout: float = 20.0):
+    """准备一次可重复执行的程序，返回 ``(program, error_type, stderr)``。"""
+    normalized = {'js': 'javascript', 'node': 'javascript', 'py': 'python'}.get(
+        (language or '').lower(), (language or '').lower()
+    )
+    if normalized not in {'python', 'cpp', 'java', 'go', 'javascript'}:
+        return None, 'CE', f'不支持的比赛语言: {language}'
+
+    workdir = tempfile.mkdtemp(prefix='letcoding-judge-')
+    try:
+        if normalized == 'python':
+            source = os.path.join(workdir, 'main.py')
+            with open(source, 'w', encoding='utf-8') as f:
+                f.write(code)
+            return PreparedProgram(['python3', source], workdir, normalized), None, None
+        if normalized == 'javascript':
+            source = os.path.join(workdir, 'main.js')
+            with open(source, 'w', encoding='utf-8') as f:
+                f.write(code)
+            return PreparedProgram(['node', source], workdir, normalized), None, None
+        if normalized == 'cpp':
+            source, executable = os.path.join(workdir, 'main.cpp'), os.path.join(workdir, 'main')
+            with open(source, 'w', encoding='utf-8') as f:
+                f.write(code)
+            result = subprocess.run(
+                ['g++', '-O2', '-pipe', '-std=c++17', source, '-o', executable],
+                capture_output=True, text=True, timeout=compile_timeout,
+            )
+            if result.returncode:
+                shutil.rmtree(workdir, ignore_errors=True)
+                return None, 'CE', result.stderr
+            return PreparedProgram([executable], workdir, normalized), None, None
+        if normalized == 'java':
+            source = os.path.join(workdir, 'Main.java')
+            with open(source, 'w', encoding='utf-8') as f:
+                f.write(code)
+            result = subprocess.run(
+                ['javac', '-d', workdir, source], capture_output=True, text=True,
+                timeout=compile_timeout,
+            )
+            if result.returncode:
+                shutil.rmtree(workdir, ignore_errors=True)
+                return None, 'CE', result.stderr
+            return PreparedProgram(['java', '-cp', workdir, 'Main'], workdir, normalized), None, None
+        source, executable = os.path.join(workdir, 'main.go'), os.path.join(workdir, 'main')
+        with open(source, 'w', encoding='utf-8') as f:
+            f.write(code)
+        result = subprocess.run(
+            ['go', 'build', '-o', executable, source], capture_output=True, text=True,
+            timeout=compile_timeout,
+        )
+        if result.returncode:
+            shutil.rmtree(workdir, ignore_errors=True)
+            return None, 'CE', result.stderr
+        return PreparedProgram([executable], workdir, normalized), None, None
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return None, 'CE', '编译超时'
+    except Exception as exc:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return None, 'CE', str(exc)
 
 
 def _interpret(result, is_compiled: bool):
@@ -383,6 +495,19 @@ def _interpret(result, is_compiled: bool):
     return (stdout, None, stderr)
 
 
+def normalize_judge_output(value: str | None) -> str:
+    """采用标准 OJ 空白规则比较输出。
+
+    保留每行的内容与换行结构，只忽略 Windows/Unix 换行差异、行尾空白及文件末尾
+    的空白行。这样不会把 ``1 2`` 与 ``12`` 等不同答案误判相同。
+    """
+    text = (value or '').replace('\r\n', '\n').replace('\r', '\n')
+    lines = [line.rstrip(' \t') for line in text.split('\n')]
+    while lines and lines[-1] == '':
+        lines.pop()
+    return '\n'.join(lines)
+
+
 def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_limit: int | None = None) -> tuple[str | None, str | None, int, str | None]:
     """
     运行代码并返回 (stdout, error_type, time_used_ms, stderr)。
@@ -394,127 +519,14 @@ def _run_code(code: str, language: str, stdin: str, timeout: int = 5, memory_lim
       - 'MLE': 内存超出限制
     time_used_ms 仅统计「运行」耗时（不含编译），单位毫秒。
     """
-    try:
-        if language == 'python':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(code)
-                f.flush()
-                src = f.name
-            try:
-                t0 = time.perf_counter()
-                result = _exec_command(['python3', src], stdin, timeout, memory_limit)
-                t1 = time.perf_counter()
-            finally:
-                os.unlink(src)
-            stdout, err_type, stderr = _interpret(result, is_compiled=False)
-            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
-
-        elif language == 'cpp':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.cpp', delete=False) as f:
-                f.write(code)
-                f.flush()
-                src = f.name
-            exe_path = f.name + '.exe'
-            try:
-                compile_result = subprocess.run(
-                    ['g++', '-o', exe_path, src],
-                    capture_output=True,
-                    text=True,
-                    timeout=max(timeout, 10),
-                )
-                if compile_result.returncode != 0:
-                    return (None, 'CE', 0, compile_result.stderr)
-                t0 = time.perf_counter()
-                result = _exec_command([exe_path], stdin, timeout, memory_limit)
-                t1 = time.perf_counter()
-            finally:
-                os.unlink(src)
-                if os.path.exists(exe_path):
-                    os.unlink(exe_path)
-            stdout, err_type, stderr = _interpret(result, is_compiled=True)
-            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
-
-        elif language == 'java':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.java', delete=False) as f:
-                f.write(code)
-                f.flush()
-                java_src = f.name
-            try:
-                class_dir = os.path.dirname(java_src)
-                compile_result = subprocess.run(
-                    ['javac', java_src],
-                    capture_output=True,
-                    text=True,
-                    timeout=max(timeout, 10),
-                )
-                if compile_result.returncode != 0:
-                    return (None, 'CE', 0, compile_result.stderr)
-                t0 = time.perf_counter()
-                result = _exec_command(
-                    ['java', '-cp', class_dir, 'Main'], stdin, timeout, memory_limit
-                )
-                t1 = time.perf_counter()
-            finally:
-                try:
-                    if os.path.exists(java_src):
-                        os.unlink(java_src)
-                    class_file = os.path.join(os.path.dirname(java_src), 'Main.class')
-                    if os.path.exists(class_file):
-                        os.unlink(class_file)
-                except Exception:
-                    pass
-            stdout, err_type, stderr = _interpret(result, is_compiled=True)
-            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
-
-        elif language == 'go':
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.go', delete=False) as f:
-                f.write(code)
-                f.flush()
-                go_src = f.name
-            try:
-                t0 = time.perf_counter()
-                result = _exec_command(
-                    ['go', 'run', go_src], stdin, max(timeout, 15), memory_limit
-                )
-                t1 = time.perf_counter()
-            finally:
-                try:
-                    if os.path.exists(go_src):
-                        os.unlink(go_src)
-                except Exception:
-                    pass
-            # go run 同时完成编译与运行，非零退出码统一视为编译错误之外归为 RE
-            stdout, stderr, returncode, timed_out, mem_exceeded = result
-            if timed_out:
-                return (None, 'TLE', int((t1 - t0) * 1000), stderr)
-            if mem_exceeded:
-                return (None, 'MLE', int((t1 - t0) * 1000), stderr)
-            if returncode != 0:
-                # go 无独立编译阶段，编译失败也归为 CE 以便前端区分
-                return (None, 'CE', int((t1 - t0) * 1000), stderr)
-            return (stdout, None, int((t1 - t0) * 1000), stderr)
-
-        elif language in ('javascript', 'js', 'node'):
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as f:
-                f.write(code)
-                f.flush()
-                js_src = f.name
-            try:
-                t0 = time.perf_counter()
-                result = _exec_command(['node', js_src], stdin, timeout, memory_limit)
-                t1 = time.perf_counter()
-            finally:
-                try:
-                    if os.path.exists(js_src):
-                        os.unlink(js_src)
-                except Exception:
-                    pass
-            stdout, err_type, stderr = _interpret(result, is_compiled=False)
-            return (stdout, err_type, int((t1 - t0) * 1000), stderr)
-
-    except (subprocess.TimeoutExpired, Exception):
-        pass
-    return (None, 'RE', 0, None)
+    # 对单次调用也复用统一的编译/运行实现，避免各语言行为漂移。
+    program, prepare_error, prepare_stderr = _prepare_program(code, language)
+    if program is not None:
+        try:
+            return program.run(stdin, timeout, memory_limit)
+        finally:
+            program.close()
+    return None, prepare_error or 'CE', 0, prepare_stderr
 
 
 def _problem_to_dict(p: ContestProblem) -> dict:
@@ -532,12 +544,83 @@ def _problem_to_dict(p: ContestProblem) -> dict:
     return data
 
 
+def _normalize_testcases(raw_testcases, raw_samples) -> list[dict]:
+    """校验管理员提供的测试数据；不再凭参考代码臆造题目输入格式。"""
+    source = raw_testcases
+    if source is None:
+        source = raw_samples or []
+    if isinstance(source, str):
+        try:
+            source = json.loads(source)
+        except json.JSONDecodeError as exc:
+            raise ValueError('测试数据必须是合法 JSON') from exc
+    if not isinstance(source, list) or not source:
+        raise ValueError('至少需要提供一组测试数据')
+    if len(source) > 200:
+        raise ValueError('测试数据最多 200 组')
+    normalized = []
+    for index, item in enumerate(source):
+        if not isinstance(item, dict) or 'input' not in item or 'output' not in item:
+            raise ValueError(f'第 {index + 1} 组测试数据必须包含 input 与 output')
+        input_data, output_data = str(item['input']), str(item['output'])
+        if len(input_data) > 65536 or len(output_data) > 65536:
+            raise ValueError(f'第 {index + 1} 组测试数据过大（上限 64KB）')
+        normalized.append({
+            'input_data': input_data,
+            'expected_output': output_data,
+            'is_sample': bool(item.get('is_sample', raw_testcases is None)),
+            'sort_order': index,
+        })
+    return normalized
+
+
+def _verify_reference_answer(code: str, language: str, testcases: list[dict], time_limit: int, memory_limit: int):
+    """建题时验证参考答案能稳定通过管理员提供的每组测试数据。"""
+    program, error_type, stderr = _prepare_program(code, language)
+    if program is None:
+        raise ValueError(f'参考代码编译失败：{stderr or error_type}')
+    try:
+        timeout = max(int(time_limit or 1000) / 1000.0, 0.05)
+        for index, testcase in enumerate(testcases):
+            output, run_error, _, run_stderr = program.run(
+                testcase['input_data'], timeout, int(memory_limit or 256),
+            )
+            if run_error:
+                raise ValueError(f'参考代码在第 {index + 1} 组测试数据上失败：{run_error} {run_stderr or ""}'.strip())
+            if normalize_judge_output(output) != normalize_judge_output(testcase['expected_output']):
+                raise ValueError(f'参考代码输出与第 {index + 1} 组测试数据的期望输出不一致')
+    finally:
+        program.close()
+
+
+def _replace_testcases(problem: ContestProblem, testcases: list[dict]):
+    ContestTestcase.delete().where(ContestTestcase.contest_problem == problem).execute()
+    for testcase in testcases:
+        ContestTestcase.create(contest_problem=problem, **testcase)
+
+
+def _validate_limits(time_limit, memory_limit) -> tuple[int, int]:
+    """统一限制题目资源配置，避免 0ms/负数等配置破坏严格判题语义。"""
+    try:
+        time_ms, memory_mb = int(time_limit), int(memory_limit)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('时间限制和内存限制必须是整数') from exc
+    if not 50 <= time_ms <= 60000:
+        raise ValueError('时间限制必须在 50ms 到 60000ms 之间')
+    if not 16 <= memory_mb <= 2048:
+        raise ValueError('内存限制必须在 16MB 到 2048MB 之间')
+    return time_ms, memory_mb
+
+
 @api.route('/')
 class ContestProblemListController(Resource):
     @api.doc('list_contest_problems')
     @api.param('contest_id', '比赛ID')
     def get(self):
         """获取比赛题目列表"""
+        _, err = _require_manager()
+        if err:
+            return err
         contest_id = request.args.get('contest_id', type=int)
         if not contest_id:
             return {'error': '缺少 contest_id'}, 400
@@ -568,8 +651,24 @@ class ContestProblemListController(Resource):
         for field in required:
             if not data.get(field, '').strip():
                 return {'error': f'{field} 不能为空'}, 400
+        try:
+            time_limit, memory_limit = _validate_limits(
+                data.get('time_limit', 1000), data.get('memory_limit', 256),
+            )
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
 
-        # 创建题目
+        try:
+            testcases = _normalize_testcases(data.get('testcases'), data.get('samples'))
+            _verify_reference_answer(
+                data['correct_answer'], data.get('language', 'cpp'), testcases,
+                time_limit, memory_limit,
+            )
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
+
+        # 创建题目及已验证的测试数据。测试数据必须由出题人提供，避免泛化随机输入
+        # 对任意题目都生成非法数据的错误设计。
         problem = ContestProblem.create(
             contest=contest,
             problem_index=data['problem_index'].strip(),
@@ -578,31 +677,17 @@ class ContestProblemListController(Resource):
             input_desc=data.get('input_desc', ''),
             output_desc=data.get('output_desc', ''),
             correct_answer=data['correct_answer'],
-            time_limit=data.get('time_limit', 1000),
-            memory_limit=data.get('memory_limit', 256),
+            time_limit=time_limit,
+            memory_limit=memory_limit,
             difficulty=data.get('difficulty', '中等'),
             language=data.get('language', 'cpp'),
             samples=data.get('samples', '[]'),
             sort_order=data.get('sort_order', 0),
         )
-
-        # 自动生成测试用例改为后台队列执行，避免建题请求因生成耗时过长（100
-        # 个用例 × 多次编译/运行 + 间隔）而触发反向代理/网关超时。生成进度可通过
-        # GET /<problem_id>/testcase-generation 轮询。
-        try:
-            redis_service = inject(IRedisService)
-            redis_service.list_push('testcase_gen_queue', {
-                'problem_id': problem.id,
-                'correct_answer': data['correct_answer'],
-                'count': 100,
-                'time_limit': data.get('time_limit', 1000),
-                'memory_limit': data.get('memory_limit', 256),
-            })
-        except Exception:
-            pass
+        _replace_testcases(problem, testcases)
 
         result = _problem_to_dict(problem)
-        result['testcase_generation'] = 'queued'
+        result['testcase_generation'] = 'done'
         return result, 201
 
 
@@ -610,6 +695,9 @@ class ContestProblemListController(Resource):
 class ContestProblemDetailController(Resource):
     def get(self, problem_id):
         """获取比赛题目详情"""
+        _, err = _require_manager()
+        if err:
+            return err
         try:
             p = ContestProblem.get_by_id(problem_id)
             data = _problem_to_dict(p)
@@ -659,7 +747,26 @@ class ContestProblemDetailController(Resource):
             problem.samples = data.get('samples', '[]')
         if 'sort_order' in data:
             problem.sort_order = data['sort_order']
+        try:
+            time_limit, memory_limit = _validate_limits(problem.time_limit, problem.memory_limit)
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
+        problem.time_limit = time_limit
+        problem.memory_limit = memory_limit
+        replacement_testcases = None
+        if 'testcases' in data or 'samples' in data:
+            try:
+                replacement_testcases = _normalize_testcases(data.get('testcases'), data.get('samples'))
+                _verify_reference_answer(
+                    data.get('correct_answer', problem.correct_answer),
+                    data.get('language', problem.language), replacement_testcases,
+                    time_limit, memory_limit,
+                )
+            except ValueError as exc:
+                return {'error': str(exc)}, 400
         problem.save()
+        if replacement_testcases is not None:
+            _replace_testcases(problem, replacement_testcases)
         return _problem_to_dict(problem), 200
 
     def delete(self, problem_id):
@@ -691,7 +798,7 @@ class ContestProblemDetailController(Resource):
 @api.route('/<int:problem_id>/regenerate-testcases')
 class RegenerateTestcasesController(Resource):
     def post(self, problem_id):
-        """重新生成测试用例（后台队列执行）"""
+        """废弃自动生成：通用题目必须由管理员提供有效测试数据。"""
         user, err = _require_manager()
         if err:
             return err
@@ -701,25 +808,7 @@ class RegenerateTestcasesController(Resource):
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
 
-        # 删除旧测试用例（生成任务会再次清理并写入，这里先清空避免轮询期间数量闪烁）
-        ContestTestcase.delete().where(
-            ContestTestcase.contest_problem == problem
-        ).execute()
-
-        # 重新生成改为后台队列执行，使用与正式比赛判题一致的时限/内存限制
-        try:
-            redis_service = inject(IRedisService)
-            redis_service.list_push('testcase_gen_queue', {
-                'problem_id': problem.id,
-                'correct_answer': problem.correct_answer,
-                'count': 100,
-                'time_limit': problem.time_limit or 1000,
-                'memory_limit': problem.memory_limit or 256,
-            })
-        except Exception:
-            pass
-
-        return {'success': True, 'testcase_generation': 'queued'}, 200
+        return {'error': '自动随机生成已停用，请在编辑题目时提交经过验证的测试数据'}, 409
 
 
 @api.route('/<int:problem_id>/testcase-generation')
@@ -753,4 +842,3 @@ class TestcaseGenerationStatusController(Resource):
             except Exception:
                 status = {'status': 'pending', 'generated': 0, 'total': 0}
         return status, 200
-

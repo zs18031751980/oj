@@ -506,7 +506,8 @@ export interface ContestProblemData {
   description: string;
   input_desc: string;
   output_desc: string;
-  correct_answer: string;
+  // 仅管理员管理接口会返回参考答案；参赛者接口绝不返回该字段。
+  correct_answer?: string;
   time_limit: number;
   memory_limit: number;
   difficulty: string;
@@ -525,8 +526,8 @@ export interface ContestProblemStatus {
 export const getContestStatuses = (contestId: number) =>
   apiRequest<Record<string, ContestProblemStatus>>(`/contests/${contestId}/statuses`);
 
-export const getContestProblem = (id: number) =>
-  apiRequest<ContestProblemData>(`/contests/problems/${id}`);
+export const getContestProblem = (contestId: number, problemId: number) =>
+  apiRequest<ContestProblemData>(`/contests/${contestId}/problems/${problemId}`);
 
 // ---------- 比赛实时排行榜 ----------
 

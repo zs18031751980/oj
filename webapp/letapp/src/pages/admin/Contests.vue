@@ -451,22 +451,12 @@ const saveProblem = async () => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      message.success('题目创建成功，测试用例正在后台生成');
+      message.success('题目创建成功，测试数据已验证并保存');
     }
     clearDraft();
     showProblemForm.value = false;
     isGeneratingTestcases.value = false;
     await loadProblems(selectedContestId.value);
-    // 创建场景下，定位刚新建的题目并轮询生成进度，直到用例数稳定
-    if (!editingProblem.value) {
-      const created = problems.value.find(
-        (p) => p.problem_index === f.problem_index && p.title === f.title,
-      );
-      if (created) {
-        await pollTestcaseGeneration(created.id);
-        if (selectedContestId.value) await loadProblems(selectedContestId.value);
-      }
-    }
   } catch (e) {
     message.error(e instanceof Error ? e.message : '保存失败');
   } finally {
@@ -509,7 +499,7 @@ const pollTestcaseGeneration = async (problemId: number) => {
   message.warning('测试用例生成超时，请稍后刷新查看');
 };
 
-// 重新生成测试用例（后台队列执行）
+// 自动生成已停用：通用题目必须由出题人提供符合题意的测试数据。
 const regenerateTestcases = async (problemId: number) => {
   try {
     const res = await apiRequest<{ success: boolean; testcase_generation: string }>(`/admin/contests/${problemId}/regenerate-testcases`, {
@@ -519,9 +509,7 @@ const regenerateTestcases = async (problemId: number) => {
       message.warning('重新生成未成功入队');
       return;
     }
-    message.success('已提交后台重新生成，正在生成测试用例...');
-    await pollTestcaseGeneration(problemId);
-    if (selectedContestId.value) await loadProblems(selectedContestId.value);
+    message.warning('自动生成已停用，请编辑题目并提交符合题意的测试数据');
   } catch (e) {
     message.error('重新生成失败');
   }
@@ -587,8 +575,7 @@ onMounted(loadContests);
               <label class="mb-1 block text-sm font-bold">比赛类型</label>
               <select v-model="contestForm.contest_type" class="ui-input w-full">
                 <option value="ACM">ACM</option>
-                <option value="周赛">周赛</option>
-                <option value="决赛">决赛</option>
+                <option value="OI">OI</option>
               </select>
             </div>
             <div></div>
@@ -629,7 +616,7 @@ onMounted(loadContests);
     </div>
 
     <div v-else-if="contests.length === 0" class="ui-empty">
-      <span class="mb-2 text-5xl">🏆</span>
+      <Icon icon="material-symbols:emoji-events" class="mb-2 h-12 w-12 text-amber-500" />
       <p class="font-bold">暂无比赛</p>
     </div>
 
@@ -682,7 +669,7 @@ onMounted(loadContests);
       </div>
 
       <div v-else-if="problems.length === 0" class="ui-empty">
-        <span class="mb-2 text-5xl">📝</span>
+        <Icon icon="material-symbols:description" class="mb-2 h-12 w-12 text-slate-400" />
         <p class="font-bold">暂无题目</p>
         <p class="text-sm text-[#64748B]">点击"添加题目"开始出题</p>
       </div>
@@ -696,14 +683,14 @@ onMounted(loadContests);
             <div class="font-bold">{{ p.title }}</div>
             <div class="mt-1 flex items-center gap-3 text-xs text-[#94A3B8]">
               <span :class="difficultyClass(p.difficulty)" class="rounded px-1.5 py-0.5">{{ p.difficulty }}</span>
-              <span>⏱ {{ p.time_limit }}ms</span>
-              <span>💾 {{ p.memory_limit }}MB</span>
-              <span>📊 {{ p.testcase_count || 0 }} 组测试用例</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-3.5 w-3.5" />{{ p.time_limit }}ms</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:memory" class="h-3.5 w-3.5" />{{ p.memory_limit }}MB</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:fact-check" class="h-3.5 w-3.5" />{{ p.testcase_count || 0 }} 组测试用例</span>
             </div>
           </div>
           <div class="flex gap-2">
             <button class="ui-btn ui-btn-ghost ui-btn-sm" @click="openProblemForm(p)">编辑</button>
-            <button class="ui-btn ui-btn-ghost ui-btn-sm text-amber-500" @click="regenerateTestcases(p.id)">🔄 重生成用例</button>
+             <button class="ui-btn ui-btn-ghost ui-btn-sm text-amber-500" @click="regenerateTestcases(p.id)"><Icon icon="material-symbols:refresh-rounded" class="h-4 w-4" />重生成用例</button>
             <button class="ui-btn ui-btn-ghost ui-btn-sm text-rose-500" @click="deleteProblem(p.id)">删除</button>
           </div>
         </div>
@@ -850,8 +837,8 @@ onMounted(loadContests);
               <section class="problem-section">
                 <div class="problem-section-head">
                   <div>
-                    <h3 class="problem-section-title">样例测试</h3>
-                    <p class="problem-section-desc">填写题目的标准输入与标准输出，用于展示给用户查看。</p>
+                    <h3 class="problem-section-title">样例与基础评测</h3>
+                    <p class="problem-section-desc">填写符合题意的输入与输出。它们会展示给用户，并作为基础判题数据；正式比赛请通过管理 API 额外上传不公开的边界测试。</p>
                   </div>
                 </div>
                 <div class="problem-section-body">

@@ -5,6 +5,7 @@ import { listContests, joinContest, type ContestData } from '../services/api';
 import { useMessage } from 'naive-ui';
 import { useAuthStore } from '../stores/auth';
 import { formatDateTime, isWithinTimeRange } from '../utils/time';
+import { Icon } from '@iconify/vue';
 
 const router = useRouter();
 const message = useMessage();
@@ -131,7 +132,7 @@ onMounted(loadData);
       </div>
 
       <div v-else-if="error" class="ui-empty">
-        <span class="mb-2 text-5xl">❌</span>
+        <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
         <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">{{ error }}</p>
         <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
@@ -157,13 +158,14 @@ onMounted(loadData);
             :title="isContestOpen(c) ? '' : (c.status === 'upcoming' ? '比赛尚未开始' : '比赛已结束')"
             @click="enterContest(c)"
           >
-            {{ isContestOpen(c) ? '🚀 进入比赛' : (c.status === 'upcoming' ? '未开始' : '已结束') }}
+            <span v-if="isContestOpen(c)" class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:play-arrow-rounded" class="h-4 w-4" />进入比赛</span>
+            <span v-else>{{ c.status === 'upcoming' ? '未开始' : '已结束' }}</span>
           </button>
         </div>
       </div>
 
       <div v-if="!isLoading && !error && filteredContests.length === 0" class="ui-empty mt-6">
-        <span class="mb-2 text-5xl">🏆</span>
+        <Icon icon="material-symbols:emoji-events" class="mb-2 h-12 w-12 text-amber-500" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无比赛</p>
       </div>
     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { listRankings, type RankingData } from '../services/api';
+import { Icon } from '@iconify/vue';
 
 interface RankingItem extends RankingData {
   easy_count?: number;
@@ -12,7 +13,7 @@ const rankings = ref<RankingItem[]>([]);
 const isLoading = ref(false);
 const error = ref('');
 
-const rankEmojis = ['🥇', '🥈', '🥉'];
+const rankIcons = ['military-tech', 'military-tech', 'military-tech'];
 
 const loadData = async () => {
   isLoading.value = true;
@@ -44,7 +45,7 @@ onMounted(loadData);
 
       <!-- 错误 -->
       <div v-else-if="error" class="ui-empty">
-        <span class="mb-2 text-5xl">❌</span>
+        <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
         <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
       </div>
@@ -59,22 +60,22 @@ onMounted(loadData);
         >
           <!-- 排名 -->
           <div class="w-12 shrink-0 text-center">
-            <span v-if="user.rank <= 3" class="text-3xl">{{ rankEmojis[user.rank - 1] }}</span>
+            <Icon v-if="user.rank <= 3" :icon="`material-symbols:${rankIcons[user.rank - 1]}`" class="h-9 w-9 text-amber-500" />
             <span v-else class="text-lg font-black text-[#64748B] dark:text-[#94A3B8]">#{{ user.rank }}</span>
           </div>
 
           <!-- 头像 -->
           <div class="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA] text-xl">
-            👤
+             <Icon icon="material-symbols:person-rounded" class="h-6 w-6" />
           </div>
 
           <!-- 用户信息 -->
           <div class="min-w-0 flex-1">
             <div class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ user.username }}</div>
             <div class="mt-1 flex items-center gap-3 text-xs text-[#94A3B8]">
-              <span>🟢 简单 {{ user.easy_count || 0 }}</span>
-              <span>🟡 中等 {{ user.medium_count || 0 }}</span>
-              <span>🔴 困难 {{ user.hard_count || 0 }}</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:circle" class="h-2.5 w-2.5 text-emerald-500" />简单 {{ user.easy_count || 0 }}</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:circle" class="h-2.5 w-2.5 text-amber-500" />中等 {{ user.medium_count || 0 }}</span>
+               <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:circle" class="h-2.5 w-2.5 text-rose-500" />困难 {{ user.hard_count || 0 }}</span>
             </div>
           </div>
 
@@ -94,7 +95,7 @@ onMounted(loadData);
 
       <!-- 空态 -->
       <div v-if="!isLoading && !error && rankings.length === 0" class="ui-empty mt-6">
-        <span class="mb-2 text-5xl">📊</span>
+        <Icon icon="material-symbols:leaderboard-rounded" class="mb-2 h-12 w-12 text-slate-400" />
         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无排名数据</p>
         <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">提交代码通过后即可上榜</p>
       </div>

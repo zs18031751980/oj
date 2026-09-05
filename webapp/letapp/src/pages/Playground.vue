@@ -412,7 +412,7 @@ const loadContestProblem = async () => {
   contestId.value = cid;
   problemId.value = pid;
   try {
-    const data = await getContestProblem(pid);
+    const data = await getContestProblem(cid, pid);
     contestProblem.value = { ...data, samples: normalizeSamples(data.samples) };
   } catch {
     // silently fail
@@ -580,7 +580,7 @@ watch(selectedLanguage, (lang) => {
         <div class="ide-left-panel" v-show="showLeftPanel">
           <!-- 无题目时：空状态 + 选择按钮 -->
           <div v-if="!contestProblem" class="ide-empty-state">
-            <div class="ide-empty-icon">📝</div>
+             <Icon icon="material-symbols:code-rounded" class="ide-empty-icon" />
             <p class="ide-empty-title">尚未选择题目</p>
             <p class="ide-empty-desc">选择一道题目开始编码挑战</p>
             <button class="ide-select-btn" @click="openProblemSelector">

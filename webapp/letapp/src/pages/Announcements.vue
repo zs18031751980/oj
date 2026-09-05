@@ -196,7 +196,7 @@ watch(
             <p class="ui-section-sub mt-1">平台通知与最新动态</p>
             <div v-if="canManageAnnouncements" class="mt-3">
               <button class="ui-btn ui-btn-secondary ui-btn-sm" @click="openManager">
-                ⚙️ 管理公告
+                <span class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:settings-rounded" class="h-4 w-4" />管理公告</span>
               </button>
             </div>
           </div>
@@ -208,7 +208,7 @@ watch(
 
           <!-- 错误 -->
           <div v-else-if="listError" class="ui-empty">
-            <span class="mb-2 text-5xl">❌</span>
+            <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
             <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
             <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">{{ listError }}</p>
             <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadAnnouncements">重试</button>
@@ -216,7 +216,7 @@ watch(
 
           <!-- 空态 -->
           <div v-else-if="filteredAnnouncements.length === 0" class="ui-empty">
-            <span class="mb-2 text-5xl">📭</span>
+            <Icon icon="material-symbols:mail-outline-rounded" class="mb-2 h-12 w-12 text-slate-400" />
             <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无公告</p>
           </div>
 
@@ -260,10 +260,10 @@ watch(
             正在加载公告内容...
           </div>
           <div v-else-if="detailError" class="flex min-h-[320px] flex-col items-center justify-center gap-4 p-8 text-center">
-            <span class="text-5xl">⚠️</span>
+            <Icon icon="material-symbols:warning-outline-rounded" class="h-12 w-12 text-amber-500" />
             <p class="text-rose-600 dark:text-rose-400">{{ detailError }}</p>
             <button v-if="currentAnnouncementId" class="ui-btn ui-btn-secondary ui-btn-sm" @click="loadSelectedAnnouncement">
-              🔄 重试
+              <span class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:refresh-rounded" class="h-4 w-4" />重试</span>
             </button>
           </div>
           <div v-else class="px-10 py-10 sm:px-16">

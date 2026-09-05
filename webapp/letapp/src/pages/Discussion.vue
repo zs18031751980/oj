@@ -253,7 +253,7 @@ onMounted(loadData);
             <p class="ui-section-sub mt-1">交流算法心得，分享学习经验</p>
           </div>
           <button class="ui-btn-primary rounded-xl px-6 py-3 text-base font-bold shadow-md transition hover:shadow-lg" @click="openCreate">
-            ➕ 发布讨论
+             <span class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:add-comment-rounded" class="h-5 w-5" />发布讨论</span>
           </button>
         </div>
 
@@ -264,7 +264,7 @@ onMounted(loadData);
 
         <!-- 错误 -->
         <div v-else-if="error" class="ui-empty">
-          <span class="mb-2 text-5xl">❌</span>
+          <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
           <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">加载失败</p>
           <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
         </div>
@@ -282,7 +282,7 @@ onMounted(loadData);
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span v-if="d.is_pinned" class="ui-badge ui-badge-amber text-[10px]">📌 置顶</span>
+                 <span v-if="d.is_pinned" class="ui-badge ui-badge-amber inline-flex items-center gap-1 text-[10px]"><Icon icon="material-symbols:push-pin" class="h-3 w-3" />置顶</span>
                 <h3 class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ d.title }}</h3>
               </div>
               <div v-if="getTags(d.tags).length" class="mt-1.5 flex flex-wrap gap-1.5">
@@ -296,17 +296,17 @@ onMounted(loadData);
                 :class="d.is_liked ? 'text-[#2563EB] dark:text-[#60A5FA]' : ''"
                 @click.stop="toggleLike(d)"
               >
-                <span>{{ d.is_liked ? '❤️' : '🤍' }}</span>
+                 <Icon :icon="d.is_liked ? 'material-symbols:favorite' : 'material-symbols:favorite-outline'" class="h-4 w-4" />
                 {{ d.like_count || 0 }}
               </button>
-              <span class="text-xs font-bold">💬 {{ d.reply_count || 0 }}</span>
-              <span class="text-[10px] text-[#94A3B8]">👁 {{ d.view_count || 0 }}</span>
+               <span class="inline-flex items-center gap-1 text-xs font-bold"><Icon icon="material-symbols:chat-bubble-outline" class="h-3.5 w-3.5" />{{ d.reply_count || 0 }}</span>
+               <span class="inline-flex items-center gap-1 text-[10px] text-[#94A3B8]"><Icon icon="material-symbols:visibility" class="h-3.5 w-3.5" />{{ d.view_count || 0 }}</span>
               <button
                 v-if="canDeleteDiscussion(d.author_id)"
                 class="text-xs font-bold text-[#EF4444] transition hover:text-[#DC2626]"
                 @click.stop="deleteDiscussionById(d.id)"
               >
-                🗑 删除
+                 <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:delete-outline" class="h-3.5 w-3.5" />删除</span>
               </button>
             </div>
           </div>
@@ -314,7 +314,7 @@ onMounted(loadData);
 
         <!-- 空态 -->
         <div v-if="!isLoading && !error && filteredDiscussions.length === 0" class="ui-empty mt-6">
-          <span class="mb-2 text-5xl">💭</span>
+          <Icon icon="material-symbols:forum-outline" class="mb-2 h-12 w-12 text-slate-400" />
           <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无讨论</p>
           <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">发布第一个讨论吧</p>
         </div>
@@ -328,14 +328,14 @@ onMounted(loadData);
           <div class="disc-modal">
             <div class="disc-modal-header">
               <h3 class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">讨论详情</h3>
-              <button class="disc-modal-close" @click="closeDetail">✕</button>
+               <button class="disc-modal-close" aria-label="关闭" @click="closeDetail"><Icon icon="material-symbols:close" /></button>
             </div>
             <div class="disc-modal-body">
               <template v-if="currentDiscussion">
                 <!-- 标题 -->
                 <div class="mb-4">
                   <div class="flex items-center gap-2 mb-2">
-                    <span v-if="currentDiscussion.is_pinned" class="ui-badge ui-badge-amber text-[10px]">📌 置顶</span>
+                     <span v-if="currentDiscussion.is_pinned" class="ui-badge ui-badge-amber inline-flex items-center gap-1 text-[10px]"><Icon icon="material-symbols:push-pin" class="h-3 w-3" />置顶</span>
                     <span class="ui-badge ui-badge-blue text-[10px]">{{ currentDiscussion.category }}</span>
                   </div>
                   <h2 class="text-xl font-black text-[#1E293B] dark:text-[#E5E7EB]">{{ currentDiscussion.title }}</h2>
@@ -359,17 +359,17 @@ onMounted(loadData);
                     :class="currentDiscussion.is_liked ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#64748B] dark:text-[#94A3B8] hover:text-[#2563EB]'"
                     @click="toggleLike(currentDiscussion)"
                   >
-                    <span>{{ currentDiscussion.is_liked ? '❤️' : '🤍' }}</span>
+                     <Icon :icon="currentDiscussion.is_liked ? 'material-symbols:favorite' : 'material-symbols:favorite-outline'" class="h-4 w-4" />
                     点赞 {{ currentDiscussion.like_count || 0 }}
                   </button>
-                  <span class="text-sm text-[#94A3B8]">💬 回复 {{ currentDiscussion.reply_count || 0 }}</span>
-                  <span class="text-sm text-[#94A3B8]">👁 浏览 {{ currentDiscussion.view_count || 0 }}</span>
+                   <span class="inline-flex items-center gap-1 text-sm text-[#94A3B8]"><Icon icon="material-symbols:chat-bubble-outline" class="h-4 w-4" />回复 {{ currentDiscussion.reply_count || 0 }}</span>
+                   <span class="inline-flex items-center gap-1 text-sm text-[#94A3B8]"><Icon icon="material-symbols:visibility" class="h-4 w-4" />浏览 {{ currentDiscussion.view_count || 0 }}</span>
                   <button
                     v-if="canDeleteDiscussion(currentDiscussion.author_id)"
                     class="ml-auto flex items-center gap-1 text-sm font-bold text-[#EF4444] transition hover:text-[#DC2626]"
                     @click="deleteDiscussionById(currentDiscussion.id)"
                   >
-                    🗑 删除讨论
+                     <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:delete-outline" class="h-4 w-4" />删除讨论</span>
                   </button>
                 </div>
 
@@ -394,7 +394,7 @@ onMounted(loadData);
                            :class="r.is_liked ? 'text-[#2563EB] dark:text-[#60A5FA]' : 'text-[#94A3B8] hover:text-[#2563EB]'"
                            @click="toggleReplyLike(r)"
                          >
-                           <span>{{ r.is_liked ? '❤️' : '🤍' }}</span>
+                            <Icon :icon="r.is_liked ? 'material-symbols:favorite' : 'material-symbols:favorite-outline'" class="h-4 w-4" />
                            {{ r.like_count || 0 }}
                          </button>
                          <button
@@ -402,7 +402,7 @@ onMounted(loadData);
                            class="ml-auto flex items-center gap-1 text-xs font-bold text-[#EF4444] transition hover:text-[#DC2626]"
                            @click="deleteReplyById(r)"
                          >
-                           🗑 删除
+                            <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:delete-outline" class="h-3.5 w-3.5" />删除</span>
                          </button>
                        </div>
                     </div>
@@ -445,7 +445,7 @@ onMounted(loadData);
           <div class="disc-modal">
             <div class="disc-modal-header">
               <h3 class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">发布讨论</h3>
-              <button class="disc-modal-close" @click="showCreate = false">✕</button>
+               <button class="disc-modal-close" aria-label="关闭" @click="showCreate = false"><Icon icon="material-symbols:close" /></button>
             </div>
             <div class="disc-modal-body">
               <div class="space-y-4">

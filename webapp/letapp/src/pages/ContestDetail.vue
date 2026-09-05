@@ -6,6 +6,7 @@ import { formatDateTime as formatCSTDateTime, isWithinTimeRange } from '../utils
 import { useMessage } from 'naive-ui';
 import { getJudgeStatus } from '../utils/judgeStatus';
 import { useAuthStore } from '../stores/auth';
+import { Icon } from '@iconify/vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -87,7 +88,7 @@ onMounted(loadData);
       </div>
 
       <div v-else-if="error" class="ui-empty">
-        <span class="mb-2 text-5xl">❌</span>
+        <Icon icon="material-symbols:error-outline-rounded" class="mb-2 h-12 w-12 text-rose-500" />
         <p class="font-bold">{{ error }}</p>
         <button class="ui-btn ui-btn-secondary ui-btn-sm mt-2" @click="loadData">重试</button>
       </div>
@@ -109,14 +110,14 @@ onMounted(loadData);
               class="ui-btn ui-btn-primary ui-btn-sm shrink-0"
               @click="router.push(`/contests/${contestId}/rankings`)"
             >
-              🏆 排行榜
+              <Icon icon="material-symbols:leaderboard-rounded" class="h-4 w-4" />排行榜
             </button>
           </div>
           <div class="mt-4 flex items-center gap-6 text-sm text-[#64748B] dark:text-[#94A3B8]">
-            <span>🏆 {{ contest.contest_type }}</span>
-            <span>🕐 {{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
-            <span>👥 {{ contest.participants_count }} 人参与</span>
-            <span>📝 {{ problems.length }} 道题目</span>
+             <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:emoji-events" class="h-4 w-4" />{{ contest.contest_type }}</span>
+             <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
+             <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:group" class="h-4 w-4" />{{ contest.participants_count }} 人参与</span>
+             <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:description" class="h-4 w-4" />{{ problems.length }} 道题目</span>
           </div>
         </div>
 
@@ -139,7 +140,7 @@ onMounted(loadData);
           </div>
 
           <div v-if="problems.length === 0" class="ui-empty m-4">
-            <span class="mb-2 text-5xl">📝</span>
+            <Icon icon="material-symbols:description" class="mb-2 h-12 w-12 text-slate-400" />
             <p class="font-bold">暂无题目</p>
           </div>
 

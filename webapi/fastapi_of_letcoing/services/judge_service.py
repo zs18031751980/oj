@@ -21,6 +21,8 @@ from models.db_models import Submission, Testcase
 from models.glot_models import CodeExecutionRequest
 from controllers.contest_problem_controller import (
     _run_code,
+    _prepare_program,
+    normalize_judge_output,
     _generate_testcases,
     _reference_looks_nondeterministic,
     _detect_language,
@@ -37,12 +39,18 @@ class JudgeWorker:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._queue_cursor = 0
 
     def start(self):
         """启动后台判题线程"""
         if self._running:
             return
         self._running = True
+        # 启动时回收上次异常退出留下的任务；每项恢复操作均由 Redis 原子执行。
+        for queue_name in ('judge_queue', 'contest_judge_queue', 'testcase_gen_queue'):
+            recovered = self.redis.list_recover(f'{queue_name}:processing', queue_name)
+            if recovered:
+                self.logger.warning(f'Recovered {recovered} pending task(s) from {queue_name}')
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         self.logger.info("JudgeWorker started")
@@ -59,22 +67,29 @@ class JudgeWorker:
         try:
             while self._running:
                 try:
-                    raw = self.redis.list_pop("judge_queue")
-                    if raw:
-                        task = json.loads(raw) if isinstance(raw, str) else raw
-                        self._process_task(task)
-                    else:
-                        raw_contest = self.redis.list_pop("contest_judge_queue")
-                        if raw_contest:
-                            task = json.loads(raw_contest) if isinstance(raw_contest, str) else raw_contest
-                            self._process_contest_task(task)
-                        else:
-                            raw_gen = self.redis.list_pop("testcase_gen_queue")
-                            if raw_gen:
-                                task = json.loads(raw_gen) if isinstance(raw_gen, str) else raw_gen
-                                self._process_gen_task(task)
-                            else:
-                                time.sleep(0.5)
+                    # 轮转读取，避免普通题库提交持续涌入时比赛判题被永久饿死。
+                    queues = [
+                        ('judge_queue', self._process_task),
+                        ('contest_judge_queue', self._process_contest_task),
+                        ('testcase_gen_queue', self._process_gen_task),
+                    ]
+                    task_found = False
+                    for offset in range(len(queues)):
+                        index = (self._queue_cursor + offset) % len(queues)
+                        queue_name, handler = queues[index]
+                        claim = self.redis.list_claim(queue_name, f'{queue_name}:processing')
+                        if claim:
+                            self._queue_cursor = (index + 1) % len(queues)
+                            task = claim['payload']
+                            handler(task)
+                            # 只有处理函数正常返回后才确认；抛异常时任务留在 processing，
+                            # 下次 Worker 启动会自动恢复，形成 at-least-once 语义。
+                            if not self.redis.list_ack(f'{queue_name}:processing', claim['receipt']):
+                                self.logger.warning(f'Could not ack task from {queue_name}; it will be retried')
+                            task_found = True
+                            break
+                    if not task_found:
+                        time.sleep(0.5)
                 except Exception as e:
                     self.logger.error("JudgeWorker loop error", e)
                     time.sleep(1)
@@ -338,8 +353,19 @@ class JudgeWorker:
         user_id = task.get("user_id")
         code = task.get("code", "")
         language = task.get("language", "cpp")
+        submitted_at_raw = task.get("submitted_at")
+
+        try:
+            submitted_at = datetime.fromisoformat(str(submitted_at_raw)) if submitted_at_raw else datetime.now()
+        except (TypeError, ValueError):
+            submitted_at = datetime.now()
 
         if submission_id is None:
+            return
+
+        cached = self.redis.get(f"contest_submission:{submission_id}")
+        if cached and cached.get('status') not in ('Pending', 'Judging', 'Running'):
+            # 可靠队列在 ack 失败后会重投；已产生最终结果的任务可安全跳过。
             return
 
         try:
@@ -350,10 +376,9 @@ class JudgeWorker:
             })
             return
 
-        # 按题目的运行时长与内存限制进行判题（time_limit 单位 ms → 秒）。
-        # 不设 1s 下限，使“卡时间限制”的用例真正生效：生成时即按该时限校准
-        # 用例规模，判题时也按该时限执行，二者一致。
-        time_limit_sec = max((problem.time_limit or 1000) / 1000.0, 0.05)
+        # 每个测试点独立执行，并严格使用题目设置的毫秒时限；编译耗时不计入
+        # 运行时限（符合主流 OJ 规则），但会受到独立的编译超时保护。
+        time_limit_sec = (problem.time_limit or 1000) / 1000.0
         memory_limit = problem.memory_limit or None
 
         testcases = list(
@@ -373,11 +398,23 @@ class JudgeWorker:
             })
             return
 
+        # 一次提交只编译一次。此前每个测试点都会重新编译，100 组数据会把
+        # C++/Java/Go 的排队时间放大两个数量级。
+        program, compile_error, compile_stderr = _prepare_program(code, language)
+
         def _judge_one(tc):
-            expected = (tc.expected_output or "").strip()
-            output, err_type, time_used_ms, stderr = _run_code(
-                code, language, tc.input_data,
-                timeout=time_limit_sec, memory_limit=memory_limit,
+            expected = tc.expected_output or ""
+            if program is None:
+                return {
+                    "passed": False,
+                    "status": compile_error or "CE",
+                    "expected": expected,
+                    "actual": None,
+                    "time_used": 0,
+                    "stderr": compile_stderr or "",
+                }
+            output, err_type, time_used_ms, stderr = program.run(
+                tc.input_data, timeout=time_limit_sec, memory_limit=memory_limit,
             )
             if err_type is not None:
                 return {
@@ -388,18 +425,8 @@ class JudgeWorker:
                     "time_used": time_used_ms,
                     "stderr": stderr or "",
                 }
-            actual = (output or "").strip()
-            passed = actual == expected
-            # 答案数值正确但空白/换行不一致时归为 PE（格式错误），便于前端区分
-            if not passed and actual.replace(" ", "").replace("\n", "") == expected.replace(" ", "").replace("\n", ""):
-                return {
-                    "passed": False,
-                    "status": "PE",
-                    "expected": expected,
-                    "actual": actual,
-                    "time_used": time_used_ms,
-                    "stderr": "",
-                }
+            actual = output or ""
+            passed = normalize_judge_output(actual) == normalize_judge_output(expected)
             return {
                 "passed": passed,
                 "status": "AC" if passed else "WA",
@@ -411,7 +438,11 @@ class JudgeWorker:
 
         # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
         # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
-        details = [_judge_one(tc) for tc in testcases]
+        try:
+            details = [_judge_one(tc) for tc in testcases]
+        finally:
+            if program is not None:
+                program.close()
 
         passed = sum(1 for d in details if d["passed"])
         total = len(details)
@@ -463,18 +494,26 @@ class JudgeWorker:
                 and user_id is not None
                 and contest_id is not None
             ):
-                ContestSubmission.create(
-                    contest_id=contest_id,
-                    user_id=user_id,
-                    contest_problem_id=problem_id,
-                    problem_index=problem.problem_index or "",
-                    status=status,
-                    passed=passed,
-                    total=total,
-                    score=score,
-                    language=language,
-                    submitted_at=datetime.now(timezone.utc),
+                defaults = {
+                    'contest_id': contest_id,
+                    'user_id': user_id,
+                    'contest_problem_id': problem_id,
+                    'problem_index': problem.problem_index or "",
+                    'status': status,
+                    'passed': passed,
+                    'total': total,
+                    'score': score,
+                    'language': language,
+                    'code': code,
+                    'submitted_at': submitted_at,
+                }
+                record, created = ContestSubmission.get_or_create(
+                    judge_submission_id=str(submission_id), defaults=defaults,
                 )
+                if not created:
+                    ContestSubmission.update(**defaults).where(
+                        ContestSubmission.id == record.id
+                    ).execute()
         except Exception as exc:
             self.logger.error("保存比赛提交记录失败", exc)
 
