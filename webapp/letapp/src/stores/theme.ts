@@ -1,15 +1,13 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { darkTheme } from 'naive-ui';
-import { updateUserTheme } from '../services/api';
+import { getAuthStorage, updateUserTheme } from '../services/api';
 
 type ThemePreference = 'light' | 'dark' | 'system';
 
 const syncThemeToBackend = async (preference: ThemePreference) => {
   try {
-    const { useAuthStore } = await import('../stores/auth');
-    const authStore = useAuthStore();
-    if (authStore.isAuthenticated) {
+    if (getAuthStorage().getItem('access_token')) {
       await updateUserTheme(preference);
     }
   } catch {

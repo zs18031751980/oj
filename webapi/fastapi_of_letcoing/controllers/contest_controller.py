@@ -1,10 +1,13 @@
+import json
 from datetime import datetime, timezone, timedelta
+from uuid import uuid4
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
 from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
+from services.judge_state import QUEUED
 
 api = Namespace('contests', description='比赛管理接口')
 
@@ -144,6 +147,42 @@ def _safe_submission_result(result):
             for item in details if isinstance(item, dict)
         ]
     return safe
+
+
+def _submission_to_result(submission):
+    """将数据库提交转换为不包含源代码和隐藏测试数据的轮询响应。"""
+    data = {
+        'id': submission.id,
+        'submission_id': submission.id,
+        'contest_id': submission.contest_id,
+        'problem_id': submission.contest_problem_id,
+        'user_id': submission.user_id,
+        'status': submission.status,
+        'verdict': submission.verdict or submission.status,
+        'passed': submission.passed,
+        'total': submission.total,
+        'score': submission.score,
+        'language': submission.language,
+        'attempt_id': submission.attempt_id,
+        'job_id': submission.job_id,
+        'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
+        'queued_at': submission.queued_at.isoformat() if submission.queued_at else None,
+        'judge_started_at': submission.judge_started_at.isoformat() if submission.judge_started_at else None,
+        'finished_at': submission.finished_at.isoformat() if submission.finished_at else None,
+        'cpu_time': submission.cpu_time,
+        'wall_time': submission.wall_time,
+        'memory': submission.memory,
+        'output_size': submission.output_size,
+        'error_message': submission.error_message,
+    }
+    if submission.testcase_results:
+        try:
+            data['details'] = json.loads(submission.testcase_results)
+        except (TypeError, ValueError):
+            data['details'] = []
+    else:
+        data['details'] = []
+    return _safe_submission_result(data)
 
 
 @api.route('/')
@@ -374,12 +413,31 @@ class ContestProblemSubmitController(Resource):
             return {'error': '代码不能为空'}, 400
 
         redis_service = inject(IRedisService)
-        submission_id = redis_service.increment('contest_submission:id_counter')
-        if submission_id is None:
-            import time as _time
-            submission_id = int(_time.time() * 1000)
+        job_id = uuid4().hex
         # 排行榜罚时以用户提交进入系统的时刻为准，绝不能使用 Worker 排队完成时刻。
         submitted_at = datetime.now(_CST).replace(tzinfo=None).isoformat()
+
+        # PostgreSQL 是提交事实源：先创建记录，再把 job 放入队列。
+        # 数据库不可用时直接拒绝提交，避免产生 Redis 中永久 Pending 的幽灵任务。
+        try:
+            submission = ContestSubmission.create(
+                contest=contest,
+                user=user,
+                contest_problem=problem,
+                problem_index=problem.problem_index or '',
+                status=QUEUED,
+                verdict=None,
+                language=language,
+                code=code,
+                judge_submission_id=job_id,
+                job_id=job_id,
+                attempt_id=1,
+                queued_at=datetime.fromisoformat(submitted_at),
+                submitted_at=datetime.fromisoformat(submitted_at),
+            )
+        except Exception:
+            return {'error': '提交记录暂时无法保存，请稍后重试'}, 503
+        submission_id = submission.id
 
         # 状态与任务必须原子写入：若进程在两条独立 Redis 命令之间退出，用户会看到
         # 永久 Pending 或 Worker 收到没有状态的任务。事务确保二者同时成功或同时失败。
@@ -389,7 +447,9 @@ class ContestProblemSubmitController(Resource):
                 'problem_id': problem_id,
                 'contest_id': contest_id,
                 'user_id': user.id,
-                'status': 'Pending',
+                'status': QUEUED,
+                'attempt_id': 1,
+                'job_id': job_id,
                 'passed': 0,
                 'total': 0,
                 'details': [],
@@ -398,17 +458,25 @@ class ContestProblemSubmitController(Resource):
             'contest_judge_queue',
             {
                 'submission_id': submission_id,
+                'job_id': job_id,
+                'attempt_id': 1,
                 'contest_id': contest_id,
                 'problem_id': problem_id,
                 'user_id': user.id,
-                'code': code,
                 'language': language,
                 'submitted_at': submitted_at,
             },
         ):
+            # 队列不可用时不能留下不可判题的数据库记录，标记为系统错误供审计。
+            ContestSubmission.update(
+                status='SystemError',
+                verdict='SystemError',
+                error_message='判题队列不可用',
+                finished_at=datetime.now(_CST).replace(tzinfo=None),
+            ).where(ContestSubmission.id == submission_id).execute()
             return {'error': '判题队列暂不可用，请稍后重试'}, 503
 
-        return {'submission_id': submission_id, 'status': 'Pending'}, 202
+        return {'submission_id': submission_id, 'job_id': job_id, 'attempt_id': 1, 'status': QUEUED}, 202
 
 
 @api.route('/<int:contest_id>/problems/<int:problem_id>/submission/<int:submission_id>')
@@ -421,17 +489,17 @@ class ContestProblemSubmissionResultController(Resource):
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-        redis_service = inject(IRedisService)
-        result = redis_service.get(f'contest_submission:{submission_id}')
-        if not result:
-            return {'error': '提交记录不存在或已过期'}, 404
+        try:
+            submission = ContestSubmission.get_by_id(submission_id)
+        except ContestSubmission.DoesNotExist:
+            return {'error': '提交记录不存在'}, 404
         if (
-            result.get('user_id') != user.id
-            or result.get('contest_id') != contest_id
-            or result.get('problem_id') != problem_id
+            submission.user_id != user.id
+            or submission.contest_id != contest_id
+            or submission.contest_problem_id != problem_id
         ):
             return {'error': '无权访问该提交'}, 403
-        return _safe_submission_result(result), 200
+        return _submission_to_result(submission), 200
 
 
 @api.route('/<int:contest_id>/problems')

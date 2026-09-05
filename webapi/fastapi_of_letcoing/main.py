@@ -375,6 +375,17 @@ def db_healthcheck():
         }
 
 
+@app.get('/healthz/judge')
+def judge_healthcheck():
+    """判题 Worker 和比赛队列健康状态，不返回代码或用户数据。"""
+    from services.judge_service import get_judge_worker
+    worker = get_judge_worker()
+    if worker is None:
+        return {'status': 'error', 'worker': None}, 503
+    data = worker.health()
+    return {'status': 'ok' if data['alive'] else 'error', 'worker': data}, 200 if data['alive'] else 503
+
+
 # ============================================================
 # 5. 全局错误处理器与请求钩子
 # ============================================================
@@ -453,17 +464,18 @@ def _close_db_pool(exc=None):
         db.close()
 
 
-# 创建数据库表（如不存在），失败时只打印警告，避免阻塞启动
-try:
-    create_tables()
-except Exception as e:
-    app.logger.warning(f"Database table creation failed (app will still start): {e}")
-
 # 执行数据库迁移（如已有 users 表缺少 role 列则自动添加；数据库不可用时安全跳过）
 try:
     run_schema_migrations()
 except Exception as e:
     app.logger.warning(f"Database migration failed (app will still start): {sanitize_db_error(str(e))}")
+
+# 迁移先于 ORM 建表：避免新模型字段尚未落地时，create_tables 触发误导性警告。
+# 对新数据库，迁移本身创建基础表；对旧数据库，迁移补齐字段后由 safe=True 保持幂等。
+try:
+    create_tables()
+except Exception as e:
+    app.logger.warning(f"Database table creation failed (app will still start): {e}")
 
 # 将内存题库同步到 PostgreSQL（供提交记录/收藏的外键引用；幂等）
 try:

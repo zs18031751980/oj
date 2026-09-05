@@ -476,29 +476,6 @@ const deleteProblem = async (id: number) => {
   }
 };
 
-// 轮询测试用例生成进度（后台队列执行，避免长时间等待）
-const pollTestcaseGeneration = async (problemId: number) => {
-  for (let i = 0; i < 60; i++) {
-    try {
-      const status = await apiRequest<{ status: string; generated: number; total: number; error?: string }>(
-        `/admin/contests/${problemId}/testcase-generation`,
-      );
-      if (status.status === 'done') {
-        message.success(`已生成 ${status.generated} 组测试用例`);
-        return;
-      }
-      if (status.status === 'error') {
-        message.error('测试用例生成出错：' + (status.error || '未知错误'));
-        return;
-      }
-    } catch (e) {
-      // 轮询期间偶发网络错误可忽略，继续重试
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  message.warning('测试用例生成超时，请稍后刷新查看');
-};
-
 // 自动生成已停用：通用题目必须由出题人提供符合题意的测试数据。
 const regenerateTestcases = async (problemId: number) => {
   try {

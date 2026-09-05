@@ -6,8 +6,9 @@ import unittest
 IMPORT_ERROR = None
 try:
     from controllers.contest_controller import SUPPORTED_CONTEST_MODES, _safe_submission_result
-    from controllers.contest_problem_controller import _prepare_program, normalize_judge_output
+    from controllers.contest_problem_controller import _exec_command, _prepare_program, normalize_judge_output
     from services.redis_service import RedisService
+    from services.judge_state import ACCEPTED, CLAIMED, QUEUED, RUNNING, can_transition
 except ModuleNotFoundError as exc:
     # 让刚拉取源码但尚未安装 requirements 的开发环境得到明确的跳过结果，
     # 而不是把环境问题误报成业务回归。
@@ -39,6 +40,11 @@ class ContestSecurityTests(unittest.TestCase):
         self.assertEqual(normalize_judge_output('1 2 \r\n\r\n'), '1 2')
         self.assertNotEqual(normalize_judge_output('1 2'), normalize_judge_output('12'))
         self.assertNotEqual(normalize_judge_output('1\n2'), normalize_judge_output('1 2'))
+
+    def test_submission_state_machine_rejects_terminal_overwrite(self):
+        self.assertTrue(can_transition(QUEUED, CLAIMED))
+        self.assertTrue(can_transition(RUNNING, ACCEPTED) is False)
+        self.assertFalse(can_transition(ACCEPTED, RUNNING))
 
 
 class _NoopLogger:
@@ -124,6 +130,13 @@ class PreparedProgramTests(unittest.TestCase):
             self.assertLess(elapsed, 1000)
         finally:
             program.close()
+
+    def test_output_limit_kills_process_group(self):
+        result = _exec_command(
+            ['python3', '-c', 'print("x" * 100000)'],
+            '', timeout=2, memory_mb=128, output_limit=1024,
+        )
+        self.assertTrue(result[5])
 
 
 if __name__ == '__main__':

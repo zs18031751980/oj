@@ -15,7 +15,7 @@ from typing import Optional
 
 from peewee import (
     Model, CharField, TextField, DateTimeField, BooleanField,
-    IntegerField, ForeignKeyField, AutoField, Database, DatabaseProxy
+    IntegerField, BigIntegerField, ForeignKeyField, AutoField, Database, DatabaseProxy
 )
 from playhouse.pool import PooledPostgresqlExtDatabase
 
@@ -436,13 +436,32 @@ class ContestSubmission(BaseModel):
     user = ForeignKeyField(User, backref="contest_submissions", verbose_name="提交用户")
     contest_problem = ForeignKeyField(ContestProblem, backref="submissions", verbose_name="所属比赛题目")
     problem_index = CharField(max_length=10, default="", verbose_name="题目编号")
-    status = CharField(max_length=20, default="WA", verbose_name="结果(AC/Partial/WA)")
+    status = CharField(max_length=32, default="Pending", verbose_name="判题状态")
+    verdict = CharField(max_length=32, null=True, verbose_name="最终判定")
     passed = IntegerField(default=0, verbose_name="通过用例数")
     total = IntegerField(default=0, verbose_name="用例总数")
     score = IntegerField(default=0, verbose_name="本题得分(OI模式)")
     language = CharField(max_length=20, default="cpp", verbose_name="提交语言")
     code = TextField(default="", verbose_name="提交源代码(审计/复判用)")
     judge_submission_id = CharField(max_length=64, null=True, unique=True, verbose_name="异步判题任务ID")
+    job_id = CharField(max_length=64, null=True, unique=True, verbose_name="判题任务ID")
+    attempt_id = IntegerField(default=1, verbose_name="判题尝试编号")
+    worker_id = CharField(max_length=128, null=True, verbose_name="判题Worker")
+    queued_at = DateTimeField(null=True, verbose_name="入队时间")
+    judge_started_at = DateTimeField(null=True, verbose_name="开始判题时间")
+    compile_started_at = DateTimeField(null=True, verbose_name="开始编译时间")
+    compile_finished_at = DateTimeField(null=True, verbose_name="编译完成时间")
+    execution_started_at = DateTimeField(null=True, verbose_name="开始执行时间")
+    execution_finished_at = DateTimeField(null=True, verbose_name="执行完成时间")
+    checked_at = DateTimeField(null=True, verbose_name="检查完成时间")
+    finished_at = DateTimeField(null=True, verbose_name="判题完成时间")
+    cpu_time = IntegerField(null=True, verbose_name="CPU时间(ms)")
+    wall_time = IntegerField(null=True, verbose_name="墙钟时间(ms)")
+    memory = BigIntegerField(null=True, verbose_name="峰值内存(bytes)")
+    output_size = BigIntegerField(null=True, verbose_name="输出大小(bytes)")
+    exit_code = IntegerField(null=True, verbose_name="退出码")
+    signal = IntegerField(null=True, verbose_name="终止信号")
+    error_message = TextField(null=True, verbose_name="判题错误信息")
     submitted_at = DateTimeField(default=datetime.now, verbose_name="提交时间")
 
     class Meta:
@@ -735,6 +754,38 @@ _SCHEMA_MIGRATIONS = [
             "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS judge_submission_id VARCHAR(64);",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_submissions_judge_submission_id "
             "ON contest_submissions(judge_submission_id) WHERE judge_submission_id IS NOT NULL;",
+        ],
+    ),
+    (
+        "0013_contest_judge_lifecycle",
+        [
+            # 0012 在部分旧环境中已登记但列未成功创建，继续幂等补齐。
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS judge_submission_id VARCHAR(64);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_submissions_judge_submission_id "
+            "ON contest_submissions(judge_submission_id) WHERE judge_submission_id IS NOT NULL;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS verdict VARCHAR(32);",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS job_id VARCHAR(64);",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS attempt_id INTEGER DEFAULT 1;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS worker_id VARCHAR(128);",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS queued_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS judge_started_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS compile_started_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS compile_finished_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS execution_started_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS execution_finished_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS checked_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS finished_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS cpu_time INTEGER;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS wall_time INTEGER;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS memory BIGINT;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS output_size BIGINT;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS exit_code INTEGER;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS signal INTEGER;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS error_message TEXT;",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_submissions_job_id "
+            "ON contest_submissions(job_id) WHERE job_id IS NOT NULL;",
+            "CREATE INDEX IF NOT EXISTS idx_contest_submissions_status "
+            "ON contest_submissions(contest_id, status, submitted_at);",
         ],
     ),
 ]

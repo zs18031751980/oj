@@ -1,3 +1,5 @@
+import { useAuthStore } from '../stores/auth';
+
 const resolveApiBaseUrl = () => {
   const envBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
   if (envBaseUrl) {
@@ -96,10 +98,7 @@ const tryRefreshToken = async (): Promise<boolean> => {
     storage.setItem('refresh_token', data.refresh_token);
     if (data.user_info) {
       storage.setItem('user_info', JSON.stringify(data.user_info));
-      try {
-        const { useAuthStore } = await import('../stores/auth');
-        useAuthStore().userInfo = data.user_info;
-      } catch { /* store not available */ }
+      useAuthStore().userInfo = data.user_info;
     }
     return true;
   } catch {

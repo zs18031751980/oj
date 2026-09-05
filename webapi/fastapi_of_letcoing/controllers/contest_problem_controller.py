@@ -7,6 +7,7 @@ import tempfile
 import os
 import shutil
 import signal
+import threading
 import time
 from datetime import datetime
 from flask import request
@@ -319,18 +320,31 @@ def _generate_random_input(seed: int, size: int = 1) -> str:
     return ' '.join(nums)
 
 
-def _build_preexec(memory_mb: int | None):
-    """构造 preexec_fn：限制子进程虚拟内存（用于检测 MLE）"""
-    if not memory_mb or memory_mb <= 0:
-        return None
+_MAX_OUTPUT_BYTES = 64 * 1024 * 1024
+_MAX_PROCESSES = 1024
+
+
+class _OutputLimitExceeded(Exception):
+    """子进程输出超过硬上限。"""
+
+
+def _build_preexec(memory_mb: int | None, cpu_seconds: int | None = None,
+                   process_limit: int | None = _MAX_PROCESSES):
+    """构造 Linux rlimit：内存、CPU、进程数和文件大小均由内核限制。"""
     try:
         import resource
 
-        limit = int(memory_mb) * 1024 * 1024
+        limit = int(memory_mb) * 1024 * 1024 if memory_mb and memory_mb > 0 else None
 
         def _limit():
             try:
-                resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+                if limit:
+                    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+                if cpu_seconds and cpu_seconds > 0:
+                    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
+                if process_limit:
+                    resource.setrlimit(resource.RLIMIT_NPROC, (process_limit, process_limit))
+                resource.setrlimit(resource.RLIMIT_FSIZE, (_MAX_OUTPUT_BYTES, _MAX_OUTPUT_BYTES))
             except Exception:
                 pass
 
@@ -339,49 +353,104 @@ def _build_preexec(memory_mb: int | None):
         return None
 
 
-def _exec_command(cmd: list, stdin: str, timeout: float, memory_mb: int | None, cwd: str | None = None):
+def _exec_command(cmd: list, stdin: str, timeout: float, memory_mb: int | None,
+                  cwd: str | None = None, output_limit: int = _MAX_OUTPUT_BYTES,
+                  process_limit: int | None = _MAX_PROCESSES):
     """
     执行命令并返回 (stdout, stderr, returncode, timed_out, mem_exceeded)。
     通过 preexec_fn 限制内存，可区分 TLE 与 MLE。
     """
-    preexec = _build_preexec(memory_mb)
+    preexec = _build_preexec(memory_mb, max(1, int(timeout)), process_limit)
     try:
+        import resource
+        usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
         process = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            text=False,
             preexec_fn=preexec,
             start_new_session=True,
             cwd=cwd,
             # 运行用户代码时不传递数据库、JWT 等服务进程环境变量。
             env={'PATH': os.environ.get('PATH', ''), 'LANG': 'C.UTF-8'},
         )
+        output_exceeded = threading.Event()
+        stdout_data: list[bytes] = []
+        stderr_data: list[bytes] = []
+
+        def _read_limited(stream, target):
+            chunks = []
+            size = 0
+            while True:
+                chunk = stream.read(65536)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > output_limit:
+                    output_exceeded.set()
+                    break
+                chunks.append(chunk)
+            target.append(b''.join(chunks))
+
+        stdout_thread = threading.Thread(target=_read_limited, args=(process.stdout, stdout_data), daemon=True)
+        stderr_thread = threading.Thread(target=_read_limited, args=(process.stderr, stderr_data), daemon=True)
+        stdout_thread.start()
+        stderr_thread.start()
+        started = time.monotonic()
         try:
-            stdout, stderr = process.communicate(input=stdin, timeout=timeout)
-        except subprocess.TimeoutExpired:
+            process.stdin.write((stdin or '').encode('utf-8'))
+            process.stdin.close()
+            while process.poll() is None:
+                if output_exceeded.is_set():
+                    raise _OutputLimitExceeded
+                if time.monotonic() - started >= timeout:
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                time.sleep(0.005)
+        except (_OutputLimitExceeded, subprocess.TimeoutExpired):
             # 终止整个进程组，防止提交代码 fork 后子进程继续占用主机资源。
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.communicate()
-            return (None, None, None, True, False)
-        result = type('ExecutionResult', (), {
-            'stdout': stdout, 'stderr': stderr, 'returncode': process.returncode,
-        })()
-        if memory_mb and result.returncode != 0 and result.stderr and 'MemoryError' in result.stderr:
+            process.wait()
+            stdout_thread.join(timeout=1)
+            stderr_thread.join(timeout=1)
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream and not stream.closed:
+                    stream.close()
+            usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+            return (
+                None, None, None, not output_exceeded.is_set(), False,
+                output_exceeded.is_set(),
+                int((usage_after.ru_utime + usage_after.ru_stime - usage_before.ru_utime - usage_before.ru_stime) * 1000),
+                int(max(0, usage_after.ru_maxrss) * 1024),
+            )
+        process.wait()
+        stdout_thread.join(timeout=1)
+        stderr_thread.join(timeout=1)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream and not stream.closed:
+                stream.close()
+        stdout = (stdout_data[0] if stdout_data else b'').decode('utf-8', errors='replace')
+        stderr = (stderr_data[0] if stderr_data else b'').decode('utf-8', errors='replace')
+        usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+        cpu_ms = int((usage_after.ru_utime + usage_after.ru_stime - usage_before.ru_utime - usage_before.ru_stime) * 1000)
+        memory_bytes = int(max(0, usage_after.ru_maxrss) * 1024)
+        if output_exceeded.is_set():
+            return (stdout, stderr, process.returncode, False, False, True, cpu_ms, memory_bytes)
+        if memory_mb and process.returncode != 0 and 'MemoryError' in stderr:
             # RLIMIT_AS 触发 Python 内存错误：标记为内存超限
-            return (result.stdout, result.stderr, result.returncode, False, True)
-        return (result.stdout, result.stderr, result.returncode, False, False)
+            return (stdout, stderr, process.returncode, False, True, False, cpu_ms, memory_bytes)
+        return (stdout, stderr, process.returncode, False, False, False, cpu_ms, memory_bytes)
     except (MemoryError, OSError) as exc:
         # setrlimit 生效时可能抛出 MemoryError / OSError(12, 'Cannot allocate memory')
         if isinstance(exc, MemoryError) or (isinstance(exc, OSError) and exc.errno == 12):
-            return (None, None, None, False, True)
-        return (None, None, None, False, False)
+            return (None, None, None, False, True, False, 0, 0)
+        return (None, None, None, False, False, False, 0, 0)
     except Exception:
-        return (None, None, None, False, False)
+        return (None, None, None, False, False, False, 0, 0)
 
 
 class PreparedProgram:
@@ -396,6 +465,7 @@ class PreparedProgram:
         self.command = command
         self.workdir = workdir
         self.language = language
+        self.last_metrics = {'cpu_time': 0, 'memory': 0, 'output_size': 0, 'exit_code': None, 'signal': None}
 
     def run(self, stdin: str, timeout: float, memory_limit: int | None):
         started = time.perf_counter()
@@ -406,13 +476,32 @@ class PreparedProgram:
             heap_mb = max(int(memory_limit) - 64, 16)
             command = ['java', '-Xms16m', f'-Xmx{heap_mb}m', *self.command[1:]]
             os_memory_limit = None
-        result = _exec_command(command, stdin, timeout, os_memory_limit, cwd=self.workdir)
+        # JVM 会创建多个 GC/JIT 线程，RLIMIT_NPROC 按用户累计计算会误伤本机
+        # 其他进程；生产执行器应使用 cgroup 的 pids.max 做进程树限制。
+        process_limit = None if self.language == 'java' else _MAX_PROCESSES
+        result = _exec_command(
+            command, stdin, timeout, os_memory_limit, cwd=self.workdir,
+            process_limit=process_limit,
+        )
         elapsed = int((time.perf_counter() - started) * 1000)
         stdout, error_type, stderr = _interpret(result, is_compiled=True)
+        self.last_metrics = {
+            'cpu_time': result[6] if len(result) > 6 else elapsed,
+            'memory': result[7] if len(result) > 7 else 0,
+            'output_size': len(stdout or '') + len(stderr or ''),
+            'exit_code': result[2] if isinstance(result[2], int) and result[2] >= 0 else None,
+            'signal': -result[2] if isinstance(result[2], int) and result[2] < 0 else None,
+        }
         return stdout, error_type, elapsed, stderr
 
     def close(self):
         shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+def _compile_command(cmd: list[str], workdir: str, timeout: float):
+    """在同样的进程组、输出和资源限制下执行编译器。"""
+    result = _exec_command(cmd, '', timeout, None, cwd=workdir, process_limit=None)
+    return result[0] or '', result[1] or '', result[2], result[3], result[5]
 
 
 def _prepare_program(code: str, language: str, compile_timeout: float = 20.0):
@@ -439,36 +528,43 @@ def _prepare_program(code: str, language: str, compile_timeout: float = 20.0):
             source, executable = os.path.join(workdir, 'main.cpp'), os.path.join(workdir, 'main')
             with open(source, 'w', encoding='utf-8') as f:
                 f.write(code)
-            result = subprocess.run(
+            _, stderr, returncode, timed_out, output_exceeded = _compile_command(
                 ['g++', '-O2', '-pipe', '-std=c++17', source, '-o', executable],
-                capture_output=True, text=True, timeout=compile_timeout,
+                workdir, compile_timeout,
             )
-            if result.returncode:
+            if timed_out or output_exceeded:
                 shutil.rmtree(workdir, ignore_errors=True)
-                return None, 'CE', result.stderr
+                return None, 'CE', '编译超时或输出超限'
+            if returncode:
+                shutil.rmtree(workdir, ignore_errors=True)
+                return None, 'CE', stderr
             return PreparedProgram([executable], workdir, normalized), None, None
         if normalized == 'java':
             source = os.path.join(workdir, 'Main.java')
             with open(source, 'w', encoding='utf-8') as f:
                 f.write(code)
-            result = subprocess.run(
-                ['javac', '-d', workdir, source], capture_output=True, text=True,
-                timeout=compile_timeout,
+            _, stderr, returncode, timed_out, output_exceeded = _compile_command(
+                ['javac', '-d', workdir, source], workdir, compile_timeout,
             )
-            if result.returncode:
+            if timed_out or output_exceeded:
                 shutil.rmtree(workdir, ignore_errors=True)
-                return None, 'CE', result.stderr
+                return None, 'CE', '编译超时或输出超限'
+            if returncode:
+                shutil.rmtree(workdir, ignore_errors=True)
+                return None, 'CE', stderr
             return PreparedProgram(['java', '-cp', workdir, 'Main'], workdir, normalized), None, None
         source, executable = os.path.join(workdir, 'main.go'), os.path.join(workdir, 'main')
         with open(source, 'w', encoding='utf-8') as f:
             f.write(code)
-        result = subprocess.run(
-            ['go', 'build', '-o', executable, source], capture_output=True, text=True,
-            timeout=compile_timeout,
+        _, stderr, returncode, timed_out, output_exceeded = _compile_command(
+            ['go', 'build', '-o', executable, source], workdir, compile_timeout,
         )
-        if result.returncode:
+        if timed_out or output_exceeded:
             shutil.rmtree(workdir, ignore_errors=True)
-            return None, 'CE', result.stderr
+            return None, 'CE', '编译超时或输出超限'
+        if returncode:
+            shutil.rmtree(workdir, ignore_errors=True)
+            return None, 'CE', stderr
         return PreparedProgram([executable], workdir, normalized), None, None
     except subprocess.TimeoutExpired:
         shutil.rmtree(workdir, ignore_errors=True)
@@ -484,7 +580,9 @@ def _interpret(result, is_compiled: bool):
     error_type ∈ {None, 'RE', 'TLE', 'MLE'}。
     编译阶段错误由调用方单独判定为 'CE'。
     """
-    stdout, stderr, returncode, timed_out, mem_exceeded = result
+    stdout, stderr, returncode, timed_out, mem_exceeded, output_exceeded, *_ = result
+    if output_exceeded:
+        return (None, 'OLE', stderr)
     if timed_out:
         return (None, 'TLE', stderr)
     if mem_exceeded:

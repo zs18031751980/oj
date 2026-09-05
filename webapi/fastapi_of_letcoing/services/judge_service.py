@@ -10,14 +10,16 @@
 
 import asyncio
 import json
+import os
 import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
+from uuid import uuid4
 
 from core.di_container import get_container
 from interfaces.service_interfaces import ICodeExecutionService, ILoggerService, IRedisService
-from models.db_models import Submission, Testcase
+from models.db_models import ContestSubmission, Submission, Testcase
 from models.glot_models import CodeExecutionRequest
 from controllers.contest_problem_controller import (
     _run_code,
@@ -26,6 +28,11 @@ from controllers.contest_problem_controller import (
     _generate_testcases,
     _reference_looks_nondeterministic,
     _detect_language,
+)
+from services.judge_state import (
+    ACCEPTED, CHECKING, CLAIMED, COMPILATION_ERROR, COMPILED, COMPILING,
+    MEMORY_LIMIT_EXCEEDED, PARTIAL, QUEUED, RUNNING, SYSTEM_ERROR,
+    OUTPUT_LIMIT_EXCEEDED, TIME_LIMIT_EXCEEDED, WRONG_ANSWER, can_transition, is_terminal,
 )
 
 
@@ -40,17 +47,21 @@ class JudgeWorker:
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._queue_cursor = 0
+        self.worker_id = f'worker-{os.getpid()}-{uuid4().hex[:12]}'
+        self.started_at = datetime.now(timezone.utc)
+        self.last_claim_at = None
+        self.last_completed_at = None
+        self.active_job = None
+        self.failure_count = 0
+        self._last_recovery = 0.0
 
     def start(self):
         """启动后台判题线程"""
         if self._running:
             return
         self._running = True
-        # 启动时回收上次异常退出留下的任务；每项恢复操作均由 Redis 原子执行。
-        for queue_name in ('judge_queue', 'contest_judge_queue', 'testcase_gen_queue'):
-            recovered = self.redis.list_recover(f'{queue_name}:processing', queue_name)
-            if recovered:
-                self.logger.warning(f'Recovered {recovered} pending task(s) from {queue_name}')
+        # 启动时仅回收租约已过期的任务，不搬走其他活跃 Worker 的任务。
+        self._recover_expired_jobs()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         self.logger.info("JudgeWorker started")
@@ -67,6 +78,9 @@ class JudgeWorker:
         try:
             while self._running:
                 try:
+                    if time.monotonic() - self._last_recovery >= 10:
+                        self._recover_expired_jobs()
+                        self._last_recovery = time.monotonic()
                     # 轮转读取，避免普通题库提交持续涌入时比赛判题被永久饿死。
                     queues = [
                         ('judge_queue', self._process_task),
@@ -81,9 +95,18 @@ class JudgeWorker:
                         if claim:
                             self._queue_cursor = (index + 1) % len(queues)
                             task = claim['payload']
-                            handler(task)
+                            self.last_claim_at = datetime.now(timezone.utc)
+                            self.active_job = task.get('job_id') or task.get('submission_id')
+                            handled = handler(task)
+                            self.last_completed_at = datetime.now(timezone.utc)
+                            self.active_job = None
                             # 只有处理函数正常返回后才确认；抛异常时任务留在 processing，
                             # 下次 Worker 启动会自动恢复，形成 at-least-once 语义。
+                            if handled is False:
+                                self.logger.warning(
+                                    f'Job from {queue_name} was not persisted; leaving it for retry'
+                                )
+                                continue
                             if not self.redis.list_ack(f'{queue_name}:processing', claim['receipt']):
                                 self.logger.warning(f'Could not ack task from {queue_name}; it will be retried')
                             task_found = True
@@ -91,11 +114,36 @@ class JudgeWorker:
                     if not task_found:
                         time.sleep(0.5)
                 except Exception as e:
+                    self.failure_count += 1
+                    self.active_job = None
                     self.logger.error("JudgeWorker loop error", e)
                     time.sleep(1)
         finally:
             self._loop.close()
             self._loop = None
+
+    def _recover_expired_jobs(self):
+        for queue_name in ('judge_queue', 'contest_judge_queue', 'testcase_gen_queue'):
+            recovered = self.redis.list_recover(
+                f'{queue_name}:processing', queue_name,
+            )
+            if recovered:
+                self.logger.warning(
+                    f'Recovered {recovered} expired job(s) from {queue_name}'
+                )
+
+    def health(self) -> dict:
+        return {
+            'worker_id': self.worker_id,
+            'alive': bool(self._running and self._thread and self._thread.is_alive()),
+            'started_at': self.started_at.isoformat(),
+            'last_claim_at': self.last_claim_at.isoformat() if self.last_claim_at else None,
+            'last_completed_at': self.last_completed_at.isoformat() if self.last_completed_at else None,
+            'active_job': self.active_job,
+            'failure_count': self.failure_count,
+            'queue_length': self.redis.list_length('contest_judge_queue'),
+            'processing_count': self.redis.list_length('contest_judge_queue:processing'),
+        }
 
     def _save_to_redis(self, submission_id, data):
         """将提交结果写入 Redis 缓存"""
@@ -244,6 +292,38 @@ class JudgeWorker:
         except Exception:
             pass
 
+    def _transition_contest(self, submission_id: int, attempt_id: int,
+                            expected: str, target: str, **fields) -> bool:
+        """以 submission + attempt + expected status 做栅栏更新。
+
+        迟到的旧 Worker 即使拿到了相同 job，也无法覆盖新 attempt 或终态结果。
+        """
+        if not can_transition(expected, target):
+            return False
+        try:
+            fields.update(status=target, worker_id=self.worker_id)
+            updated = ContestSubmission.update(**fields).where(
+                (ContestSubmission.id == submission_id)
+                & (ContestSubmission.attempt_id == attempt_id)
+                & (ContestSubmission.status == expected)
+            ).execute()
+            return updated == 1
+        except Exception as exc:
+            self.logger.error(
+                f'Contest submission state transition failed: {submission_id} '
+                f'{expected}->{target}', exc
+            )
+            return False
+
+    def _contest_submission(self, submission_id: int, job_id: str, attempt_id: int):
+        try:
+            submission = ContestSubmission.get_by_id(submission_id)
+        except ContestSubmission.DoesNotExist:
+            return None
+        if submission.job_id != job_id or submission.attempt_id != attempt_id:
+            return None
+        return submission
+
     def _process_gen_task(self, task: dict):
         """后台生成比赛题目的测试用例（与判题解耦，避免阻塞建题请求）"""
         from models.db_models import ContestProblem, ContestTestcase
@@ -348,6 +428,8 @@ class JudgeWorker:
         )
 
         submission_id = task.get("submission_id")
+        job_id = task.get("job_id")
+        attempt_id = int(task.get("attempt_id", 1) or 1)
         contest_id = task.get("contest_id")
         problem_id = task.get("problem_id")
         user_id = task.get("user_id")
@@ -361,12 +443,41 @@ class JudgeWorker:
             submitted_at = datetime.now()
 
         if submission_id is None:
-            return
+            return True
 
-        cached = self.redis.get(f"contest_submission:{submission_id}")
-        if cached and cached.get('status') not in ('Pending', 'Judging', 'Running'):
-            # 可靠队列在 ack 失败后会重投；已产生最终结果的任务可安全跳过。
-            return
+        submission = self._contest_submission(submission_id, job_id, attempt_id)
+        if submission is None:
+            # 旧 job 或已经被重试替换的 job，安全确认而不执行用户代码。
+            return True
+        if is_terminal(submission.status):
+            return True
+        if submission.status != QUEUED:
+            # 同一 job 在租约过期后重新投递：提升 attempt 并把旧 Worker 隔离掉。
+            # 旧 Worker 后续所有写入都带旧 attempt_id，因此不会覆盖本次重试。
+            reclaimed = ContestSubmission.update(
+                status=QUEUED,
+                attempt_id=ContestSubmission.attempt_id + 1,
+                worker_id=None,
+            ).where(
+                (ContestSubmission.id == submission_id)
+                & (ContestSubmission.attempt_id == attempt_id)
+                & (ContestSubmission.status == submission.status)
+            ).execute()
+            if reclaimed != 1:
+                return True
+            attempt_id += 1
+        if not self._transition_contest(
+            submission_id, attempt_id, QUEUED, CLAIMED,
+            judge_started_at=datetime.now(),
+        ):
+            # 可能是重复投递或另一个 Worker 已经认领；不能执行两次。
+            return True
+        code = submission.code
+        contest_id = submission.contest_id
+        problem_id = submission.contest_problem_id
+        user_id = submission.user_id
+        language = submission.language
+        submitted_at = submission.submitted_at.isoformat() if submission.submitted_at else submitted_at_raw
 
         try:
             problem = ContestProblem.get_by_id(problem_id)
@@ -374,7 +485,13 @@ class JudgeWorker:
             self._save_contest_result(submission_id, {
                 "status": "Error", "passed": 0, "total": 0, "details": [],
             })
-            return
+            self._transition_contest(
+                submission_id, attempt_id, CLAIMED, SYSTEM_ERROR,
+                verdict=SYSTEM_ERROR,
+                error_message='比赛题目不存在或读取失败',
+                finished_at=datetime.now(),
+            )
+            return True
 
         # 每个测试点独立执行，并严格使用题目设置的毫秒时限；编译耗时不计入
         # 运行时限（符合主流 OJ 规则），但会受到独立的编译超时保护。
@@ -396,11 +513,44 @@ class JudgeWorker:
                 "total": 0,
                 "details": [],
             })
-            return
+            self._transition_contest(
+                submission_id, attempt_id, CLAIMED, SYSTEM_ERROR,
+                verdict=SYSTEM_ERROR,
+                error_message='题目没有可用测试用例',
+                finished_at=datetime.now(),
+            )
+            return True
 
         # 一次提交只编译一次。此前每个测试点都会重新编译，100 组数据会把
         # C++/Java/Go 的排队时间放大两个数量级。
+        if not self._transition_contest(
+            submission_id, attempt_id, CLAIMED, COMPILING,
+            compile_started_at=datetime.now(),
+        ):
+            return True
         program, compile_error, compile_stderr = _prepare_program(code, language)
+
+        if program is None:
+            self._save_contest_result(submission_id, {
+                "problem_id": problem_id, "contest_id": contest_id, "user_id": user_id,
+                "status": COMPILATION_ERROR, "passed": 0, "total": len(testcases),
+                "score": 0, "details": [], "attempt_id": attempt_id, "job_id": job_id,
+            })
+            self._transition_contest(
+                submission_id, attempt_id, COMPILING, COMPILATION_ERROR,
+                verdict=COMPILATION_ERROR,
+                total=len(testcases),
+                compile_finished_at=datetime.now(),
+                finished_at=datetime.now(),
+                error_message=compile_stderr or compile_error or '编译失败',
+            )
+            return True
+        if not self._transition_contest(
+            submission_id, attempt_id, COMPILING, COMPILED,
+            compile_finished_at=datetime.now(),
+        ):
+            program.close()
+            return True
 
         def _judge_one(tc):
             expected = tc.expected_output or ""
@@ -416,6 +566,7 @@ class JudgeWorker:
             output, err_type, time_used_ms, stderr = program.run(
                 tc.input_data, timeout=time_limit_sec, memory_limit=memory_limit,
             )
+            metrics = dict(getattr(program, 'last_metrics', {}))
             if err_type is not None:
                 return {
                     "passed": False,
@@ -424,6 +575,11 @@ class JudgeWorker:
                     "actual": None,
                     "time_used": time_used_ms,
                     "stderr": stderr or "",
+                    "cpu_time": metrics.get('cpu_time', time_used_ms),
+                    "memory": metrics.get('memory', 0),
+                    "output_size": metrics.get('output_size', 0),
+                    "exit_code": metrics.get('exit_code'),
+                    "signal": metrics.get('signal'),
                 }
             actual = output or ""
             passed = normalize_judge_output(actual) == normalize_judge_output(expected)
@@ -434,7 +590,19 @@ class JudgeWorker:
                 "actual": actual,
                 "time_used": time_used_ms,
                 "stderr": "",
+                "cpu_time": metrics.get('cpu_time', time_used_ms),
+                "memory": metrics.get('memory', 0),
+                "output_size": metrics.get('output_size', 0),
+                "exit_code": metrics.get('exit_code'),
+                "signal": metrics.get('signal'),
             }
+
+        if not self._transition_contest(
+            submission_id, attempt_id, COMPILED, RUNNING,
+            execution_started_at=datetime.now(),
+        ):
+            program.close()
+            return True
 
         # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
         # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
@@ -443,6 +611,13 @@ class JudgeWorker:
         finally:
             if program is not None:
                 program.close()
+
+        execution_finished_at = datetime.now()
+        total_cpu_time = sum(d.get('cpu_time', 0) or 0 for d in details)
+        peak_memory = max((d.get('memory', 0) or 0 for d in details), default=0)
+        output_size = sum(d.get('output_size', 0) or 0 for d in details)
+        exit_codes = [d.get('exit_code') for d in details if d.get('exit_code') is not None]
+        signals = [d.get('signal') for d in details if d.get('signal') is not None]
 
         passed = sum(1 for d in details if d["passed"])
         total = len(details)
@@ -457,6 +632,8 @@ class JudgeWorker:
             status = "TLE"
         elif "MLE" in status_set:
             status = "MLE"
+        elif "OLE" in status_set:
+            status = "OLE"
         elif "RE" in status_set:
             status = "RE"
         elif passed > 0:
@@ -472,7 +649,7 @@ class JudgeWorker:
         else:
             score = 0
 
-        self._save_contest_result(submission_id, {
+        result_payload = {
             "problem_id": problem_id,
             "contest_id": contest_id,
             "user_id": user_id,
@@ -481,41 +658,69 @@ class JudgeWorker:
             "total": total,
             "score": score,
             "details": details,
-        })
+            "cpu_time": total_cpu_time,
+            "wall_time": sum(d.get('time_used', 0) or 0 for d in details),
+            "memory": peak_memory,
+            "output_size": output_size,
+            "exit_code": exit_codes[-1] if exit_codes else None,
+            "signal": signals[-1] if signals else None,
+            "attempt_id": attempt_id,
+            "job_id": job_id,
+        }
+
+        # 运行异常是 RUNNING 的直接终态；正常执行进入 CHECKING 后再落最终判定。
+        direct_runtime_states = {
+            "TLE": TIME_LIMIT_EXCEEDED,
+            "MLE": MEMORY_LIMIT_EXCEEDED,
+            "OLE": OUTPUT_LIMIT_EXCEEDED,
+            "RE": "RE",
+        }
+        runtime_status = next((direct_runtime_states[s] for s in status_set if s in direct_runtime_states), None)
+        if runtime_status:
+            persisted = self._transition_contest(
+                submission_id, attempt_id, RUNNING, runtime_status,
+                verdict=runtime_status,
+                passed=passed,
+                total=total,
+                score=score,
+                cpu_time=total_cpu_time,
+                wall_time=sum(d.get('time_used', 0) or 0 for d in details),
+                memory=peak_memory,
+                output_size=output_size,
+                exit_code=exit_codes[-1] if exit_codes else None,
+                signal=signals[-1] if signals else None,
+                testcase_results=json.dumps(details, ensure_ascii=False),
+                execution_finished_at=execution_finished_at,
+                finished_at=execution_finished_at,
+            )
+        else:
+            claimed_for_check = self._transition_contest(
+                submission_id, attempt_id, RUNNING, CHECKING,
+                passed=passed,
+                total=total,
+                score=score,
+                cpu_time=total_cpu_time,
+                wall_time=sum(d.get('time_used', 0) or 0 for d in details),
+                memory=peak_memory,
+                output_size=output_size,
+                exit_code=exit_codes[-1] if exit_codes else None,
+                signal=signals[-1] if signals else None,
+                testcase_results=json.dumps(details, ensure_ascii=False),
+                execution_finished_at=execution_finished_at,
+            )
+            persisted = claimed_for_check and self._transition_contest(
+                submission_id, attempt_id, CHECKING,
+                ACCEPTED if status == ACCEPTED else PARTIAL if status == PARTIAL else WRONG_ANSWER,
+                verdict=status,
+                finished_at=datetime.now(),
+                checked_at=datetime.now(),
+            )
+        if not persisted:
+            return False
+        self._save_contest_result(submission_id, result_payload)
         self.logger.info(
             f"Contest submission {submission_id} done: {status} (passed {passed}/{total})"
         )
-
-        # 持久化提交记录，供实时排行榜聚合（失败不阻塞判题结果返回）
-        # library 提交（比赛结束后在题库中做题）不计入比赛排行榜
-        try:
-            if (
-                not task.get("library")
-                and user_id is not None
-                and contest_id is not None
-            ):
-                defaults = {
-                    'contest_id': contest_id,
-                    'user_id': user_id,
-                    'contest_problem_id': problem_id,
-                    'problem_index': problem.problem_index or "",
-                    'status': status,
-                    'passed': passed,
-                    'total': total,
-                    'score': score,
-                    'language': language,
-                    'code': code,
-                    'submitted_at': submitted_at,
-                }
-                record, created = ContestSubmission.get_or_create(
-                    judge_submission_id=str(submission_id), defaults=defaults,
-                )
-                if not created:
-                    ContestSubmission.update(**defaults).where(
-                        ContestSubmission.id == record.id
-                    ).execute()
-        except Exception as exc:
-            self.logger.error("保存比赛提交记录失败", exc)
 
     def _judge_single(self, code: str, language: str, stdin: str, expected: str) -> dict:
         """执行单个测试点并对比输出"""
@@ -561,3 +766,7 @@ def start_judge_worker():
     logger = container.resolve(ILoggerService)
     _worker_instance = JudgeWorker(redis, code_service, logger)
     _worker_instance.start()
+
+
+def get_judge_worker() -> Optional[JudgeWorker]:
+    return _worker_instance

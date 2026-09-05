@@ -13,11 +13,14 @@ Redis 缓存服务模块
 
 import redis           # Redis Python 客户端
 import json            # JSON 序列化/反序列化
+import hashlib
 import time            # 时间戳操作
 from typing import Optional, Any, Dict, List, Union
 from datetime import timedelta
 from interfaces.service_interfaces import IConfigService, ILoggerService, IRedisService
 from core.di_container import Injectable
+
+_JOB_LEASE_SECONDS = 300
 
 
 class RedisService(IRedisService, Injectable):
@@ -426,13 +429,15 @@ class RedisService(IRedisService, Injectable):
             return None
 
     def list_claim(self, key: str, processing_key: str) -> Any:
-        """使用 RPOPLPUSH 原子认领任务，Worker 崩溃后任务不会丢失。"""
+        """使用 RPOPLPUSH 原子认领任务，并为 delivery 建立租约。"""
         if not self.is_connected():
             return None
         try:
             receipt = self._client.rpoplpush(key, processing_key)
             if receipt is None:
                 return None
+            if hasattr(self._client, 'setex'):
+                self._client.setex(self._lease_key(processing_key, receipt), _JOB_LEASE_SECONDS, '1')
             return {'payload': json.loads(receipt), 'receipt': receipt}
         except Exception as ex:
             self._logger_service.error(f"Redis 认领队列任务失败: {key}", ex)
@@ -443,23 +448,39 @@ class RedisService(IRedisService, Injectable):
         if not self.is_connected():
             return False
         try:
-            return self._client.lrem(processing_key, 1, receipt) == 1
+            removed = self._client.lrem(processing_key, 1, receipt) == 1
+            if removed and hasattr(self._client, 'delete'):
+                self._client.delete(self._lease_key(processing_key, receipt))
+            return removed
         except Exception as ex:
             self._logger_service.error(f"Redis 确认队列任务失败: {processing_key}", ex)
             return False
 
     def list_recover(self, processing_key: str, key: str) -> int:
-        """恢复没有 ack 的任务（例如 Worker 进程崩溃或发布重启）。"""
+        """只恢复租约已过期的任务，避免重启一个 Worker 时复制其他任务。"""
         if not self.is_connected():
             return 0
         recovered = 0
         try:
-            while self._client.rpoplpush(processing_key, key) is not None:
-                recovered += 1
+            if not hasattr(self._client, 'lrange') or not hasattr(self._client, 'exists'):
+                while self._client.rpoplpush(processing_key, key) is not None:
+                    recovered += 1
+                return recovered
+            for receipt in self._client.lrange(processing_key, 0, -1):
+                if self._client.exists(self._lease_key(processing_key, receipt)):
+                    continue
+                if self._client.lrem(processing_key, 1, receipt) == 1:
+                    self._client.lpush(key, receipt)
+                    recovered += 1
             return recovered
         except Exception as ex:
             self._logger_service.error(f"Redis 恢复队列任务失败: {processing_key}", ex)
             return recovered
+
+    @staticmethod
+    def _lease_key(processing_key: str, receipt: str) -> str:
+        digest = hashlib.sha256(receipt.encode('utf-8')).hexdigest()
+        return f'judge:lease:{processing_key}:{digest}'
 
     def enqueue_with_state(self, state_key: str, state: Any, ttl: int, queue_key: str, task: Any) -> bool:
         """通过 Redis 事务原子完成“提交已接收 + 任务入队”。"""
