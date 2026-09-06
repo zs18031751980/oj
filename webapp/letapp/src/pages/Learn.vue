@@ -4,6 +4,8 @@ import { Icon } from '@iconify/vue';
 import { useRoute, useRouter } from 'vue-router';
 import { sortNodesFoldersFirst } from '../utils/treeSort';
 import type { RecentItem } from '../components/RecentPanel.vue';
+import { useAuthStore } from '../stores/auth';
+import { clearLearnHistory, listLearnHistory, recordLearnHistory } from '../services/api';
 
 const MarkdownComponent = defineAsyncComponent(
   () => import('../components/MarkdownComponent.vue'),
@@ -47,6 +49,7 @@ interface BreadcrumbItem {
 /** ====== 路由 ====== */
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 
 /** ====== 状态 ====== */
 const treeData = ref<TreeNode | null>(null);
@@ -63,8 +66,6 @@ const middleSearch = ref('');
 const expandedGroups = ref<Set<string>>(new Set());
 const recentList = ref<RecentItem[]>([]);
 const mobileSidebarOpen = ref(false);
-
-const RECENT_KEY = 'learn_recent_v1';
 
 /** ====== 路径工具：学习资料以同源静态文件方式提供（public/learn） ====== */
 function encodePath(p: string): string {
@@ -361,17 +362,29 @@ function timeAgo(ts: number): string {
   return formatDate(ts * 1000, { month: 'short', day: 'numeric' });
 }
 
-/** ====== 最近浏览（localStorage） ====== */
-function loadRecent() {
+/** ====== 最近浏览（登录用户数据库） ====== */
+async function loadRecent() {
+  recentList.value = [];
+  if (!authStore.isAuthenticated || !treeData.value) return;
   try {
-    const raw = localStorage.getItem(RECENT_KEY);
-    if (raw) recentList.value = JSON.parse(raw);
-  } catch { /* ignore */ }
-}
-function saveRecent() {
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentList.value)); } catch { /* ignore */ }
+    const response = await listLearnHistory();
+    recentList.value = response.data.map((item) => {
+      const node = getNodeByPath(item.resource_id);
+      const visitedAt = item.browsed_at ? new Date(item.browsed_at).getTime() : Date.now();
+      return {
+        path: item.resource_id,
+        title: node ? cleanName(node.name) : cleanPath(item.resource_id),
+        dir: cleanPath(item.resource_id.split('/').slice(0, -1).join('/')),
+        mtime: Math.floor(visitedAt / 1000),
+        visitedAt,
+      };
+    });
+  } catch {
+    // 历史记录加载失败不影响资料浏览。
+  }
 }
 function pushRecent(file: MarkdownData) {
+  if (!authStore.isAuthenticated) return;
   const parent = file.path.split('/').slice(0, -1).join('/');
   const item: RecentItem = {
     path: file.path,
@@ -383,13 +396,19 @@ function pushRecent(file: MarkdownData) {
   const next = recentList.value.filter((r) => r.path !== file.path);
   next.unshift(item);
   recentList.value = next.slice(0, 6);
-  saveRecent();
+  void recordLearnHistory(file.path).catch(() => { /* 浏览记录失败不影响阅读 */ });
 }
 function clearRecent() {
+  if (!authStore.isAuthenticated) return;
   recentList.value = [];
-  saveRecent();
+  void clearLearnHistory().catch(() => { /* 清空失败时保持当前界面状态 */ });
 }
 const continueItem = computed(() => recentList.value[0] || null);
+
+watch(() => authStore.isAuthenticated, (authenticated) => {
+  if (authenticated) void loadRecent();
+  else recentList.value = [];
+});
 
 /** ====== 详情页面包屑 ====== */
 const fileBreadcrumb = computed<BreadcrumbItem[]>(() => {
@@ -420,7 +439,7 @@ function saveCollapsed() {
 }
 
 const recentMode = computed(() => getRecentMode(windowWidth.value));
-const showRecent = computed(() => recentMode.value !== 'mobile');
+const showRecent = computed(() => authStore.isAuthenticated && recentMode.value !== 'mobile');
 const recentCollapsed = ref(false);
 function defaultCollapsedFor(mode: string): boolean {
   // 平板默认收起，桌面默认展开
@@ -482,10 +501,10 @@ watch(currentFile, (f) => {
 
 onMounted(async () => {
   window.addEventListener('resize', onResize);
-  loadRecent();
   loadCollapsed();
   syncCollapsed();
   await loadTree();
+  await loadRecent();
   const queryPath = route.query.path as string;
   if (queryPath) await loadFile(queryPath);
   else navigateToFolder('');

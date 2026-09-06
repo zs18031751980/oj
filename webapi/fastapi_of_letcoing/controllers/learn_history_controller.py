@@ -80,3 +80,16 @@ class LearnHistoryController(Resource):
             return {'success': True}, 201
         except Exception as e:
             return {'error': f'记录浏览失败: {e}'}, 500
+
+    @api.doc('clear_learn_history')
+    @AuthMiddleware.require_auth
+    def delete(self):
+        """清空当前登录用户的学习资源浏览记录"""
+        user_id = _current_user_id()
+        try:
+            LearnBrowsingHistory.delete().where(
+                LearnBrowsingHistory.user == user_id
+            ).execute()
+            return {'success': True}, 200
+        except Exception as e:
+            return {'error': f'清空浏览记录失败: {e}'}, 500

@@ -725,3 +725,6 @@ export const recordLearnHistory = (resourceId: string) =>
     method: 'POST',
     body: JSON.stringify({ resource_id: resourceId }),
   });
+
+export const clearLearnHistory = () =>
+  apiRequest<{ success: boolean }>('/learn-history', { method: 'DELETE' });
