@@ -229,7 +229,7 @@ onMounted(loadData);
     <div class="app-container-with-sidebar py-6">
       <!-- 左侧分类 -->
       <aside class="app-sidebar-col">
-        <div class="ui-card space-y-1 p-3">
+         <div class="border-l border-[#E2E8F0] pl-3 dark:border-[#1E293B]">
           <button
             v-for="cat in categories"
             :key="cat"
@@ -252,7 +252,7 @@ onMounted(loadData);
             <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">讨论区</h1>
             <p class="ui-section-sub mt-1">交流算法心得，分享学习经验</p>
           </div>
-          <button class="ui-btn-primary rounded-xl px-6 py-3 text-base font-bold shadow-md transition hover:shadow-lg" @click="openCreate">
+           <button class="ui-btn ui-btn-primary ui-btn-md" @click="openCreate">
              <span class="inline-flex items-center gap-1.5"><Icon icon="material-symbols:add-comment-rounded" class="h-5 w-5" />发布讨论</span>
           </button>
         </div>
@@ -274,7 +274,7 @@ onMounted(loadData);
           <div
             v-for="d in filteredDiscussions"
             :key="d.id"
-            class="ui-card flex items-start gap-4 p-4 transition hover:border-[#2563EB]/30 dark:hover:border-[#60A5FA]/30 cursor-pointer"
+             class="flex cursor-pointer items-start gap-4 border-b border-[#E2E8F0] px-2 py-3 transition-colors hover:bg-[#F8FBFF] dark:border-[#1E293B] dark:hover:bg-[#172554]"
             @click="openDetail(d)"
           >
             <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]">

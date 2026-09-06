@@ -953,15 +953,14 @@ onUnmounted(() => {
   gap: 12px;
   padding: 14px 16px;
   margin-bottom: 18px;
-  background: linear-gradient(90deg, #eff6ff, #f5f3ff);
+  background: #eff6ff;
   border: 1px solid #dbeafe;
   border-radius: 12px;
   cursor: pointer;
   transition: box-shadow 0.15s, transform 0.15s;
 }
 .continue-banner:hover {
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.14);
-  transform: translateY(-1px);
+  background: #e8f1ff;
 }
 :global(html.dark) .continue-banner { background: #172554; border-color: #1e3a8a; }
 .continue-icon { color: #2563eb; display: flex; }

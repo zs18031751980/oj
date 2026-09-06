@@ -1018,7 +1018,7 @@ html.dark .ide-left-panel { border-color: #1E293B; background: #111827; }
   padding: 32px;
   text-align: center;
 }
-.ide-empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.6; }
+.ide-empty-icon { width: 32px; height: 32px; margin-bottom: 10px; opacity: 0.55; }
 .ide-empty-title { font-size: 18px; font-weight: 700; color: #1E293B; margin-bottom: 8px; }
 html.dark .ide-empty-title { color: #E5E7EB; }
 .ide-empty-desc { font-size: 13px; color: #94A3B8; margin-bottom: 20px; }
@@ -1036,7 +1036,7 @@ html.dark .ide-empty-title { color: #E5E7EB; }
   cursor: pointer;
   transition: all 0.2s;
 }
-.ide-select-btn:hover { background: #1D4ED8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37,99,235,0.3); }
+.ide-select-btn:hover { background: #1D4ED8; }
 
 .ide-panel-tabs {
   display: flex;

@@ -164,15 +164,27 @@ onMounted(loadData);
         </div>
       </div>
 
-      <div v-if="!isLoading && !error && filteredContests.length === 0" class="ui-empty mt-6">
-        <Icon icon="material-symbols:emoji-events" class="mb-2 h-12 w-12 text-amber-500" />
-        <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无比赛</p>
-      </div>
+       <div v-if="!isLoading && !error && filteredContests.length === 0" class="contest-empty mt-6">
+         <Icon icon="material-symbols:event-busy" class="h-7 w-7 text-[#94A3B8]" />
+         <p class="font-bold text-[#1E293B] dark:text-[#E5E7EB]">暂无比赛</p>
+         <p class="text-sm text-[#64748B] dark:text-[#94A3B8]">目前没有符合当前分类的比赛。</p>
+       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.contest-empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 72px;
+  padding: 16px 18px;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+:global(html.dark) .contest-empty { border-color: #1e293b; }
+
 .contest-header__actions {
   /* 让按钮贴齐容器右侧内容边缘（容器自带内边距，约 24–32px） */
   align-self: flex-start;

@@ -601,7 +601,7 @@ onMounted(loadContests);
       <div
         v-for="c in contests"
         :key="c.id"
-        class="ui-card cursor-pointer p-4 transition hover:shadow-md"
+        class="ui-card cursor-pointer p-4 transition-colors"
         :class="selectedContestId === c.id ? 'ring-2 ring-[#2563EB]' : ''"
         @click="selectContest(c.id)"
       >

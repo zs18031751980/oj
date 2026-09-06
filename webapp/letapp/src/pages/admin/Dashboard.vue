@@ -216,6 +216,6 @@ onMounted(loadStats);
 @reference 'tailwindcss';
 
 .admin-card {
-  @apply rounded-[1.75rem] border border-slate-200 bg-white/85 p-6 shadow-lg shadow-slate-200/60 backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20;
+  @apply rounded-md border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900;
 }
 </style>

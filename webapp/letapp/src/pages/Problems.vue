@@ -218,7 +218,7 @@ onMounted(() => {
       <div class="flex items-start gap-6">
         <!-- 左侧筛选 -->
         <aside class="hidden w-60 shrink-0 lg:block">
-          <div class="ui-card space-y-6">
+          <div class="border-l border-[#E2E8F0] pl-4 dark:border-[#1E293B]">
             <div>
               <div class="ui-section-title mb-2 text-sm">状态</div>
               <div class="flex flex-col gap-1">
@@ -307,9 +307,9 @@ onMounted(() => {
             </button>
           </div>
 
-          <div class="ui-card overflow-hidden !p-0">
+          <div class="overflow-hidden rounded-md border border-[#E2E8F0] bg-white dark:border-[#1E293B] dark:bg-[#111827]">
             <!-- 表头 48px -->
-            <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem] items-center gap-4 border-b border-[#E2E8F0] px-4 text-xs font-bold text-[#64748B] dark:border-[#1E293B] sm:grid" style="height:48px">
+             <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem] items-center gap-4 border-b border-[#E2E8F0] px-4 text-xs font-bold text-[#64748B] dark:border-[#1E293B] sm:grid" style="height:40px">
               <span>状态</span>
               <span>题目</span>
               <span class="text-center">难度</span>
@@ -338,7 +338,7 @@ onMounted(() => {
               <button
                 v-for="p in filteredProblems"
                 :key="p.id"
-                class="problem-row grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-4 px-4 py-3 text-left transition hover:bg-[#EFF6FF] dark:hover:bg-[#172554] sm:grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem]"
+                 class="problem-row grid w-full grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-4 px-4 py-2.5 text-left transition-colors hover:bg-[#EFF6FF] dark:hover:bg-[#172554] sm:grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem]"
                 @click="openProblem(p.id)"
               >
                 <span class="flex justify-center">

@@ -81,33 +81,33 @@ onMounted(loadFavorites);
     </div>
 
     <div class="favorites-content mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
-      <div v-if="loadError" class="flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white/85 py-16 text-center shadow-lg backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85">
+      <div v-if="loadError" class="flex flex-col items-center justify-center rounded-md border border-slate-200 bg-white py-8 text-center dark:border-slate-800 dark:bg-slate-900">
         <Icon icon="material-symbols:cloud-off-rounded" class="mb-3 h-12 w-12 text-rose-400" />
         <p class="font-black">收藏列表加载失败</p>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ loadError }}</p>
-        <button class="mt-4 rounded-full bg-amber-400 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-amber-300" @click="loadFavorites">
+         <button class="ui-btn ui-btn-md mt-4 bg-amber-400 text-slate-950 hover:bg-amber-300" @click="loadFavorites">
           重新加载
         </button>
       </div>
 
-      <div v-else-if="loading" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div v-for="i in 6" :key="i" class="h-40 animate-pulse rounded-3xl bg-white/70 dark:bg-slate-900/70"></div>
+      <div v-else-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div v-for="i in 6" :key="i" class="h-32 animate-pulse rounded-md bg-white dark:bg-slate-900"></div>
       </div>
 
-      <div v-else-if="favorites.length === 0" class="flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-white/85 py-16 text-center shadow-lg backdrop-blur-2xl dark:border-slate-800 dark:bg-slate-900/85">
+      <div v-else-if="favorites.length === 0" class="flex flex-col items-center justify-center rounded-md border border-slate-200 bg-white py-8 text-center dark:border-slate-800 dark:bg-slate-900">
         <Icon icon="material-symbols:star-outline-rounded" class="mb-3 h-14 w-14 text-slate-300 dark:text-slate-600" />
         <p class="font-black">还没有收藏任何题目</p>
         <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">在题目页点击星标，就能把题目收进这里。</p>
-        <button class="mt-4 rounded-full bg-amber-400 px-5 py-2.5 text-sm font-black text-slate-950 transition hover:bg-amber-300" @click="router.push('/problems')">
+         <button class="ui-btn ui-btn-md mt-4 bg-amber-400 text-slate-950 hover:bg-amber-300" @click="router.push('/problems')">
           前往题库
         </button>
       </div>
 
-      <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div
           v-for="item in favorites"
           :key="item.problem_id"
-          class="favorite-card group relative flex flex-col rounded-3xl border border-slate-200 bg-white/85 p-5 shadow-lg shadow-slate-200/50 backdrop-blur-2xl transition hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-amber-200/40 dark:border-slate-800 dark:bg-slate-900/85 dark:shadow-black/20 dark:hover:border-amber-800"
+           class="favorite-card group relative flex flex-col rounded-md border border-slate-200 bg-white p-4 transition-colors hover:border-amber-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-amber-800"
         >
           <button
             class="absolute right-4 top-4 z-10 rounded-xl p-2 text-amber-500 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-amber-950/50"

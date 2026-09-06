@@ -111,7 +111,7 @@
   }
 
   button {
-    border-radius: 0.5rem;
+    border-radius: 0.375rem;
   }
 
   a {
@@ -234,13 +234,13 @@
 
   /* 卡片 */
   .ui-card {
-    @apply rounded-xl border border-[#E2E8F0] bg-white p-5 transition;
+    @apply rounded-md border border-[#E2E8F0] bg-white p-4 transition-colors;
   }
   :where(.dark) .ui-card {
     @apply border-[#1E293B] bg-[#111827];
   }
   .ui-card-hover {
-    @apply hover:-translate-y-0.5 hover:shadow-md;
+    @apply hover:border-[#CBD5E1] dark:hover:border-[#334155];
   }
 
   /* 区块标题 */
@@ -253,7 +253,7 @@
 
   /* 按钮：三档高度 32 / 36 / 40 */
   .ui-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .ui-btn-primary {
     @apply bg-[#2563EB] text-white hover:bg-[#1D4ED8] active:bg-[#1E40AF];
@@ -289,7 +289,7 @@
 
   /* 图标按钮：40×40 点击区域，图标 20px */
   .ui-icon-btn {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-lg text-[#64748B] transition hover:bg-[#F1F5F9] disabled:opacity-40;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-md text-[#64748B] transition-colors hover:bg-[#F1F5F9] disabled:opacity-40;
   }
   :where(.dark) .ui-icon-btn {
     @apply text-[#94A3B8] hover:bg-[#1E293B];
@@ -297,7 +297,7 @@
 
   /* 输入框 */
   .ui-input {
-    @apply w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#1E293B] outline-none transition focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30;
+    @apply w-full rounded-md border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#1E293B] outline-none transition-colors focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30;
   }
   :where(.dark) .ui-input {
     @apply border-[#1E293B] bg-[#0F172A] text-[#E5E7EB];
@@ -305,7 +305,7 @@
 
   /* 徽章 / 状态标签 */
   .ui-badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold;
+    @apply inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold;
   }
   .ui-badge-blue { @apply bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA]; }
   .ui-badge-green { @apply bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300; }
@@ -314,7 +314,7 @@
   .ui-badge-slate { @apply bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300; }
 
   /* 难度标签 */
-  .ui-diff { @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold; }
+  .ui-diff { @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-bold; }
   .ui-diff-easy { @apply bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400; }
   .ui-diff-mid { @apply bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400; }
   .ui-diff-hard { @apply bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400; }
@@ -326,18 +326,18 @@
 
   /* 空状态 */
   .ui-empty {
-    @apply flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#E2E8F0] bg-white/60 py-16 text-center dark:border-[#1E293B] dark:bg-[#111827]/60;
+    @apply flex flex-col items-center justify-center gap-2 rounded-md border border-dashed border-[#E2E8F0] bg-white py-8 text-center dark:border-[#1E293B] dark:bg-[#111827];
   }
 
   /* 表格：表头 48px / 行 56px / Hover 极浅蓝 */
   .ui-table {
-    @apply w-full border-separate border-spacing-0 overflow-hidden rounded-xl border border-[#E2E8F0] dark:border-[#1E293B];
+    @apply w-full border-separate border-spacing-0 overflow-hidden rounded-md border border-[#E2E8F0] dark:border-[#1E293B];
   }
   .ui-table thead th {
     @apply h-12 bg-[#F8FAFC] px-4 text-left text-xs font-bold text-[#64748B] dark:bg-[#0B1220] dark:text-[#94A3B8];
   }
   .ui-table tbody td {
-    @apply h-14 border-t border-[#E2E8F0] px-4 align-middle text-sm text-[#1E293B] dark:border-[#1E293B] dark:text-[#E5E7EB];
+    @apply h-12 border-t border-[#E2E8F0] px-4 align-middle text-sm text-[#1E293B] dark:border-[#1E293B] dark:text-[#E5E7EB];
   }
   .ui-table tbody tr {
     @apply transition-colors hover:bg-[#F8FBFF] dark:hover:bg-[#172554];

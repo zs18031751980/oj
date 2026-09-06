@@ -55,7 +55,7 @@ onMounted(loadData);
         <div
           v-for="user in rankings"
           :key="user.user_id"
-          class="ui-card flex items-center gap-4 p-4 transition hover:shadow-md"
+           class="ui-card flex items-center gap-4 p-3 transition-colors"
           :class="user.rank <= 3 ? 'ring-2 ring-amber-200 dark:ring-amber-800' : ''"
         >
           <!-- 排名 -->

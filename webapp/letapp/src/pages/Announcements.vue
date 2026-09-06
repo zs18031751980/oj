@@ -168,7 +168,7 @@ watch(
       <div class="app-container-with-sidebar py-6 pt-4">
         <!-- 左侧分类栏 240px -->
         <aside class="app-sidebar-col">
-          <div class="ui-card space-y-1 p-3">
+           <div class="border-l border-[#E2E8F0] pl-3 dark:border-[#1E293B]">
             <button
               v-for="cat in categories"
               :key="cat"
@@ -226,7 +226,7 @@ watch(
               v-for="item in filteredAnnouncements"
               :key="item.id"
               type="button"
-              class="announcement-item group flex w-full items-center gap-4 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 text-left transition hover:border-[#2563EB]/30 hover:shadow-sm dark:border-[#1E293B] dark:bg-[#111827] dark:hover:border-[#60A5FA]/30"
+               class="announcement-item group flex w-full items-center gap-4 border-b border-[#E2E8F0] bg-white px-2 py-3 text-left transition-colors hover:bg-[#F8FBFF] dark:border-[#1E293B] dark:bg-[#111827] dark:hover:bg-[#172554]"
               @click="openAnnouncement(item)"
             >
               <!-- 左侧图标 48px -->
