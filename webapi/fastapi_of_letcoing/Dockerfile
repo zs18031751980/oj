@@ -1,4 +1,5 @@
-FROM public.ecr.aws/docker/library/python:3.13-slim
+# Keep Debian Bookworm: it provides the Java 17 toolchain required by the judge.
+FROM public.ecr.aws/docker/library/python:3.13-slim-bookworm
 
 WORKDIR /app
 
