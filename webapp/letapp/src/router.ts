@@ -1,13 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import { resolveManagerRoute } from './utils/announcement-access';
+import LuckyDraw from './pages/LuckyDraw.vue';
 
 const routes = [
   {
     path: '/chou',
     name: 'LuckyDraw',
     meta: { title: '春日惊喜抽奖' },
-    component: () => import('./pages/LuckyDraw.vue'),
+    component: LuckyDraw,
   },
   {
     path: '',

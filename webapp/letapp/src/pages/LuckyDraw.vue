@@ -56,9 +56,40 @@ const buttonText = computed(() => coolingDown.value ? '暂不可抽奖' : '开�
 const buttonDisabled = computed(() => coolingDown.value || !config.items.length);
 let cooldownTimer: number | undefined;
 let drawTimer: number | undefined;
+const memoryStorage = new Map<string, string>();
+
+function readLastDraw() {
+  try {
+    return localStorage.getItem(cooldownKey) || memoryStorage.get(cooldownKey) || '';
+  } catch {
+    return memoryStorage.get(cooldownKey) || '';
+  }
+}
+
+function saveLastDraw(value: string) {
+  memoryStorage.set(cooldownKey, value);
+  try {
+    localStorage.setItem(cooldownKey, value);
+  } catch {
+    // Some private or embedded browsers disable storage; memory fallback is enough.
+  }
+}
+
+function secureRandom() {
+  try {
+    const cryptoApi = globalThis.crypto;
+    if (cryptoApi?.getRandomValues) {
+      const bytes = cryptoApi.getRandomValues(new Uint32Array(1));
+      return bytes[0]! / 4294967296;
+    }
+  } catch {
+    // Fall back for older or restricted browsers.
+  }
+  return Math.random();
+}
 
 function updateCooldown() {
-  const lastDraw = Number(localStorage.getItem(cooldownKey) || 0);
+  const lastDraw = Number(readLastDraw() || 0);
   const remaining = lastDraw + cooldownMs - Date.now();
   coolingDown.value = remaining > 0;
   status.value = coolingDown.value ? '抽奖资格冷却中' : '';
@@ -67,8 +98,7 @@ function updateCooldown() {
 
 function pickPrize() {
   const totalWeight = config.items.reduce((sum, item) => sum + item.weight, 0);
-  const bytes = crypto.getRandomValues(new Uint32Array(1));
-  let cursor = bytes[0]! / 4294967296 * totalWeight;
+  let cursor = secureRandom() * totalWeight;
   for (const item of config.items) {
     cursor -= item.weight;
     if (cursor < 0) return item.name;
@@ -77,7 +107,7 @@ function pickPrize() {
 }
 
 function startCooldown() {
-  localStorage.setItem(cooldownKey, String(Date.now()));
+  saveLastDraw(String(Date.now()));
   updateCooldown();
   cooldownTimer = window.setInterval(updateCooldown, 1000);
 }
