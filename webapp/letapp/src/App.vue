@@ -16,12 +16,13 @@ import {useAuthStore} from './stores/auth'
 import {storeToRefs} from 'pinia'
 
 const themeStore = useThemeStore()
-const authStore = useAuthStore()
 const {theme} = storeToRefs(themeStore)
 const {init} = themeStore
+// 抽奖页是公开活动页：避免受限浏览器因认证存储不可用而在首屏白屏。
+const authStore = window.location.pathname === '/chou' ? null : useAuthStore()
 
 onMounted(() => {
   init()
-  void authStore.restoreSession()
+  void authStore?.restoreSession()
 })
 </script>

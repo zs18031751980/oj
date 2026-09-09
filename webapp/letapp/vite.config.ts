@@ -53,7 +53,8 @@ function announcementsPlugin() {
 export default defineConfig({
     plugins: [vue(), tailwindcss(), announcementsPlugin()],
     build: {
-        target: 'es2020',
+        // Keep generated bundles parseable by older iOS Safari and Android WebView.
+        target: 'es2017',
         cssMinify: 'esbuild',
         sourcemap: false,
         reportCompressedSize: false,

@@ -4,6 +4,35 @@ import { darkTheme } from 'naive-ui';
 import { getAuthStorage, updateUserTheme } from '../services/api';
 
 type ThemePreference = 'light' | 'dark' | 'system';
+const THEME_STORAGE_KEY = 'appThemePreference';
+
+const readThemePreference = (): ThemePreference => {
+  try {
+    const preference = localStorage.getItem(THEME_STORAGE_KEY);
+    return preference === 'light' || preference === 'dark' || preference === 'system'
+      ? preference
+      : 'system';
+  } catch {
+    return 'system';
+  }
+};
+
+const saveThemePreference = (preference: ThemePreference) => {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, preference);
+  } catch {
+    // Private and embedded browsers can disable web storage.
+  }
+};
+
+const getSystemPrefersDark = () => {
+  try {
+    return typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    return false;
+  }
+};
 
 const syncThemeToBackend = async (preference: ThemePreference) => {
   try {
@@ -16,11 +45,8 @@ const syncThemeToBackend = async (preference: ThemePreference) => {
 };
 
 export const useThemeStore = defineStore('theme', () => {
-  const LOCAL_STORAGE_THEME_KEY = 'appThemePreference';
-  const userPreference = ref<ThemePreference>(
-    (localStorage.getItem(LOCAL_STORAGE_THEME_KEY) as ThemePreference | null) || 'system',
-  );
-  const systemPrefersDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const userPreference = ref<ThemePreference>(readThemePreference());
+  const systemPrefersDark = ref(getSystemPrefersDark());
 
   const updateThemeClass = (dark: boolean) => {
     document.documentElement.classList.toggle('dark', dark);
@@ -40,7 +66,7 @@ export const useThemeStore = defineStore('theme', () => {
     },
     set(value: boolean) {
       userPreference.value = value ? 'dark' : 'light';
-      localStorage.setItem(LOCAL_STORAGE_THEME_KEY, userPreference.value);
+      saveThemePreference(userPreference.value);
       updateThemeClass(value);
       syncThemeToBackend(userPreference.value);
     },
@@ -51,14 +77,14 @@ export const useThemeStore = defineStore('theme', () => {
   const applyUserTheme = (preference?: string) => {
     if (preference && ['light', 'dark', 'system'].includes(preference)) {
       userPreference.value = preference as ThemePreference;
-      localStorage.setItem(LOCAL_STORAGE_THEME_KEY, preference);
+      saveThemePreference(userPreference.value);
       updateThemeClass(isDark.value);
     }
   };
 
   const setThemePreference = (preference: ThemePreference) => {
     userPreference.value = preference;
-    localStorage.setItem(LOCAL_STORAGE_THEME_KEY, preference);
+    saveThemePreference(preference);
     updateThemeClass(isDark.value);
     syncThemeToBackend(preference);
   };
@@ -68,13 +94,22 @@ export const useThemeStore = defineStore('theme', () => {
   };
 
   const init = () => {
+    if (typeof window.matchMedia !== 'function') {
+      updateThemeClass(isDark.value);
+      return;
+    }
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', (event) => {
+    const handleChange = (event: MediaQueryListEvent) => {
       systemPrefersDark.value = event.matches;
       if (userPreference.value === 'system') {
         updateThemeClass(isDark.value);
       }
-    });
+    };
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+    } else {
+      mediaQuery.addListener(handleChange);
+    }
 
     updateThemeClass(isDark.value);
   };

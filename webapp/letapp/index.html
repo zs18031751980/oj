@@ -2,6 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8"/>
+    <script>
+      // Keep the public lucky-draw page outside the main SPA startup path.
+      if (window.location.pathname === '/chou') window.location.replace('/chou/');
+    </script>
     <link rel="dns-prefetch" href="https://glot.io" />
     <link rel="icon" type="image/png" href="/assets/favicon.png" />
     <link rel="preload" href="/assets/favicon.png" as="image" />
