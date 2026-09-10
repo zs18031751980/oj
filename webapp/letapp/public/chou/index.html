@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="format-detection" content="telephone=no">
   <meta name="theme-color" content="#fcfaf9">
-  <title>春日惊喜抽奖</title>
+  <title>百团嘉年华抽奖</title>
   <style>
     * { box-sizing: border-box; }
     html, body { min-width: 0; margin: 0; }
@@ -41,10 +41,10 @@
 <body>
   <main class="page">
     <section class="hero">
-      <div class="logo-wrap"><img src="./logo.jpg" alt="iOS Club XAUAT"></div>
+      <div class="logo-wrap"><img src="./logo.jpg?v=3" alt="iOS Club XAUAT" onerror="this.onerror=null;this.src='/chou/logo.jpg?v=3';"></div>
       <div class="brand">iOS CLUB · XAUAT</div>
       <div class="eyebrow">LUCKY DRAW / 2026</div>
-      <h1>春日惊喜抽奖</h1>
+      <h1>百团嘉年华抽奖</h1>
       <p class="subtitle">玩数码，学编程，来iOSClub!</p>
     </section>
     <section class="draw-card" aria-live="polite">
@@ -63,12 +63,12 @@
       var prizes = [
         { name: 'iOS主题钥匙扣', weight: 25, icon: '✦' },
         { name: 'iOS主题扇子', weight: 20, icon: '◆' },
-        { name: 'iOS主题应援周边', weight: 30, icon: '●' },
+        { name: 'iOS主题应援周边', weight: 60, icon: '●' },
         { name: 'iOS主题手账本', weight: 10, icon: '◇' },
         { name: '花粉徽章', weight: 20, icon: '★' }
       ];
       var cooldownMs = 24 * 60 * 60 * 1000;
-      var storageKey = 'lottery:last-draw:春日惊喜抽奖';
+      var storageKey = 'lottery:last-draw:百团嘉年华抽奖';
       var result = document.getElementById('result');
       var status = document.getElementById('status');
       var button = document.getElementById('draw-button');

@@ -7,7 +7,7 @@ const routes = [
   {
     path: '/chou',
     name: 'LuckyDraw',
-    meta: { title: '春日惊喜抽奖' },
+    meta: { title: '百团嘉年华抽奖' },
     component: LuckyDraw,
   },
   {

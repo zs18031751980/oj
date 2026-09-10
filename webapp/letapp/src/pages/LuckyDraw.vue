@@ -36,12 +36,12 @@ import './LuckyDraw.css';
 
 type Prize = { name: string; weight: number };
 const config = {
-  title: '春日惊喜抽奖',
+  title: '百团嘉年华抽奖',
   subtitle: '玩数码，学编程，来iOSClub!',
   items: [
     { name: 'iOS主题钥匙扣', weight: 25 },
     { name: 'iOS主题扇子', weight: 20 },
-    { name: 'iOS主题应援周边', weight: 30 },
+    { name: 'iOS主题应援周边', weight: 60 },
     { name: 'iOS主题手账本', weight: 10 },
     { name: '花粉徽章', weight: 20 },
   ] satisfies Prize[],
