@@ -32,6 +32,7 @@ const searchQuery = ref('');
 const difficultyFilter = ref<string>('');
 const categoryFilter = ref('');
 const statusFilter = ref<'' | 'solved' | 'unsolved' | 'attempted' | 'favorite'>('');
+const sortMode = ref<'latest' | 'number'>('latest');
 const isLoading = ref(true);
 const loadError = ref('');
 const { getStats } = useProblemStats();
@@ -135,6 +136,11 @@ const filteredProblems = computed(() => {
         isAttempted: authStore.isAuthenticated && stat.attempted,
         acceptRate: stat.submissions > 0 ? Math.round((stat.accepted / stat.submissions) * 100) : null,
       };
+    })
+    .sort((a, b) => {
+      const aNumber = a.sourceNumber ?? a.id;
+      const bNumber = b.sourceNumber ?? b.id;
+      return sortMode.value === 'latest' ? bNumber - aNumber : aNumber - bNumber;
     });
 });
 
@@ -143,6 +149,16 @@ const openProblem = (id: number) => {
 };
 
 const isFavorited = (id: number) => favoriteIds.value.has(id);
+
+const openRandomProblem = () => {
+  const candidates = filteredProblems.value;
+  if (!candidates.length) {
+    message.info('当前筛选条件下没有可打开的题目');
+    return;
+  }
+  const selectedProblem = candidates[Math.floor(Math.random() * candidates.length)];
+  if (selectedProblem) openProblem(selectedProblem.id);
+};
 
 const goLogin = () => {
   authStore.startOAuthLogin('iOSClub', router.currentRoute.value.fullPath, true);
@@ -198,28 +214,11 @@ onMounted(() => {
 <template>
   <div class="problems-page bg-[#F6F8FC] dark:bg-[#0F172A]">
     <div class="app-container py-6">
-      <!-- 标题区 -->
-      <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 class="text-2xl font-black text-[#1E293B] dark:text-[#E5E7EB]">在线题库</h1>
-          <p class="ui-section-sub mt-1">共 {{ problems.length }} 道题目 · 当前筛选出 {{ filteredProblems.length }} 道</p>
-        </div>
-        <div class="relative w-full sm:w-80">
-          <Icon icon="material-symbols:search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            class="ui-input pl-9"
-            placeholder="搜索题号、名称或标签"
-          />
-        </div>
-      </div>
-
-      <div class="flex items-start gap-6">
+      <div class="flex items-start gap-4 lg:gap-6">
         <!-- 左侧筛选 -->
-        <aside class="hidden w-60 shrink-0 lg:block">
-          <div class="border-l border-[#E2E8F0] pl-4 dark:border-[#1E293B]">
-            <div>
+        <aside data-testid="problem-filter-card" class="problem-filter-card hidden w-60 shrink-0 lg:block">
+          <div class="space-y-6">
+            <section>
               <div class="ui-section-title mb-2 text-sm">状态</div>
               <div class="flex flex-col gap-1">
                 <button
@@ -238,8 +237,8 @@ onMounted(() => {
                   {{ opt.label }}
                 </button>
               </div>
-            </div>
-            <div>
+            </section>
+            <section>
               <div class="ui-section-title mb-2 text-sm">难度</div>
               <div class="flex flex-col gap-1">
                 <button
@@ -259,8 +258,8 @@ onMounted(() => {
                   <span :class="difficultyClass(d)" class="!px-2 !py-0">{{ d }}</span>
                 </button>
               </div>
-            </div>
-            <div>
+            </section>
+            <section>
               <div class="ui-section-title mb-2 text-sm">分类</div>
               <div class="filter-scroll flex max-h-72 flex-col gap-1 overflow-y-auto pr-1">
                 <button class="filter-item" :class="{ active: categoryFilter === '' }" @click="categoryFilter = ''">全部分类</button>
@@ -274,16 +273,53 @@ onMounted(() => {
                   {{ c.label }}
                 </button>
               </div>
-            </div>
+            </section>
           </div>
         </aside>
 
         <!-- 右侧内容 -->
         <section class="min-w-0 flex-1">
+          <div class="problem-intro-card mb-4">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <h1 class="text-2xl font-semibold text-[#1E293B] dark:text-[#E5E7EB]">在线题库</h1>
+                <p class="ui-section-sub mt-1">精选编程题目，持续提升你的编程能力。</p>
+              </div>
+              <div class="relative w-full xl:w-64">
+                <Icon icon="material-symbols:search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <input
+                  v-model="searchQuery"
+                  type="text"
+                  class="ui-input h-10 pl-9"
+                  placeholder="搜索题号、名称或标签"
+                />
+              </div>
+            </div>
+
+            <div data-testid="problem-toolbar" class="problem-toolbar mt-5">
+              <div class="flex flex-wrap gap-2">
+                <button class="problem-toolbar-tab" :class="{ active: statusFilter === '' }" @click="statusFilter = ''">全部题目</button>
+                <button class="problem-toolbar-tab" :class="{ active: statusFilter === 'favorite' }" @click="statusFilter = 'favorite'">我的收藏</button>
+                <button class="problem-toolbar-tab" :class="{ active: statusFilter === 'unsolved' }" @click="statusFilter = 'unsolved'">未解决</button>
+                <button class="problem-toolbar-tab" :class="{ active: statusFilter === 'solved' }" @click="statusFilter = 'solved'">已解决</button>
+              </div>
+              <div class="flex items-center gap-2">
+                <select v-model="sortMode" class="problem-sort" aria-label="题目排序">
+                  <option value="latest">按最新发布</option>
+                  <option value="number">按题号排序</option>
+                </select>
+                <button class="ui-btn ui-btn-primary ui-btn-sm" @click="openRandomProblem">
+                  <Icon icon="material-symbols:shuffle-rounded" class="h-4 w-4" />
+                  随机一题
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- 移动端筛选 -->
           <div class="mb-4 flex flex-wrap gap-2 lg:hidden">
             <button
-              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              class="rounded-md border px-3 py-1 text-xs font-medium transition-colors"
               :class="difficultyFilter === '' ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
               @click="difficultyFilter = ''"
             >
@@ -292,14 +328,14 @@ onMounted(() => {
             <button
               v-for="d in ['简单', '中等', '困难']"
               :key="d"
-              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              class="rounded-md border px-3 py-1 text-xs font-medium transition-colors"
               :class="difficultyFilter === d ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
               @click="difficultyFilter = difficultyFilter === d ? '' : (d as any)"
             >
               {{ d }}
             </button>
             <button
-              class="rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+              class="rounded-md border px-3 py-1 text-xs font-medium transition-colors"
               :class="statusFilter === 'favorite' ? 'border-[#2563EB] bg-[#EFF6FF] text-[#2563EB] dark:border-[#60A5FA] dark:bg-[#172554] dark:text-[#60A5FA]' : 'border-[#E2E8F0] text-[#64748B] dark:border-[#334155] dark:text-[#94A3B8]'"
               @click="statusFilter = statusFilter === 'favorite' ? '' : 'favorite'"
             >
@@ -309,7 +345,7 @@ onMounted(() => {
 
           <div class="overflow-hidden rounded-md border border-[#E2E8F0] bg-white dark:border-[#1E293B] dark:bg-[#111827]">
             <!-- 表头 48px -->
-             <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem] items-center gap-4 border-b border-[#E2E8F0] px-4 text-xs font-bold text-[#64748B] dark:border-[#1E293B] sm:grid" style="height:40px">
+             <div class="hidden grid-cols-[2.5rem_minmax(0,1fr)_5rem_5rem_5rem] items-center gap-4 border-b border-[#E2E8F0] px-4 text-xs font-medium text-[#64748B] dark:border-[#1E293B] sm:grid" style="height:40px">
               <span>状态</span>
               <span>题目</span>
               <span class="text-center">难度</span>
@@ -357,7 +393,7 @@ onMounted(() => {
                 <span class="min-w-0">
                   <span class="flex items-center gap-2">
                     <span class="shrink-0 text-xs font-mono text-[#94A3B8]">#{{ p.sourceNumber ?? p.id }}</span>
-                    <span class="truncate font-bold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
+                    <span class="truncate font-semibold text-[#1E293B] dark:text-[#E5E7EB]">{{ p.title }}</span>
                   </span>
                   <span class="mt-1 flex flex-wrap gap-1.5">
                     <span
@@ -397,8 +433,27 @@ onMounted(() => {
 @reference 'tailwindcss';
 
 .filter-item {
-  @apply flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors;
+  @apply flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors;
   color: #475569;
+}
+.problem-filter-card,
+.problem-intro-card {
+  @apply rounded-md border border-[#E2E8F0] bg-white p-4 dark:border-[#1E293B] dark:bg-[#111827];
+}
+.problem-intro-card {
+  @apply p-5;
+}
+.problem-toolbar {
+  @apply flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#1E293B];
+}
+.problem-toolbar-tab {
+  @apply inline-flex h-8 items-center justify-center rounded-md border border-[#E2E8F0] bg-white px-3 text-xs font-medium text-[#475569] transition-colors hover:border-[#CBD5E1] hover:bg-[#F8FAFC] dark:border-[#334155] dark:bg-[#111827] dark:text-[#CBD5E1] dark:hover:bg-[#1E293B];
+}
+.problem-toolbar-tab.active {
+  @apply border-[#2563EB] bg-[#2563EB] text-white hover:border-[#1D4ED8] hover:bg-[#1D4ED8] dark:border-[#3B82F6] dark:bg-[#2563EB];
+}
+.problem-sort {
+  @apply h-8 rounded-md border border-[#E2E8F0] bg-white px-2.5 text-xs font-medium text-[#475569] outline-none transition-colors focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]/25 dark:border-[#334155] dark:bg-[#111827] dark:text-[#CBD5E1];
 }
 html:not(.dark) .filter-item:hover {
   background: #F1F5F9;

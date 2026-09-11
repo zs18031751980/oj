@@ -17,6 +17,7 @@ from models.db_models import (
 )
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
+from services.contest_lifecycle import can_edit_contest_assets
 
 api = Namespace('admin/contests', description='比赛管理接口（管理员）')
 
@@ -69,6 +70,13 @@ def _require_manager():
         return user, None
     except Exception:
         return None, ('用户不存在', 401)
+
+
+def _require_editable_contest(contest: Contest):
+    """发布即冻结题目、参考答案和隐藏数据，防止赛中变更判题标准。"""
+    if not can_edit_contest_assets(contest.lifecycle_state):
+        return {'error': '比赛已发布，题目与测试数据已冻结'}, 409
+    return None
 
 
 def _detect_language(code: str) -> str:
@@ -743,6 +751,9 @@ class ContestProblemListController(Resource):
             contest = Contest.get_by_id(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
+        locked = _require_editable_contest(contest)
+        if locked:
+            return locked
 
         data = request.get_json(silent=True) or {}
         required = ['problem_index', 'title', 'description', 'correct_answer']
@@ -819,6 +830,9 @@ class ContestProblemDetailController(Resource):
             problem = ContestProblem.get_by_id(problem_id)
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
+        locked = _require_editable_contest(problem.contest)
+        if locked:
+            return locked
 
         data = request.get_json(silent=True) or {}
         if 'problem_index' in data:
@@ -877,6 +891,9 @@ class ContestProblemDetailController(Resource):
             problem = ContestProblem.get_by_id(problem_id)
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
+        locked = _require_editable_contest(problem.contest)
+        if locked:
+            return locked
 
         try:
             # 显式按依赖顺序清理子表，避免外键约束冲突或级联未生效导致删除失败

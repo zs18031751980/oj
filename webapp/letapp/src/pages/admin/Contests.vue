@@ -3,7 +3,7 @@ import { ref, computed, nextTick, watch, defineAsyncComponent, onMounted } from 
 import { Icon } from '@iconify/vue';
 import { useMessage } from 'naive-ui';
 import {
-  listContests, createContest, updateContest, getContest,
+  listManagedContests, createContest, updateContest, getContest, publishContest,
   type ContestData
 } from '../../services/api';
 import { apiRequest } from '../../services/api';
@@ -29,6 +29,7 @@ const contestForm = ref({
   contest_type: 'ACM',
   start_time: '',
   end_time: '',
+  freeze_time: '',
   penalty_time: 20,
 });
 
@@ -38,6 +39,7 @@ const emptyContestForm = () => ({
   contest_type: 'ACM',
   start_time: '',
   end_time: '',
+  freeze_time: '',
   penalty_time: 20,
 });
 
@@ -51,6 +53,7 @@ const openContestForm = (contest?: ContestData) => {
       contest_type: contest.contest_type || 'ACM',
       start_time: toLocalInputValue(contest.start_time),
       end_time: toLocalInputValue(contest.end_time),
+      freeze_time: toLocalInputValue(contest.freeze_time),
       penalty_time: contest.penalty_time ?? 20,
     };
   } else {
@@ -316,7 +319,7 @@ const clearDraft = () => {
 const loadContests = async () => {
   isLoadingContests.value = true;
   try {
-    contests.value = await listContests();
+    contests.value = await listManagedContests();
   } catch (e) {
     message.error('加载比赛列表失败');
   } finally {
@@ -362,6 +365,7 @@ const saveContest = async () => {
       ...contestForm.value,
       start_time: toLocalInputValue(contestForm.value.start_time),
       end_time: toLocalInputValue(contestForm.value.end_time),
+      freeze_time: toLocalInputValue(contestForm.value.freeze_time),
     };
     const editingId = editingContestId.value;
     if (editingId) {
@@ -378,6 +382,19 @@ const saveContest = async () => {
     }
   } catch (e) {
     message.error(e instanceof Error ? e.message : '保存失败');
+  }
+};
+
+const publishSelectedContest = async (contest: ContestData) => {
+  try {
+    await publishContest(contest.id);
+    message.success('比赛已发布，题目与规则现已冻结');
+    await loadContests();
+    if (selectedContestId.value === contest.id) {
+      selectedContest.value = await getContest(contest.id);
+    }
+  } catch (e) {
+    message.error(e instanceof Error ? e.message : '发布失败，请检查题目与隐藏测试数据');
   }
 };
 
@@ -557,6 +574,11 @@ onMounted(loadContests);
             </div>
             <div></div>
           </div>
+          <div>
+            <label class="mb-1 block text-sm font-bold">封榜时间（可选）</label>
+            <input v-model="contestForm.freeze_time" type="datetime-local" step="60" class="ui-input w-full" />
+            <p class="mt-1 text-xs text-[#94A3B8]">封榜后继续判题，参赛者不再看到新的 AC，公开榜固定为封榜前快照。</p>
+          </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="mb-1 block text-sm font-bold">开始时间</label>
@@ -612,13 +634,22 @@ onMounted(loadContests);
               <span class="ui-badge" :class="c.status === 'ongoing' ? 'ui-badge-green' : c.status === 'upcoming' ? 'ui-badge-blue' : 'ui-badge-slate'">
                 {{ c.status === 'ongoing' ? '进行中' : c.status === 'upcoming' ? '即将开始' : '已结束' }}
               </span>
+              <span class="ui-badge" :class="c.lifecycle_state === 'DRAFT' ? 'ui-badge-slate' : 'ui-badge-blue'">
+                {{ c.lifecycle_state === 'DRAFT' ? '草稿' : c.is_frozen ? '已封榜' : '已发布' }}
+              </span>
               <span class="text-xs text-[#94A3B8]">{{ c.contest_type }}</span>
             </div>
             <p class="mt-1 text-sm text-[#64748B]">{{ c.participants_count || 0 }} 人参与</p>
           </div>
           <div class="flex items-center gap-2">
             <button
+              v-if="c.lifecycle_state === 'DRAFT' || !c.lifecycle_state"
+              class="ui-btn ui-btn-primary ui-btn-sm"
+              @click.stop="publishSelectedContest(c)"
+            >发布</button>
+            <button
               class="ui-btn ui-btn-ghost ui-btn-sm"
+              :disabled="c.lifecycle_state && c.lifecycle_state !== 'DRAFT'"
               @click.stop="openContestForm(c)"
             >编辑</button>
             <button

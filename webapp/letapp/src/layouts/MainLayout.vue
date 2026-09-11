@@ -4,7 +4,7 @@
     :style="{ '--header-h': '4rem' }"
   >
     <header
-      class="fixed inset-x-0 top-0 z-50 h-[var(--header-h,4rem)] border-b border-[#E2E8F0] bg-[#F6F8FC]/90 backdrop-blur-xl transition-colors dark:border-[#1E293B] dark:bg-[#0F172A]/90"
+      class="fixed inset-x-0 top-0 z-50 h-[var(--header-h,4rem)] border-b border-[#E2E8F0] bg-white transition-colors dark:border-[#1E293B] dark:bg-[#0F172A]"
     >
       <div
         class="mx-auto flex h-full max-w-[1440px] items-center gap-4 px-4 sm:px-6 lg:px-8"
@@ -13,9 +13,9 @@
           <img
             src="/assets/logo.png"
             alt="Let Coding Logo"
-            class="h-9 w-9 rounded-xl object-cover shadow-sm"
+            class="h-9 w-9 rounded-md object-cover"
           />
-          <span class="text-lg font-black tracking-tight">Let Coding</span>
+          <span class="text-lg font-semibold tracking-tight">Let Coding</span>
         </a>
 
         <nav
@@ -41,7 +41,7 @@
               v-model="globalSearchQuery"
               type="text"
               placeholder="搜索题目…"
-              class="h-10 w-48 rounded-lg border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm text-[#1E293B] outline-none transition focus:border-[#2563EB] focus:ring-2 focus:ring-[#2563EB]/30 dark:border-[#1E293B] dark:bg-[#0F172A] dark:text-[#E5E7EB] dark:placeholder-[#64748B]"
+              class="h-10 w-48 rounded-md border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm text-[#1E293B] outline-none transition focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]/25 dark:border-[#1E293B] dark:bg-[#0F172A] dark:text-[#E5E7EB] dark:placeholder-[#64748B]"
               @keydown.enter="goSearch"
             />
           </div>
@@ -338,10 +338,10 @@ watch(menuVisible, toggleMenuLock);
 }
 
 .user-dropdown {
-  @apply absolute right-0 top-[calc(100%+0.5rem)] z-60 grid min-w-[13rem] gap-1 rounded-2xl border border-[#E2E8F0] bg-white/95 p-2 shadow-xl backdrop-blur-xl dark:border-[#1E293B] dark:bg-[#111827]/95;
+  @apply absolute right-0 top-[calc(100%+0.5rem)] z-60 grid min-w-[13rem] gap-1 rounded-md border border-[#E2E8F0] bg-white p-1 shadow-[0_4px_12px_rgb(15_23_42_/_0.08)] dark:border-[#1E293B] dark:bg-[#111827];
 }
 .user-dropdown-item {
-  @apply flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left text-sm font-bold text-[#334155] transition-colors dark:text-[#E5E7EB];
+  @apply flex w-full items-center gap-2.5 rounded-md px-3.5 py-2.5 text-left text-sm font-medium text-[#334155] transition-colors dark:text-[#E5E7EB];
 }
 .user-dropdown-item:hover {
   @apply bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA];
@@ -364,7 +364,7 @@ watch(menuVisible, toggleMenuLock);
 }
 
 .mobile-drawer {
-  @apply fixed right-0 top-0 z-50 flex h-full w-[20rem] max-w-[88vw] flex-col border-l border-[#E2E8F0] bg-white shadow-2xl dark:border-[#1E293B] dark:bg-[#111827];
+  @apply fixed right-0 top-0 z-50 flex h-full w-[20rem] max-w-[88vw] flex-col border-l border-[#E2E8F0] bg-white shadow-[0_0_24px_rgb(15_23_42_/_0.08)] dark:border-[#1E293B] dark:bg-[#111827];
 }
 .drawer-heading {
   @apply flex h-16 items-center justify-between border-b border-[#E2E8F0] px-4 dark:border-[#1E293B];
@@ -373,7 +373,7 @@ watch(menuVisible, toggleMenuLock);
   @apply grid gap-1 p-3;
 }
 .drawer-link {
-  @apply flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold text-[#334155] transition-colors dark:text-[#E5E7EB];
+  @apply flex w-full items-center gap-3 rounded-md px-4 py-3 text-left text-sm font-medium text-[#334155] transition-colors dark:text-[#E5E7EB];
 }
 .drawer-link:hover {
   @apply bg-[#EFF6FF] text-[#2563EB] dark:bg-[#172554] dark:text-[#60A5FA];

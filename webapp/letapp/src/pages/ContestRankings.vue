@@ -74,8 +74,9 @@ onUnmounted(() => {
             <span class="ui-badge ui-badge-blue">
               {{ isOI() ? 'OI（按得分）' : 'ACM（解题数 + 罚时）' }}
             </span>
-             <span v-if="contest" class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
-            <span class="text-[#94A3B8]">每 10 秒自动刷新</span>
+            <span v-if="contest" class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
+            <span v-if="contest?.is_frozen" class="ui-badge ui-badge-amber">已封榜 · 显示封榜前排名</span>
+            <span v-else class="text-[#94A3B8]">每 10 秒自动刷新</span>
           </div>
         </div>
       </div>

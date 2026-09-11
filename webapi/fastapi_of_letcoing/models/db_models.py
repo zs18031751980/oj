@@ -331,6 +331,10 @@ class Contest(BaseModel):
     created_by = IntegerField(null=True, verbose_name="创建者ID")
     is_public = BooleanField(default=True, verbose_name="是否公开")
     penalty_time = IntegerField(default=20, verbose_name="罚时(分钟, ACM 模式)")
+    lifecycle_state = CharField(max_length=20, default="DRAFT", verbose_name="生命周期状态")
+    freeze_time = DateTimeField(null=True, verbose_name="封榜时间")
+    published_at = DateTimeField(null=True, verbose_name="发布时间")
+    finalized_at = DateTimeField(null=True, verbose_name="最终榜发布时间")
 
     class Meta:
         table_name = "contests"
@@ -462,10 +466,38 @@ class ContestSubmission(BaseModel):
     exit_code = IntegerField(null=True, verbose_name="退出码")
     signal = IntegerField(null=True, verbose_name="终止信号")
     error_message = TextField(null=True, verbose_name="判题错误信息")
+    idempotency_key = CharField(max_length=128, null=True, verbose_name="提交幂等键")
+    received_at = DateTimeField(null=True, verbose_name="服务端受理时间")
+    contest_eligible = BooleanField(default=True, verbose_name="是否计入比赛成绩")
     submitted_at = DateTimeField(default=datetime.now, verbose_name="提交时间")
 
     class Meta:
         table_name = "contest_submissions"
+
+
+class ContestScoreboardSnapshot(BaseModel):
+    """封榜与最终榜的不可变公开快照。"""
+    id = AutoField(primary_key=True)
+    contest = ForeignKeyField(Contest, backref="scoreboard_snapshots")
+    snapshot_kind = CharField(max_length=20, verbose_name="PUBLIC_FREEZE/FINAL")
+    payload = TextField(verbose_name="排行榜 JSON")
+    scoreboard_version = IntegerField(default=0)
+
+    class Meta:
+        table_name = "contest_scoreboard_snapshots"
+
+
+class ContestJudgeOutbox(BaseModel):
+    """数据库事实与 Redis 队列之间的可靠投递记录。"""
+    id = AutoField(primary_key=True)
+    submission = ForeignKeyField(ContestSubmission, backref="outbox", unique=True)
+    state = CharField(max_length=20, default="PENDING")
+    dispatch_attempts = IntegerField(default=0)
+    last_error = TextField(null=True)
+    dispatched_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = "contest_judge_outbox"
 
 
 class ContestTestcase(BaseModel):
@@ -515,7 +547,8 @@ class LearnBrowsingHistory(BaseModel):
 # 所有已注册模型的列表（用于表创建和删除操作）
 MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
           Contest, ContestParticipant, Discussion, DiscussionReply,
-          ContestProblem, ContestTestcase, ContestSubmission, LearnFavorite, LearnBrowsingHistory]
+          ContestProblem, ContestTestcase, ContestSubmission, ContestScoreboardSnapshot,
+          ContestJudgeOutbox, LearnFavorite, LearnBrowsingHistory]
 
 
 def create_tables():
@@ -786,6 +819,50 @@ _SCHEMA_MIGRATIONS = [
             "ON contest_submissions(job_id) WHERE job_id IS NOT NULL;",
             "CREATE INDEX IF NOT EXISTS idx_contest_submissions_status "
             "ON contest_submissions(contest_id, status, submitted_at);",
+        ],
+    ),
+    (
+        "0014_contest_submission_facts",
+        [
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128);",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS received_at TIMESTAMP;",
+            "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS contest_eligible BOOLEAN DEFAULT true;",
+            "UPDATE contest_submissions SET received_at = submitted_at WHERE received_at IS NULL;",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_submissions_idempotency "
+            "ON contest_submissions(contest_id, user_id, idempotency_key) "
+            "WHERE idempotency_key IS NOT NULL;",
+            "CREATE INDEX IF NOT EXISTS idx_contest_submissions_scoreboard "
+            "ON contest_submissions(contest_id, user_id, contest_problem_id, received_at);",
+        ],
+    ),
+    (
+        "0015_contest_lifecycle_and_snapshots",
+        [
+            "ALTER TABLE contests ADD COLUMN IF NOT EXISTS lifecycle_state VARCHAR(20) DEFAULT 'DRAFT';",
+            "ALTER TABLE contests ADD COLUMN IF NOT EXISTS freeze_time TIMESTAMP;",
+            "ALTER TABLE contests ADD COLUMN IF NOT EXISTS published_at TIMESTAMP;",
+            "ALTER TABLE contests ADD COLUMN IF NOT EXISTS finalized_at TIMESTAMP;",
+            "UPDATE contests SET lifecycle_state = CASE "
+            "WHEN status = 'past' THEN 'FINALIZED' "
+            "WHEN status IN ('upcoming', 'ongoing') THEN 'SCHEDULED' "
+            "ELSE lifecycle_state END WHERE lifecycle_state = 'DRAFT';",
+            "CREATE TABLE IF NOT EXISTS contest_scoreboard_snapshots ("
+            "id SERIAL PRIMARY KEY, contest_id INTEGER REFERENCES contests(id) ON DELETE CASCADE, "
+            "snapshot_kind VARCHAR(20) NOT NULL, payload TEXT NOT NULL, scoreboard_version INTEGER DEFAULT 0, "
+            "created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now());",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_scoreboard_snapshot_kind "
+            "ON contest_scoreboard_snapshots(contest_id, snapshot_kind);",
+        ],
+    ),
+    (
+        "0016_contest_judge_outbox",
+        [
+            "CREATE TABLE IF NOT EXISTS contest_judge_outbox ("
+            "id SERIAL PRIMARY KEY, submission_id INTEGER NOT NULL UNIQUE REFERENCES contest_submissions(id) ON DELETE CASCADE, "
+            "state VARCHAR(20) NOT NULL DEFAULT 'PENDING', dispatch_attempts INTEGER NOT NULL DEFAULT 0, "
+            "last_error TEXT, dispatched_at TIMESTAMP, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now());",
+            "CREATE INDEX IF NOT EXISTS idx_contest_judge_outbox_pending "
+            "ON contest_judge_outbox(state, created_at) WHERE state = 'PENDING';",
         ],
     ),
 ]

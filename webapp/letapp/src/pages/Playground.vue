@@ -245,6 +245,7 @@ const submitCode = async () => {
         `/contests/${contestId.value}/problems/${problemId.value}/submit`,
         {
           method: "POST",
+          headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({ code: source, language: selectedLanguage.value }),
         },
       );

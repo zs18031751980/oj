@@ -2,6 +2,7 @@
 
 import shutil
 import unittest
+from datetime import datetime, timedelta
 
 IMPORT_ERROR = None
 try:
@@ -9,6 +10,7 @@ try:
     from controllers.contest_problem_controller import _exec_command, _prepare_program, normalize_judge_output
     from services.redis_service import RedisService
     from services.judge_state import ACCEPTED, CLAIMED, QUEUED, RUNNING, can_transition
+    from services.contest_scoring import compute_acm_scoreboard
 except ModuleNotFoundError as exc:
     # 让刚拉取源码但尚未安装 requirements 的开发环境得到明确的跳过结果，
     # 而不是把环境问题误报成业务回归。
@@ -45,6 +47,56 @@ class ContestSecurityTests(unittest.TestCase):
         self.assertTrue(can_transition(QUEUED, CLAIMED))
         self.assertTrue(can_transition(RUNNING, ACCEPTED) is False)
         self.assertFalse(can_transition(ACCEPTED, RUNNING))
+
+
+@unittest.skipIf(IMPORT_ERROR is not None, 'requires backend dependencies')
+class AcmScoreboardTests(unittest.TestCase):
+    def test_only_pre_ac_non_ce_rejections_contribute_to_penalty(self):
+        start = datetime(2026, 1, 1, 9, 0)
+        rows = compute_acm_scoreboard(
+            entries=[{'entry_id': 1, 'username': 'alice'}],
+            problem_indexes=['A', 'B'],
+            submissions=[
+                {'entry_id': 1, 'problem_index': 'A', 'verdict': 'CE', 'received_at': start + timedelta(minutes=5)},
+                {'entry_id': 1, 'problem_index': 'A', 'verdict': 'WA', 'received_at': start + timedelta(minutes=10)},
+                {'entry_id': 1, 'problem_index': 'A', 'verdict': 'AC', 'received_at': start + timedelta(minutes=30)},
+                {'entry_id': 1, 'problem_index': 'A', 'verdict': 'WA', 'received_at': start + timedelta(minutes=35)},
+                {'entry_id': 1, 'problem_index': 'B', 'verdict': 'WA', 'received_at': start + timedelta(minutes=40)},
+            ],
+            start_at=start,
+            penalty_minutes=20,
+        )
+        self.assertEqual(rows[0]['solved_count'], 1)
+        self.assertEqual(rows[0]['penalty'], 50)
+        self.assertEqual(rows[0]['problems']['A']['wrong_before_ac'], 1)
+        self.assertEqual(rows[0]['problems']['B']['wrong_before_ac'], 1)
+
+    def test_last_accepted_time_breaks_equal_solve_and_penalty_ties(self):
+        start = datetime(2026, 1, 1, 9, 0)
+        rows = compute_acm_scoreboard(
+            entries=[{'entry_id': 1, 'username': 'later'}, {'entry_id': 2, 'username': 'earlier'}],
+            problem_indexes=['A'],
+            submissions=[
+                {'entry_id': 1, 'problem_index': 'A', 'verdict': 'AC', 'received_at': start + timedelta(minutes=20)},
+                {'entry_id': 2, 'problem_index': 'A', 'verdict': 'AC', 'received_at': start + timedelta(minutes=10)},
+            ],
+            start_at=start,
+            penalty_minutes=20,
+        )
+        self.assertEqual([row['entry_id'] for row in rows], [2, 1])
+        self.assertEqual([row['rank'] for row in rows], [1, 2])
+
+    def test_registered_entry_without_submissions_is_retained(self):
+        rows = compute_acm_scoreboard(
+            entries=[{'entry_id': 7, 'username': 'idle'}],
+            problem_indexes=['A'],
+            submissions=[],
+            start_at=datetime(2026, 1, 1, 9, 0),
+            penalty_minutes=20,
+        )
+        self.assertEqual(rows[0]['entry_id'], 7)
+        self.assertEqual(rows[0]['solved_count'], 0)
+        self.assertEqual(rows[0]['rank'], 1)
 
 
 class _NoopLogger:

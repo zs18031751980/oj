@@ -388,7 +388,10 @@ export interface ContestData {
   status: string;
   start_time: string | null;
   end_time: string | null;
+  freeze_time?: string | null;
   penalty_time: number;
+  lifecycle_state?: 'DRAFT' | 'READY' | 'SCHEDULED' | 'RUNNING' | 'FROZEN' | 'ENDED' | 'FINALIZING' | 'FINALIZED' | 'CANCELLED';
+  is_frozen?: boolean;
   participants_count: number;
   created_at: string;
 }
@@ -396,20 +399,26 @@ export interface ContestData {
 export const listContests = (status?: string) =>
   apiRequest<ContestData[]>(`/contests/${status ? `?status=${status}` : ''}`);
 
+export const listManagedContests = () =>
+  apiRequest<ContestData[]>('/contests/manage');
+
 export const getContest = (id: number) =>
   apiRequest<ContestData>(`/contests/${id}`);
 
-export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; penalty_time?: number }) =>
+export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; freeze_time?: string; penalty_time?: number }) =>
   apiRequest<ContestData>('/contests/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 
-export const updateContest = (id: number, data: Partial<{ title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; penalty_time?: number; status?: string }>) =>
+export const updateContest = (id: number, data: Partial<{ title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; freeze_time?: string; penalty_time?: number; status?: string }>) =>
   apiRequest<ContestData>(`/contests/${id}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
+
+export const publishContest = (id: number) =>
+  apiRequest<ContestData>(`/contests/${id}/publish`, { method: 'POST' });
 
 export const joinContest = (id: number) =>
   apiRequest<{ success: boolean }>(`/contests/${id}/join`, { method: 'POST' });

@@ -3,10 +3,15 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from flask import request
 from flask_restx import Namespace, Resource, fields
-from models.db_models import Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission
+from models.db_models import (
+    Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission,
+    ContestJudgeOutbox, get_database,
+)
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
 from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
+from services.contest_lifecycle import can_delete_contest
+from services.contest_outbox import dispatch_outbox_entry
 from services.judge_state import QUEUED
 
 api = Namespace('contests', description='比赛管理接口')
@@ -32,6 +37,7 @@ contest_input = api.model('ContestInput', {
     'start_time': fields.String(description='开始时间'),
     'end_time': fields.String(description='结束时间'),
     'penalty_time': fields.Integer(default=20, description='罚时(分钟, ACM 模式)'),
+    'freeze_time': fields.String(description='封榜时间（可选）'),
 })
 
 
@@ -57,6 +63,8 @@ def _contest_to_dict(contest):
     data['participants_count'] = ContestParticipant.select().where(
         ContestParticipant.contest == contest
     ).count()
+    data['lifecycle_state'] = contest.lifecycle_state
+    data['is_frozen'] = _contest_is_frozen(contest)
     return data
 
 
@@ -92,6 +100,10 @@ def _contest_time_error(contest):
     Asia/Shanghai（UTC+8）墙钟存储/传输；读出时为 naive 值，这里统一当作 UTC+8
     解释再与 UTC 当前时间比较，避免被误当作 UTC 而产生时区偏移。
     """
+    if contest.lifecycle_state == 'DRAFT':
+        return '比赛尚未发布'
+    if contest.lifecycle_state == 'CANCELLED':
+        return '比赛已取消'
     now = datetime.now(timezone.utc)
 
     def _aware(dt):
@@ -111,11 +123,23 @@ def _contest_time_error(contest):
 def _contest_status(contest):
     """基于当前时间返回实时状态，不依赖创建时写入的过期状态字段。"""
     error = _contest_time_error(contest)
-    if error == '比赛尚未开始':
+    if error in ('比赛尚未发布', '比赛尚未开始'):
         return 'upcoming'
-    if error == '比赛已结束':
+    if error in ('比赛已取消', '比赛已结束'):
         return 'past'
     return 'ongoing'
+
+
+def _contest_is_frozen(contest) -> bool:
+    """封榜只影响对参赛者的公开可见性，不停止判题或真实计分。"""
+    if not contest.freeze_time or _contest_status(contest) != 'ongoing':
+        return False
+    freeze_time = contest.freeze_time
+    if freeze_time.tzinfo is None:
+        freeze_time = freeze_time.replace(tzinfo=_CST)
+    else:
+        freeze_time = freeze_time.astimezone(_CST)
+    return datetime.now(timezone.utc) >= freeze_time
 
 
 def _require_participant(contest, user):
@@ -166,6 +190,7 @@ def _submission_to_result(submission):
         'attempt_id': submission.attempt_id,
         'job_id': submission.job_id,
         'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
+        'received_at': submission.received_at.isoformat() if submission.received_at else None,
         'queued_at': submission.queued_at.isoformat() if submission.queued_at else None,
         'judge_started_at': submission.judge_started_at.isoformat() if submission.judge_started_at else None,
         'finished_at': submission.finished_at.isoformat() if submission.finished_at else None,
@@ -192,11 +217,16 @@ class ContestListController(Resource):
     def get(self):
         """获取比赛列表"""
         status_filter = request.args.get('status', '').strip()
-        query = Contest.select().where(Contest.is_public == True)
-        if status_filter:
-            query = query.where(Contest.status == status_filter)
+        query = Contest.select().where(
+            Contest.is_public == True,
+            Contest.lifecycle_state != 'DRAFT',
+            Contest.lifecycle_state != 'CANCELLED',
+        )
         contests = query.order_by(Contest.start_time.desc())
-        return [_contest_to_dict(c) for c in contests], 200
+        data = [_contest_to_dict(c) for c in contests]
+        if status_filter:
+            data = [item for item in data if item['status'] == status_filter]
+        return data, 200
 
     @api.expect(contest_input)
     def post(self):
@@ -218,8 +248,11 @@ class ContestListController(Resource):
 
         start_time = _parse_dt(data.get('start_time'))
         end_time = _parse_dt(data.get('end_time'))
+        freeze_time = _parse_dt(data.get('freeze_time'))
         if start_time and end_time and end_time <= start_time:
             return {'error': '结束时间必须晚于开始时间'}, 400
+        if freeze_time and (not start_time or not end_time or not start_time < freeze_time < end_time):
+            return {'error': '封榜时间必须位于开始与结束时间之间'}, 400
         contest_type = str(data.get('contest_type', 'ACM')).upper()
         if contest_type not in SUPPORTED_CONTEST_MODES:
             return {'error': '比赛模式仅支持 ACM 或 OI'}, 400
@@ -244,6 +277,8 @@ class ContestListController(Resource):
             end_time=end_time,
             created_by=user.id,
             penalty_time=int(data.get('penalty_time', 20) or 20),
+            freeze_time=freeze_time,
+            lifecycle_state='DRAFT',
         )
         return _contest_to_dict(contest), 201
 
@@ -254,6 +289,10 @@ class ContestDetailController(Resource):
         """获取比赛详情"""
         try:
             contest = Contest.get_by_id(contest_id)
+            user = _get_current_user()
+            is_manager = bool(user and user.role == 'manager')
+            if (not contest.is_public or contest.lifecycle_state == 'DRAFT') and not is_manager:
+                return {'error': '比赛不存在'}, 404
             return _contest_to_dict(contest), 200
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
@@ -270,6 +309,8 @@ class ContestDetailController(Resource):
             contest = Contest.get_by_id(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
+        if contest.lifecycle_state not in ('DRAFT', 'READY'):
+            return {'error': '比赛发布后不能直接修改规则或时间'}, 409
 
         data = request.get_json(silent=True) or {}
         if 'title' in data:
@@ -291,8 +332,16 @@ class ContestDetailController(Resource):
             parsed = _parse_dt(data['end_time'])
             if parsed is not None:
                 contest.end_time = parsed
+        if 'freeze_time' in data:
+            contest.freeze_time = _parse_dt(data['freeze_time']) if data['freeze_time'] else None
         if contest.start_time and contest.end_time and contest.end_time <= contest.start_time:
             return {'error': '结束时间必须晚于开始时间'}, 400
+        if contest.freeze_time and (
+            not contest.start_time
+            or not contest.end_time
+            or not contest.start_time < contest.freeze_time < contest.end_time
+        ):
+            return {'error': '封榜时间必须位于开始与结束时间之间'}, 400
         if 'penalty_time' in data:
             try:
                 contest.penalty_time = int(data['penalty_time'] or 20)
@@ -300,6 +349,7 @@ class ContestDetailController(Resource):
                 pass
         contest.save()
         return _contest_to_dict(contest), 200
+
 
     def delete(self, contest_id):
         """删除比赛"""
@@ -313,6 +363,8 @@ class ContestDetailController(Resource):
             contest = Contest.get_by_id(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
+        if not can_delete_contest(contest.lifecycle_state):
+            return {'error': '已发布比赛必须保留审计记录；请取消比赛，不能删除'}, 409
 
         try:
             # 先显式级联删除依赖数据，避免外键约束冲突
@@ -341,6 +393,72 @@ class ContestDetailController(Resource):
             return {'success': True}, 200
         except Exception as exc:
             return {'error': f'删除失败: {exc}'}, 500
+
+
+@api.route('/<int:contest_id>/cancel')
+class ContestCancelController(Resource):
+    def post(self, contest_id):
+        """取消比赛但保留题目、提交和操作痕迹，避免破坏审计链。"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
+        if user.role != 'manager':
+            return {'error': '仅管理员可管理比赛'}, 403
+        try:
+            contest = Contest.get_by_id(contest_id)
+        except Contest.DoesNotExist:
+            return {'error': '比赛不存在'}, 404
+        if contest.lifecycle_state == 'FINALIZED':
+            return {'error': '最终榜已结算，不能取消'}, 409
+        contest.lifecycle_state = 'CANCELLED'
+        contest.save()
+        return _contest_to_dict(contest), 200
+
+
+@api.route('/manage')
+class ContestManageListController(Resource):
+    def get(self):
+        """管理员比赛工作台：包含尚未公开的草稿。"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
+        if user.role != 'manager':
+            return {'error': '仅管理员可查看比赛工作台'}, 403
+        contests = Contest.select().order_by(Contest.start_time.desc())
+        return [_contest_to_dict(contest) for contest in contests], 200
+
+
+@api.route('/<int:contest_id>/publish')
+class ContestPublishController(Resource):
+    def post(self, contest_id):
+        """发布比赛：冻结发布版本前，必须保证每题均有可用隐藏测试数据。"""
+        user = _get_current_user()
+        if not user:
+            return {'error': '请先登录'}, 401
+        if user.role != 'manager':
+            return {'error': '仅管理员可发布比赛'}, 403
+        try:
+            contest = Contest.get_by_id(contest_id)
+        except Contest.DoesNotExist:
+            return {'error': '比赛不存在'}, 404
+        if contest.lifecycle_state not in ('DRAFT', 'READY'):
+            return {'error': '比赛已发布，不能再次发布'}, 409
+        if not contest.start_time or not contest.end_time:
+            return {'error': '发布比赛必须设置开始和结束时间'}, 400
+        problems = list(ContestProblem.select().where(ContestProblem.contest == contest))
+        if not problems:
+            return {'error': '发布比赛至少需要一道题目'}, 400
+        for problem in problems:
+            has_hidden_testcase = ContestTestcase.select().where(
+                ContestTestcase.contest_problem == problem,
+                ContestTestcase.is_sample == False,
+            ).exists()
+            if not has_hidden_testcase:
+                return {'error': f'题目 {problem.problem_index} 缺少隐藏测试数据'}, 400
+        contest.lifecycle_state = 'SCHEDULED'
+        contest.published_at = datetime.now(_CST).replace(tzinfo=None)
+        contest.save()
+        return _contest_to_dict(contest), 200
 
 
 @api.route('/<int:contest_id>/join')
@@ -412,71 +530,81 @@ class ContestProblemSubmitController(Resource):
         if not code.strip():
             return {'error': '代码不能为空'}, 400
 
+        idempotency_key = request.headers.get('Idempotency-Key', '').strip()[:128] or None
+        if idempotency_key:
+            existing = ContestSubmission.select().where(
+                ContestSubmission.contest == contest,
+                ContestSubmission.user == user,
+                ContestSubmission.idempotency_key == idempotency_key,
+            ).first()
+            if existing:
+                return {
+                    'submission_id': existing.id,
+                    'job_id': existing.job_id,
+                    'attempt_id': existing.attempt_id,
+                    'status': existing.status,
+                    'idempotent_replay': True,
+                }, 202
+
         redis_service = inject(IRedisService)
         job_id = uuid4().hex
         # 排行榜罚时以用户提交进入系统的时刻为准，绝不能使用 Worker 排队完成时刻。
-        submitted_at = datetime.now(_CST).replace(tzinfo=None).isoformat()
+        received_at = datetime.now(_CST).replace(tzinfo=None)
+        if contest.end_time and received_at > contest.end_time.replace(tzinfo=None):
+            return {'error': '比赛已结束'}, 400
+        submitted_at = received_at.isoformat()
 
         # PostgreSQL 是提交事实源：先创建记录，再把 job 放入队列。
         # 数据库不可用时直接拒绝提交，避免产生 Redis 中永久 Pending 的幽灵任务。
         try:
-            submission = ContestSubmission.create(
-                contest=contest,
-                user=user,
-                contest_problem=problem,
-                problem_index=problem.problem_index or '',
-                status=QUEUED,
-                verdict=None,
-                language=language,
-                code=code,
-                judge_submission_id=job_id,
-                job_id=job_id,
-                attempt_id=1,
-                queued_at=datetime.fromisoformat(submitted_at),
-                submitted_at=datetime.fromisoformat(submitted_at),
-            )
+            with get_database().atomic():
+                submission = ContestSubmission.create(
+                    contest=contest,
+                    user=user,
+                    contest_problem=problem,
+                    problem_index=problem.problem_index or '',
+                    status=QUEUED,
+                    verdict=None,
+                    language=language,
+                    code=code,
+                    judge_submission_id=job_id,
+                    job_id=job_id,
+                    attempt_id=1,
+                    queued_at=datetime.fromisoformat(submitted_at),
+                    received_at=received_at,
+                    contest_eligible=True,
+                    submitted_at=datetime.fromisoformat(submitted_at),
+                    idempotency_key=idempotency_key,
+                )
+                outbox = ContestJudgeOutbox.create(submission=submission)
         except Exception:
+            # 并发重试可能由唯一幂等索引先完成写入；把它视为同一提交。
+            if idempotency_key:
+                existing = ContestSubmission.select().where(
+                    ContestSubmission.contest == contest,
+                    ContestSubmission.user == user,
+                    ContestSubmission.idempotency_key == idempotency_key,
+                ).first()
+                if existing:
+                    return {
+                        'submission_id': existing.id,
+                        'job_id': existing.job_id,
+                        'attempt_id': existing.attempt_id,
+                        'status': existing.status,
+                        'idempotent_replay': True,
+                    }, 202
             return {'error': '提交记录暂时无法保存，请稍后重试'}, 503
         submission_id = submission.id
 
-        # 状态与任务必须原子写入：若进程在两条独立 Redis 命令之间退出，用户会看到
-        # 永久 Pending 或 Worker 收到没有状态的任务。事务确保二者同时成功或同时失败。
-        if not redis_service.enqueue_with_state(
-            f'contest_submission:{submission_id}',
-            {
-                'problem_id': problem_id,
-                'contest_id': contest_id,
-                'user_id': user.id,
-                'status': QUEUED,
-                'attempt_id': 1,
-                'job_id': job_id,
-                'passed': 0,
-                'total': 0,
-                'details': [],
-            },
-            3600,
-            'contest_judge_queue',
-            {
-                'submission_id': submission_id,
-                'job_id': job_id,
-                'attempt_id': 1,
-                'contest_id': contest_id,
-                'problem_id': problem_id,
-                'user_id': user.id,
-                'language': language,
-                'submitted_at': submitted_at,
-            },
-        ):
-            # 队列不可用时不能留下不可判题的数据库记录，标记为系统错误供审计。
-            ContestSubmission.update(
-                status='SystemError',
-                verdict='SystemError',
-                error_message='判题队列不可用',
-                finished_at=datetime.now(_CST).replace(tzinfo=None),
-            ).where(ContestSubmission.id == submission_id).execute()
-            return {'error': '判题队列暂不可用，请稍后重试'}, 503
-
-        return {'submission_id': submission_id, 'job_id': job_id, 'attempt_id': 1, 'status': QUEUED}, 202
+        # 数据库已持久化事实与 outbox；即时投递失败也由 Worker 后续补偿，不能丢比赛提交。
+        dispatched = dispatch_outbox_entry(redis_service, outbox)
+        return {
+            'submission_id': submission_id,
+            'job_id': job_id,
+            'attempt_id': 1,
+            'status': QUEUED,
+            'queue_pending_retry': not dispatched,
+        }, 202
 
 
 @api.route('/<int:contest_id>/problems/<int:problem_id>/submission/<int:submission_id>')
@@ -499,19 +627,35 @@ class ContestProblemSubmissionResultController(Resource):
             or submission.contest_problem_id != problem_id
         ):
             return {'error': '无权访问该提交'}, 403
-        return _submission_to_result(submission), 200
+        result = _submission_to_result(submission)
+        # ICPC 封榜后，参赛者继续收到错误结果，但不能从 AC 结果推断真实榜单。
+        if _contest_is_frozen(Contest.get_by_id(contest_id)) and user.role != 'manager':
+            if result['status'] == 'AC':
+                result['status'] = 'Frozen'
+                result['verdict'] = 'Frozen'
+                result['details'] = []
+        return result, 200
 
 
 @api.route('/<int:contest_id>/problems')
 @api.param('contest_id', '比赛ID')
 class ContestProblemListPublicController(Resource):
     def get(self, contest_id: int):
-        """获取比赛题目列表（公开接口）"""
+        """获取比赛题目目录；仅进行中的已报名参赛者可访问。"""
         try:
+            contest = Contest.get_by_id(contest_id)
+            time_error = _contest_time_error(contest)
+            if time_error:
+                return {'error': time_error}, 403
+            user = _get_current_user()
+            if not user or not _require_participant(contest, user):
+                return {'error': '请先参加比赛'}, 403
             problems = ContestProblem.select().where(
                 ContestProblem.contest_id == contest_id
             ).order_by(ContestProblem.problem_index)
             return [_public_problem_data(p) for p in problems], 200
+        except Contest.DoesNotExist:
+            return {'error': '比赛不存在'}, 404
         except Exception as e:
             return {'error': str(e)}, 500
 
@@ -539,6 +683,8 @@ class ContestProblemStatusesController(Resource):
             best: dict = {}
             for s in subs:
                 pid = s.contest_problem_id
+                if _contest_is_frozen(contest) and user.role != 'manager' and s.status == 'AC':
+                    continue
                 if pid not in best:
                     best[pid] = {'status': s.status, 'solved': s.status == 'AC'}
                 elif not best[pid]['solved'] and s.status == 'AC':

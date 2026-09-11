@@ -44,14 +44,15 @@ const loadData = async () => {
   isLoading.value = true;
   error.value = '';
   try {
-    const [c, p] = await Promise.all([
-      getContest(contestId),
-      listContestProblems(contestId),
-    ]);
+    const c = await getContest(contestId);
     contest.value = c;
-    problems.value = p;
-    try { await joinContest(contestId); } catch {}
-    if (authStore.isAuthenticated) {
+    if (c.status === 'ongoing') {
+      await joinContest(contestId);
+      problems.value = await listContestProblems(contestId);
+    } else {
+      problems.value = [];
+    }
+    if (authStore.isAuthenticated && c.status === 'ongoing') {
       try {
         const s = await getContestStatuses(contestId);
         statuses.value = s || {};
@@ -118,7 +119,15 @@ onMounted(loadData);
              <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:schedule" class="h-4 w-4" />{{ formatTime(contest.start_time) }} ~ {{ formatTime(contest.end_time) }}</span>
              <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:group" class="h-4 w-4" />{{ contest.participants_count }} 人参与</span>
              <span class="inline-flex items-center gap-1"><Icon icon="material-symbols:description" class="h-4 w-4" />{{ problems.length }} 道题目</span>
+             <span v-if="contest.freeze_time" class="inline-flex items-center gap-1" :class="contest.is_frozen ? 'text-amber-600 dark:text-amber-300' : ''"><Icon icon="material-symbols:lock-clock-rounded" class="h-4 w-4" />{{ contest.is_frozen ? '排行榜已封榜' : `封榜：${formatTime(contest.freeze_time)}` }}</span>
           </div>
+        </div>
+
+        <div
+          v-if="contest.is_frozen"
+          class="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-300"
+        >
+          排行榜已封榜。仍可正常提交；新的通过结果将在最终榜公布时统一揭晓。
         </div>
 
         <!-- 不在比赛时间范围内时提示，并禁止进入答题 -->

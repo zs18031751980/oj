@@ -34,6 +34,7 @@ from services.judge_state import (
     MEMORY_LIMIT_EXCEEDED, PARTIAL, QUEUED, RUNNING, SYSTEM_ERROR,
     OUTPUT_LIMIT_EXCEEDED, TIME_LIMIT_EXCEEDED, WRONG_ANSWER, can_transition, is_terminal,
 )
+from services.contest_outbox import dispatch_pending_outbox
 
 
 class JudgeWorker:
@@ -80,6 +81,9 @@ class JudgeWorker:
                 try:
                     if time.monotonic() - self._last_recovery >= 10:
                         self._recover_expired_jobs()
+                        # Redis 短暂不可用时，比赛提交留在 PostgreSQL outbox；恢复后由
+                        # 任意 Worker 重投，不依赖用户手工再次提交。
+                        dispatch_pending_outbox(self.redis)
                         self._last_recovery = time.monotonic()
                     # 轮转读取，避免普通题库提交持续涌入时比赛判题被永久饿死。
                     queues = [
@@ -307,6 +311,14 @@ class JudgeWorker:
                 & (ContestSubmission.attempt_id == attempt_id)
                 & (ContestSubmission.status == expected)
             ).execute()
+            if updated == 1 and is_terminal(target):
+                # 提交事实先落库，再异步刷新可重建的榜单投影；排行榜读取不再高频全表扫描。
+                try:
+                    contest_id = ContestSubmission.get_by_id(submission_id).contest_id
+                    from controllers.contest_rankings_controller import refresh_live_projection
+                    refresh_live_projection(contest_id)
+                except Exception:
+                    pass
             return updated == 1
         except Exception as exc:
             self.logger.error(
