@@ -1,5 +1,5 @@
 <template>
-  <main class="page-shell">
+  <main class="lucky-draw page-shell">
     <section class="hero">
       <div class="brand-mark">
         <img src="/chou/logo.jpg" alt="iOS Club XAUAT" />

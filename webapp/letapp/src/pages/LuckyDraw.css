@@ -1,4 +1,5 @@
-:root {
+@scope (.lucky-draw) {
+:scope {
   --ink: #292746;
   --muted: #817f97;
   --muted-light: #aaa6b8;
@@ -12,9 +13,8 @@
   --yellow: #f9e4a0;
 }
 
-* { box-sizing: border-box; }
-html { min-width: 0; overflow-x: hidden; }
-body {
+:scope, :scope * { box-sizing: border-box; }
+:scope {
   min-width: 0;
   min-height: 100vh;
   margin: 0;
@@ -74,4 +74,5 @@ footer { margin-top: 64px; color: #aaa5ad; text-align: center; font-size: 12px; 
   .section-heading strong { font-size: 20px; }
   .prize-grid { grid-template-columns: 1fr; gap: 12px; }
   footer { margin-top: 48px; }
+}
 }
