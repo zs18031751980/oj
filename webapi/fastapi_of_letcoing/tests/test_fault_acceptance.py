@@ -1,5 +1,6 @@
 """真实进程崩溃、数据库回滚和磁盘故障的隔离验收，不连接部署服务。"""
 import errno
+from datetime import timedelta
 import json
 import os
 from pathlib import Path
@@ -26,7 +27,20 @@ def wait_until(predicate, timeout=5):
     raise AssertionError('isolated process did not reach expected state')
 
 
-def test_sigkill_after_claim_recovers_and_scores_once(postgres, cache, worker, tmp_path, monkeypatch):
+@pytest.fixture(params=['UTC', 'Asia/Shanghai'])
+def process_timezone(request, monkeypatch):
+    with monkeypatch.context() as context:
+        context.setenv('TZ', request.param)
+        time.tzset()
+        try:
+            yield request.param
+        finally:
+            context.undo()
+            time.tzset()
+
+
+def test_sigkill_after_claim_recovers_and_scores_once(
+        postgres, cache, worker, tmp_path, monkeypatch, process_timezone):
     from services.contest_outbox import dispatch_outbox_entry
     from controllers.contest_rankings_controller import _compute_rankings
     monkeypatch.setenv('APP_ENV', 'test')
@@ -35,8 +49,11 @@ def test_sigkill_after_claim_recovers_and_scores_once(postgres, cache, worker, t
     m.run_schema_migrations()
     user, contest, problem = contest_fixture()
     m.ContestTestcase.create(contest_problem=problem, input_data='', expected_output='42')
+    # 比赛时间采用 UTC+8 墙钟；提交必须显式落在比赛内，不能依赖宿主机 TZ。
+    received_at = contest.start_time + timedelta(minutes=1)
     row = m.ContestSubmission.create(contest=contest, user=user, contest_problem=problem,
-        problem_index='A', code='print(42)', language='python', status='Queued', job_id='killed-consumer')
+        problem_index='A', code='print(42)', language='python', status='Queued',
+        received_at=received_at, submitted_at=received_at, job_id='killed-consumer')
     entry = m.ContestJudgeOutbox.create(submission=row)
     assert dispatch_outbox_entry(cache, entry)
     marker = tmp_path/'claimed.json'
