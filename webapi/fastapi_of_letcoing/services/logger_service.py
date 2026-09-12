@@ -34,6 +34,21 @@ class SafeJSONFormatter(logging.Formatter):
             pass
         if record.exc_info:
             payload['exception_type'] = record.exc_info[0].__name__
+            # Peewee 包装异常时保留 __context__；只记录白名单 SQLSTATE，禁止 SQL/参数。
+            error = record.exc_info[1]
+            seen = set()
+            names = {'42P01': 'undefined_table', '42703': 'undefined_column',
+                     '42501': 'insufficient_privilege', '53300': 'too_many_connections',
+                     '55P03': 'lock_not_available', '57014': 'query_cancelled',
+                     '40001': 'serialization_failure', '40P01': 'deadlock_detected'}
+            while error is not None and id(error) not in seen and len(seen) < 8:
+                seen.add(id(error))
+                state = getattr(error, 'pgcode', None)
+                if isinstance(state, str) and re.fullmatch(r'[A-Z0-9]{5}', state):
+                    payload['sqlstate'] = state
+                    payload['database_error'] = names.get(state, 'database_error')
+                    break
+                error = error.__cause__ or error.__context__
             payload['frames'] = [{'file': frame.filename, 'line': frame.lineno, 'function': frame.name}
                                  for frame in traceback.extract_tb(record.exc_info[2])]
         return json.dumps(payload, ensure_ascii=False)

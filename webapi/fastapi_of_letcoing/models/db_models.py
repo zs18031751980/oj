@@ -47,6 +47,7 @@ def _create_actual_db() -> PooledPostgresqlExtDatabase:
         max_connections=int(config['max_connections']), stale_timeout=int(config['stale_timeout']),
         timeout=int(config.get('pool_timeout', 5)), connect_timeout=5,
         sslmode=config.get('sslmode', 'prefer'),
+        **({'sslrootcert': config['sslrootcert']} if config.get('sslrootcert') else {}),
         options=f'-c timezone=Asia/Shanghai -c statement_timeout={statement_timeout} -c lock_timeout=5000 -c idle_in_transaction_session_timeout=30000')
 
 
@@ -1089,8 +1090,7 @@ def _apply_migrations(db):
     """
     在已建立连接的前提下应用所有尚未执行的迁移。
 
-    迁移记录保存在 schema_migrations 表中；若该表无法创建，
-    仍会继续执行迁移（迁移语句本身幂等，可重复运行）。
+    迁移记录与对应 DDL 同事务；创建记录表或执行迁移失败时立即终止。
     """
     db.execute_sql("CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT now())")
     applied = {row[0] for row in db.execute_sql('SELECT name FROM schema_migrations').fetchall()}

@@ -23,6 +23,9 @@ def main():
         parser.error('最少保留七天')
     if args.command == 'set-role' and (not args.user_id or not args.role):
         parser.error('set-role 必须提供 --user-id 和 --role')
+    import os
+    from deploy.preflight import validate_environment
+    validate_environment(os.environ)
     app = create_app()
     with app.app_context():
         if args.command in {'audit-export', 'archive-outboxes'}:

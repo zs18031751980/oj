@@ -11,4 +11,4 @@ COPY . .
 ENV UPLOAD_DIR=/var/lib/letcoding/uploads
 USER 10001:10001
 EXPOSE 8080
-CMD ["gunicorn", "--config", "gunicorn.conf.py", "app_factory:create_app()"]
+CMD ["python", "-m", "deploy.start_api"]

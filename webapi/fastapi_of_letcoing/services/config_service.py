@@ -101,7 +101,9 @@ class ConfigService(IConfigService):
                         "database": db_name,
                         "username": urllib.parse.unquote(parsed.username or "postgres"),
                         "password": urllib.parse.unquote(parsed.password or ""),
-                        "sslmode": sslmode or "prefer",
+                        "sslmode": sslmode or self.get_config("DB_SSLMODE", "prefer"),
+                        "sslrootcert": self.get_config("DB_SSLROOTCERT") or query.get("sslrootcert", [None])[0],
+                        "pool_timeout": self.get_config("DB_POOL_TIMEOUT", 5),
                         "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
                         "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
                     }
@@ -115,6 +117,8 @@ class ConfigService(IConfigService):
             "username": self.get_config("DB_USER", "postgres"),
             "password": self.get_config("DB_PASSWORD", ""),
             "sslmode": self.get_config("DB_SSLMODE", "prefer"),
+            "sslrootcert": self.get_config("DB_SSLROOTCERT"),
+            "pool_timeout": self.get_config("DB_POOL_TIMEOUT", 5),
             "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
             "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
         }

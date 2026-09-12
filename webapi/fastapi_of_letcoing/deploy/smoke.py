@@ -35,7 +35,8 @@ def main():
             raise RuntimeError(f'{method} {path}: HTTP {response.status_code}')
         return response
     try:
-        for path in ('/healthz', '/readyz', '/healthz/judge'):
+        for path in ('/healthz', '/readyz', '/problems?page=1&page_size=1', '/contests/?page=1&page_size=1',
+                     '/healthz/judge?pool=practice'):
             call(path)
         response = call('/auth/login/password', 'POST', json={
             'identifier': os.environ['SMOKE_IDENTIFIER'], 'password': os.environ['SMOKE_PASSWORD'], 'remember': False})

@@ -1,5 +1,7 @@
 """只在专用 Worker 主机使用 Docker CLI；API 镜像不挂载 Docker socket。"""
 import json
+import logging
+import time
 import os
 import re
 from pathlib import Path
@@ -7,6 +9,72 @@ import subprocess
 from uuid import uuid4
 
 from services.execution_runtime import run_process
+
+
+logger = logging.getLogger('letcoding.sandbox')
+
+
+def docker_environment():
+    # 仅可信 Docker CLI 使用；选手程序始终使用 execution_runtime 的隔离环境。
+    keys = ('PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG',
+            'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'XDG_RUNTIME_DIR')
+    return {key: os.environ[key] for key in keys if key in os.environ}
+
+
+def diagnostic_reason(stderr):
+    text = str(stderr).lower()
+    for needle, reason in (
+        ('permission denied', 'permission_denied'),
+        ('cannot connect', 'daemon_unavailable'),
+        ('failed to connect', 'daemon_unavailable'),
+        ('cgroup', 'cgroup_unavailable'),
+        ('no such file', 'path_unavailable'),
+        ('executable file not found', 'executable_unavailable'),
+    ):
+        if needle in text:
+            return reason
+    return 'supervisor_failed'
+
+
+def cleanup_container(name, timeout=10):
+    try:
+        result = subprocess.run(['docker', 'rm', '-f', name], capture_output=True,
+                                timeout=timeout, env=docker_environment())
+        if result.returncode == 0:
+            return True
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    logger.error('sandbox cleanup_failed container=%s', name)
+    return False
+
+
+def reap_expired_containers(now=None):
+    """只清理本应用标记且已超过硬截止时间的容器；每轮限制 5 秒/10 个候选。"""
+    current = time.time() if now is None else now
+    deadline = time.monotonic() + 5
+    result = run_process(['docker', 'ps', '-aq', '--filter', 'label=io.letcoding.sandbox=1'],
+                         '', 2, output_limit=8192, environment=docker_environment())
+    if result['returncode'] != 0 or result['timed_out']:
+        raise RuntimeError('sandbox reaper daemon unavailable')
+    removed = 0
+    for name in result['stdout'].splitlines()[-10:]:
+        remaining = deadline-time.monotonic()
+        if remaining <= 0 or not re.fullmatch(r'[0-9a-f]{12,64}', name):
+            continue
+        inspected = run_process(['docker', 'inspect', '--format', '{{json .Config.Labels}}', name],
+                                '', min(remaining, 2), output_limit=4096, environment=docker_environment())
+        if inspected['returncode'] != 0 or inspected['timed_out']:
+            continue
+        try:
+            labels = json.loads(inspected['stdout'])
+            expires = int(labels.get('io.letcoding.expires', '0'))
+            eligible = labels.get('io.letcoding.sandbox') == '1' and 0 < expires <= current
+        except (ValueError, TypeError, AttributeError):
+            continue
+        remaining = deadline-time.monotonic()
+        if eligible and remaining > 0:
+            removed += int(cleanup_container(name, min(remaining, 2)))
+    return removed
 
 
 def execute(command, stdin, timeout, memory_mb, cwd, output_limit=1024 * 1024, compiling=False):
@@ -40,7 +108,9 @@ def execute(command, stdin, timeout, memory_mb, cwd, output_limit=1024 * 1024, c
         '--user', '0:0',
         '--tmpfs', '/tmp:rw,nosuid,nodev,noexec,size=256m',
         '--mount', f'type=bind,src={workdir},dst=/work' + ('' if compiling else ',readonly'),
-        '--workdir', '/work', '--log-driver=none', '-i',
+        '--workdir', '/',
+        '--label', 'io.letcoding.sandbox=1',
+        '--label', f'io.letcoding.expires={int(time.time() + wall_timeout + 90)}', '--log-driver=none', '-i',
         image,
         'python3', '/opt/execution_runtime.py']
     cpuset = os.environ.get('JUDGE_CPUSET')
@@ -51,17 +121,24 @@ def execute(command, stdin, timeout, memory_mb, cwd, output_limit=1024 * 1024, c
     if os.getuid() == 0:
         raise RuntimeError('判题 Worker 必须以非 root 用户运行')
     try:
-        result = run_process(options, payload, wall_timeout + 15, output_limit=output_limit * 8 + 65536)
+        result = run_process(options, payload, wall_timeout + 15, output_limit=output_limit * 8 + 65536,
+                             environment=docker_environment())
         if result['timed_out']:
             raise RuntimeError('执行容器启动或监督超时')
         if result['returncode'] != 0:
-            inspect = subprocess.run(['docker', 'inspect', '--format', '{{.State.OOMKilled}}', name],
-                                     capture_output=True, text=True, timeout=5)
-            if inspect.stdout.strip() == 'true':
+            try:
+                inspect = subprocess.run(['docker', 'inspect', '--format', '{{.State.OOMKilled}}', name],
+                    capture_output=True, text=True, timeout=5, env=docker_environment())
+                oom = inspect.returncode == 0 and inspect.stdout.strip() == 'true'
+            except (OSError, subprocess.TimeoutExpired):
+                oom = False
+            if oom:
                 return {'stdout': '', 'stderr': '', 'returncode': -9, 'timed_out': False,
                         'output_exceeded': False, 'memory_exceeded': True, 'cpu_ms': 0,
                         'memory_bytes': memory * 1024 * 1024}
-            raise RuntimeError('执行容器不可用或监督器异常')
+            reason = diagnostic_reason(result.get('stderr', ''))
+            logger.error('sandbox failure container=%s reason=%s exit=%s', name, reason, result['returncode'])
+            raise RuntimeError(f'执行器异常 reason={reason} diagnostic_id={name}')
         return json.loads(result['stdout'])
     finally:
-        subprocess.run(['docker', 'rm', '-f', name], capture_output=True, timeout=10)
+        cleanup_container(name)

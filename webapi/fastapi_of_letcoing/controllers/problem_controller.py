@@ -48,13 +48,22 @@ def _is_contest_ended(contest: Contest) -> bool:
     return False
 
 
+def _ended_problem_query():
+    current = datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
+    # 摘要查询不读取参考答案、描述或测试数据，过滤在数据库中完成。
+    return (ContestProblem.select(
+        ContestProblem.id, ContestProblem.contest, ContestProblem.title,
+        ContestProblem.difficulty, ContestProblem.time_limit, ContestProblem.memory_limit,
+        Contest.id, Contest.title, Contest.is_public, Contest.lifecycle_state, Contest.end_time)
+        .join(Contest).where(Contest.is_public == True,
+            ~Contest.lifecycle_state.in_(['DRAFT', 'READY', 'CANCELLED']),
+            (Contest.lifecycle_state == 'FINALIZED') | (Contest.end_time <= current))
+        .order_by(Contest.id, ContestProblem.sort_order, ContestProblem.id))
+
+
 def _iter_ended_contest_problems():
-    """遍历所有公开且已结束比赛的比赛题目，返回 (contest, contest_problem)"""
-    query = (ContestProblem.select(ContestProblem, Contest).join(Contest)
-             .where(Contest.is_public == True).order_by(Contest.id, ContestProblem.sort_order))
-    for cp in query:
-        if _is_contest_ended(cp.contest):
-            yield cp.contest, cp
+    for cp in _ended_problem_query().iterator():
+        yield cp.contest, cp
 
 
 def _library_summary(contest: Contest, cp: ContestProblem) -> dict:
@@ -157,11 +166,46 @@ def serialize_problem(problem):
 class ProblemListController(Resource):
     @api.doc("list_problems")
     def get(self):
-        problems = [serialize_summary(PROBLEMS[problem_id]) for problem_id in sorted(PROBLEMS)]
-        # 动态并入已结束比赛的比赛题目，按比赛名称归类
-        for contest, cp in _iter_ended_contest_problems():
-            problems.append(serialize_summary(_library_summary(contest, cp)))
-        return {"data": problems, "total": len(problems)}, 200
+        from utils.pagination import pagination
+        try:
+            page = pagination(request.args)
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
+        text = request.args.get('q', '').strip()
+        category = request.args.get('category', '').strip()
+        difficulty = request.args.get('difficulty', '').strip()
+        if max(map(len, (text, category, difficulty))) > 128:
+            return {'error': '筛选条件过长'}, 400
+        problems = [serialize_summary(PROBLEMS[key]) for key in sorted(PROBLEMS)]
+        if text:
+            problems = [p for p in problems if text.casefold() in
+                (' '.join([str(p['id']), p['title'] or '', *(p['tags'] or [])])).casefold()]
+        if category:
+            problems = [p for p in problems if p['category'] == category]
+        if difficulty:
+            problems = [p for p in problems if p['difficulty'] == difficulty]
+        query = _ended_problem_query()
+        if text:
+            query = query.where(ContestProblem.title.contains(text) |
+                (ContestProblem.id + LIBRARY_ID_BASE).cast('text').contains(text))
+        if category:
+            if category.startswith('contest-') and category[8:].isdigit():
+                query = query.where(Contest.id == int(category[8:]))
+            else:
+                query = query.where(Contest.id == -1)
+        if difficulty:
+            query = query.where(ContestProblem.difficulty == difficulty)
+        static_count = len(problems)
+        if page:
+            offset, size = page
+            total = static_count + query.count()
+            problems = problems[offset:offset+size]
+            remaining = size-len(problems)
+            query = query.offset(max(0, offset-static_count)).limit(remaining)
+        for cp in query.iterator():
+            problems.append(serialize_summary(_library_summary(cp.contest, cp)))
+        from utils.http_cache import conditional_json
+        return conditional_json({'data': problems, 'total': total if page else len(problems)})
 
 
 @api.route("/<int:problem_id>")

@@ -22,13 +22,29 @@ def can_view_rankings(lifecycle_state: str | None, *, is_public: bool, is_manage
 
 
 from functools import wraps
+from contextlib import contextmanager
+
+
+@contextmanager
+def timed_transaction():
+    import time
+    from flask import g, has_request_context
+    from models.db_models import get_database
+    started = time.monotonic()
+    try:
+        with get_database().atomic() as transaction:
+            yield transaction
+    finally:
+        if has_request_context():
+            g.contest_transaction_seconds = (getattr(g, 'contest_transaction_seconds', 0.)
+                                             + time.monotonic()-started)
 
 
 def transactional(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
         from models.db_models import get_database
-        with get_database().atomic() as transaction:
+        with timed_transaction() as transaction:
             result = function(*args, **kwargs)
             status = result[1] if isinstance(result, tuple) and len(result) > 1 else getattr(result, 'status_code', 200)
             if isinstance(status, int) and status >= 400:

@@ -24,13 +24,13 @@ def process_group_cpu(group_id):
 
 
 def run_process(command, stdin, timeout, cwd=None, output_limit=1024 * 1024, uid=None, gid=None,
-                cpu_timeout=None, cpu_reader=None):
+                cpu_timeout=None, cpu_reader=None, environment=None):
     started = time.monotonic()
     identity = {'user': uid, 'group': gid, 'extra_groups': []} if uid is not None else {}
     process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
         **identity,
-        env={'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
+        env=environment if environment is not None else {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'LANG': 'C.UTF-8',
              'HOME': '/tmp', 'GOCACHE': '/tmp/go-cache', 'GOMAXPROCS': '2',
              'GOFLAGS': '-p=2', 'PYTHONDONTWRITEBYTECODE': '1'})
     cpu_reader = cpu_reader or (lambda: process_group_cpu(process.pid))
@@ -112,6 +112,12 @@ def run_process(command, stdin, timeout, cwd=None, output_limit=1024 * 1024, uid
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == '--exec':
+        # Popen 的 cwd 在 setuid 之前处理。已降权 launcher 才能进入 UID 所有的 0700 目录。
+        if os.getuid() == 0 or len(sys.argv) < 4:
+            raise SystemExit('unprivileged launcher required')
+        os.chdir(sys.argv[2])
+        os.execvpe(sys.argv[3], sys.argv[3:], os.environ)
     request = json.load(sys.stdin)
     if type(request.get('uid')) is not int or request['uid'] <= 0 or type(request.get('gid')) is not int or request['gid'] <= 0:
         raise RuntimeError('执行用户必须为非 root 身份')
@@ -124,8 +130,9 @@ if __name__ == '__main__':
     def child_cpu():
         usage = resource.getrusage(resource.RUSAGE_SELF)
         return max(0., cgroup_seconds() - baseline_cpu - usage.ru_utime - usage.ru_stime + baseline_own)
-    result = run_process(request['command'], request.get('stdin', ''), request['timeout'],
-                         cwd='/work', output_limit=request['output_limit'], uid=request['uid'], gid=request['gid'],
+    command = [sys.executable, '-I', __file__, '--exec', '/work', *request['command']]
+    result = run_process(command, request.get('stdin', ''), request['timeout'],
+                         cwd=None, output_limit=request['output_limit'], uid=request['uid'], gid=request['gid'],
                          cpu_timeout=request.get('cpu_timeout'), cpu_reader=child_cpu)
     # 每个执行容器有独立 cgroup；统计整个进程树，包含 JVM native 内存。
     try:

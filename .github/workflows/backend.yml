@@ -67,3 +67,24 @@ jobs:
           BACKEND_RESULT: ${{ needs.backend.result }}
           FRONTEND_RESULT: ${{ needs.frontend-contract.result }}
         run: test "$BACKEND_RESULT" = success && test "$FRONTEND_RESULT" = success
+
+  promote-production:
+    name: Promote verified commit to production
+    needs: [release-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.ENABLE_PRODUCTION_PROMOTION == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    concurrency:
+      group: production-promotion
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Fast-forward production only after every acceptance job passed
+        env:
+          ACCEPTED_SHA: ${{ github.sha }}
+        run: python3 webapi/fastapi_of_letcoing/deploy/promote_release.py --sha "$ACCEPTED_SHA"

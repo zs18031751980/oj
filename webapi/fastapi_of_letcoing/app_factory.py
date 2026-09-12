@@ -206,7 +206,7 @@ def create_app(overrides=None):
     app.config['JWT_REFRESH_TOKEN_EXPIRE'] = int(os.environ.get('JWT_REFRESH_TOKEN_EXPIRE', '604800'))
     # JWT 签名算法，默认使用 HMAC-SHA256
     app.config['JWT_ALGORITHM'] = os.environ.get('JWT_ALGORITHM', 'HS256')
-    # Flask 的全局密钥，用于 session 加密等；如果没有单独配置，则复用 JWT 密钥
+    # Flask Session 使用独立密钥，生产环境不回退到 JWT 密钥
     app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', '')
 
     # ---------- 前端 URL 配置 ----------
@@ -309,7 +309,8 @@ def create_app(overrides=None):
         from models.db_models import get_database
         from interfaces.service_interfaces import IRedisService
         try:
-            get_database().execute_sql('SELECT 1')
+            from services.health import check_schema
+            check_schema(get_database())
             redis_service = get_container().resolve(IRedisService)
             if not redis_service.is_connected() or not redis_service._client.ping():
                 raise RuntimeError('redis unavailable')
@@ -322,11 +323,13 @@ def create_app(overrides=None):
     def judge_healthcheck():
         """判题 Worker 和比赛队列健康状态，不返回代码或用户数据。"""
         from interfaces.service_interfaces import IRedisService
+        from services.health import POOLS, judge_available
+        pool = request.args.get('pool', 'contest')
+        if pool not in POOLS:
+            return {'error': 'invalid pool'}, 400
         try:
             cache = get_container().resolve(IRedisService)
-            if not cache.is_connected():
-                raise RuntimeError('redis unavailable')
-            alive = any((cache.get(key) or {}).get('alive') for key in cache._client.scan_iter('judge:worker:*', count=100))
+            alive = judge_available(cache, pool)
             return {'status': 'ok' if alive else 'unavailable'}, 200 if alive else 503
         except Exception:
             return {'status': 'unavailable'}, 503

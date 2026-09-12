@@ -20,8 +20,9 @@ services:
     env_file: ../.env.production
     environment:
       JUDGE_SANDBOX_IMAGE: "${JUDGE_SANDBOX_IMAGE:?Set immutable sandbox image digest}"
+      DB_MIGRATION_MODE: check
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
-    command: [sh, -c, 'mkdir -p /tmp/prometheus && exec gunicorn --config gunicorn.conf.py "app_factory:create_app()"']
+    command: [sh, -c, 'mkdir -p /tmp/prometheus && exec python -m deploy.start_api']
     ports: ["127.0.0.1:8080:8080"]
     read_only: true
     cap_drop: [ALL]

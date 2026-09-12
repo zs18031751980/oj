@@ -1,3 +1,3 @@
 # 只运行 API；判题 Worker 需要专用 Linux Docker 主机。
-[phases.start]
-cmd = "gunicorn --config gunicorn.conf.py 'app_factory:create_app()'"
+[start]
+cmd = "python -m deploy.start_api"

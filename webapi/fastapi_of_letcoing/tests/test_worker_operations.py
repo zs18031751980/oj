@@ -2,6 +2,7 @@
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -216,7 +217,8 @@ def test_metrics_exclude_draining_capacity(app, db, cache):
     from services.observability import register_metrics
     register_metrics(app)
     app.config['METRICS_TOKEN'] = 'test-only'
-    cache.set('judge:worker:draining', {'alive': True, 'pool': 'contest', 'draining': True}, 30)
+    cache.set('judge:worker:draining', {'alive': True, 'pool': 'contest', 'draining': True,
+        'heartbeat_unix': time.time(), 'accepting_jobs': False}, 30)
     with patch('core.di_container.inject', return_value=cache):
         response = app.test_client().get('/metrics', headers={'Authorization': 'Bearer test-only'})
     assert 'letcoding_worker_slots{pool="contest",state="alive"} 1' in response.text

@@ -1,5 +1,6 @@
-from services.contest_lifecycle import transactional, lock_contest
+from services.contest_lifecycle import transactional, lock_contest, timed_transaction
 import json
+from peewee import Case, JOIN, fn
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from flask import g, request
@@ -61,9 +62,9 @@ def _contest_to_dict(contest):
     """转换比赛为字典，包含参与人数"""
     data = contest.to_dict()
     data['status'] = _contest_status(contest)
-    data['participants_count'] = ContestParticipant.select().where(
-        ContestParticipant.contest == contest
-    ).count()
+    count = getattr(contest, 'participant_count', None)
+    data['participants_count'] = (count if count is not None else
+        ContestParticipant.select().where(ContestParticipant.contest == contest).count())
     data['lifecycle_state'] = contest.lifecycle_state
     data['is_frozen'] = _contest_is_frozen(contest)
     return data
@@ -243,17 +244,33 @@ class ContestListController(Resource):
     @api.param('status', '筛选状态(upcoming/ongoing/past)')
     def get(self):
         """获取比赛列表"""
+        from utils.pagination import pagination
+        try:
+            page = pagination(request.args)
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
         status_filter = request.args.get('status', '').strip()
-        query = Contest.select().where(
-            Contest.is_public == True,
-            Contest.lifecycle_state != 'DRAFT',
-            Contest.lifecycle_state != 'CANCELLED',
-        )
-        contests = query.order_by(Contest.start_time.desc())
-        data = [_contest_to_dict(c) for c in contests]
+        current = datetime.now(_CST).replace(tzinfo=None)
+        status = Case(None, (
+            (Contest.lifecycle_state.in_(['FINALIZED', 'CANCELLED']), 'past'),
+            (Contest.lifecycle_state.in_(['DRAFT', 'READY']), 'upcoming'),
+            (Contest.start_time > current, 'upcoming'),
+            (Contest.end_time <= current, 'past'),
+        ), 'ongoing')
+        query = (Contest.select(Contest, fn.COUNT(ContestParticipant.id).alias('participant_count'))
+                 .join(ContestParticipant, JOIN.LEFT_OUTER)
+                 .where(Contest.is_public == True,
+                        ~Contest.lifecycle_state.in_(['DRAFT', 'CANCELLED']))
+                 .group_by(Contest.id))
         if status_filter:
-            data = [item for item in data if item['status'] == status_filter]
-        return data, 200
+            query = query.where(status == status_filter)
+        headers = {}
+        if page:
+            headers['X-Total-Count'] = str(query.count())
+            query = query.offset(page[0]).limit(page[1])
+        query = query.order_by(Contest.start_time.desc(), Contest.id.desc())
+        from utils.http_cache import conditional_json
+        return conditional_json([_contest_to_dict(c) for c in query], headers)
 
     @api.expect(contest_input)
     def post(self):
@@ -580,7 +597,7 @@ class ContestProblemSubmitController(Resource):
         # PostgreSQL 是提交事实源：先创建记录，再把 job 放入队列。
         # 数据库不可用时直接拒绝提交，避免产生 Redis 中永久 Pending 的幽灵任务。
         try:
-            with get_database().atomic():
+            with timed_transaction():
                 contest = lock_contest(contest_id)
                 current_user = User.get_or_none(User.id == user.id)
                 if not current_user or not current_user.is_active or not _require_participant(contest, current_user):

@@ -15,6 +15,9 @@ def register_metrics(app):
     lock_wait = Histogram('letcoding_contest_lock_wait_seconds', 'Contest row lock acquisition duration',
         registry=registry, buckets=(.001, .005, .01, .05, .1, .5, 1, 2, 5, 15))
 
+    transaction_time = Histogram('letcoding_contest_transaction_seconds', 'Contest transaction duration',
+        registry=registry, buckets=(.001, .005, .01, .05, .1, .5, 1, 2, 5, 15))
+
     @app.after_request
     def count(response):
         import time
@@ -23,6 +26,8 @@ def register_metrics(app):
         latency.labels(route).observe(time.monotonic() - getattr(g, 'request_started', time.monotonic()))
         if hasattr(g, 'contest_lock_wait'):
             lock_wait.observe(g.contest_lock_wait)
+        if hasattr(g, 'contest_transaction_seconds'):
+            transaction_time.observe(g.contest_transaction_seconds)
         return response
 
     @app.get('/metrics')
@@ -52,12 +57,14 @@ def register_metrics(app):
             from services.contest_metrics import POOLS, judge_histogram_text
             body += judge_histogram_text(cache)
             workers = [cache.get(key) or {} for key in cache._client.scan_iter('judge:worker:*', count=100)]
-            alive = sum(bool(worker.get('alive')) for worker in workers)
+            from services.health import worker_is_fresh, worker_accepts
+            workers = [w for w in workers if worker_is_fresh(w)]
+            alive = len(workers)
             for pool in POOLS:
                 available = [w for w in workers if w.get('alive') and w.get('pool', 'all') == pool]
                 body += f'letcoding_worker_slots{{pool="{pool}",state="alive"}} {len(available)}\n'.encode()
-                body += f'letcoding_worker_slots{{pool="{pool}",state="idle"}} {sum(not w.get("active_job") and not w.get("draining") for w in available)}\n'.encode()
-                body += f'letcoding_worker_slots{{pool="{pool}",state="accepting"}} {sum(not w.get("draining") for w in available)}\n'.encode()
+                body += f'letcoding_worker_slots{{pool="{pool}",state="idle"}} {sum(not w.get("active_job") and worker_accepts(w, pool) for w in available)}\n'.encode()
+                body += f'letcoding_worker_slots{{pool="{pool}",state="accepting"}} {sum(worker_accepts(w, pool) for w in available)}\n'.encode()
                 body += f'letcoding_worker_slots{{pool="{pool}",state="draining"}} {sum(bool(w.get("draining")) for w in available)}\n'.encode()
                 body += f'letcoding_projection_consecutive_failures{{pool="{pool}"}} {max((w.get("projection_consecutive_failures", 0) for w in available), default=0)}\n'.encode()
             audit = [w for w in workers if w.get('alive') and w.get('audit_enabled')]

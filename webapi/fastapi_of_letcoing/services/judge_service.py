@@ -263,6 +263,15 @@ class JudgeWorker:
                     dispatch_package_validation(self.redis)
             except Exception as exc:
                 self.logger.error('Judge maintenance failed', exc)
+            if (os.environ.get('APP_ENV') == 'production'
+                    and os.environ.get('JUDGE_BACKEND', 'docker') == 'docker'
+                    and time.monotonic() >= getattr(self, '_next_reap', 0)):
+                self._next_reap = time.monotonic() + 60
+                try:
+                    from services.sandbox_service import reap_expired_containers
+                    reap_expired_containers()
+                except Exception as exc:
+                    self.logger.error('Sandbox reaper failed', exc)
             self._stop_event.wait(2)
 
     def _persist_dead_jobs(self):
@@ -343,6 +352,7 @@ class JudgeWorker:
     def health(self) -> dict:
         return {
             'worker_id': self.worker_id,
+            'heartbeat_unix': time.time(),
             'alive': bool(self._running and self._thread and self._thread.is_alive()),
             'draining': self._draining.is_set(),
             'accepting_jobs': bool(self._running and not self._draining.is_set()),
