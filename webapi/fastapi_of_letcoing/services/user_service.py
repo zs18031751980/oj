@@ -331,7 +331,8 @@ class UserService(DatabaseService, Injectable):
         Returns:
              标准化的用户信息字典（不含 password_hash）
         """
-        print(f"[USER_SYNC] find_or_create_user 被调用: provider={provider}, provider_id={provider_id}")
+        import logging
+        logger = logging.getLogger('letcoding.users')
         try:
             # ----- 查找已有用户 -----
             try:
@@ -359,22 +360,27 @@ class UserService(DatabaseService, Injectable):
 
                 if user_info.get('avatar_url') and user.avatar_url != user_info['avatar_url']:
                     user.avatar_url = user_info['avatar_url']
-                if user_info.get('role'):
-                    # 收集 DB 当前角色和 Provider 传回的角色，取最高优先级（manager > staff > member）
-                    roles_to_compare = [user.role, user_info['role']]
-                    highest = pick_highest_role(roles_to_compare)
-                    if user.role != highest:
-                        user.role = highest
+                incoming_role = normalize_role(user_info.get('role', 'member'))
+                user.provider_role = incoming_role
+                effective_role = user.local_role or incoming_role
+                role_changed = user.role != effective_role
+                user.role = effective_role
 
                 incoming_status = user_info.get('is_active')
-                if isinstance(incoming_status, bool):
-                    user.is_active = incoming_status
+                # 本地停用是独立授权边界；提供商不能在登录同步时重新激活账号。
+                if incoming_status is False:
+                    user.is_active = False
 
                 user.last_login = datetime.now(BEIJING_TZ)
-                user.save()
+                from models.db_models import AuthSession
+                with self._get_database().atomic():
+                    # 仅保存同步中实际修改的字段，避免覆盖并发停用或密码修改。
+                    user.save(only=list(set(user.dirty_fields + [User.updated_at])))
+                    if incoming_status is False or role_changed:
+                        AuthSession.update(revoked=True).where(AuthSession.user == user.id).execute()
 
-                print(f"用户登录成功: {user.id} ({provider})")
-                return user.to_dict()
+                logger.info('用户同步完成 user_id=%s provider=%s', user.id, provider)
+                return User.get_by_id(user.id).to_dict()
 
             except DoesNotExist:
                 # ----- 创建新用户 -----
@@ -409,6 +415,7 @@ class UserService(DatabaseService, Injectable):
                     email=email,
                     password_hash=None,
                     role=highest_role,
+                    provider_role=highest_role,
                     provider=provider,
                     provider_id=provider_id,
                     avatar_url=user_info.get('avatar_url'),
@@ -416,7 +423,7 @@ class UserService(DatabaseService, Injectable):
                     last_login=datetime.now(BEIJING_TZ)
                 )
 
-                print(f"新用户注册成功: {user.id} ({provider})")
+                logger.info('新用户注册成功 user_id=%s provider=%s', user.id, provider)
                 return user.to_dict()
 
         except Exception as e:

@@ -51,297 +51,201 @@ def _get_current_user():
         return None
 
 
-def _calc_hotness(d):
-    """计算热度分数：回复数*2 + 点赞数*3 + 浏览数*0.1，再按时间衰减"""
-    now = datetime.now(timezone.utc)
-    created = d.created_at
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
-    age_hours = max((now - created).total_seconds() / 3600, 0.1)
-    score = (d.reply_count or 0) * 2 + (d.like_count or 0) * 3 + (d.view_count or 0) * 0.1
-    # 时间衰减：24小时内保持较高权重
-    decay = max(1.0, age_hours / 24)
-    return score / decay
+def _page():
+    from werkzeug.exceptions import BadRequest
+    try:
+        return min(100, max(1, int(request.args.get('limit', 30)))), max(0, int(request.args.get('offset', 0)))
+    except ValueError as exc:
+        raise BadRequest('分页参数无效') from exc
 
 
-def _discussion_to_dict(d, current_user=None):
-    """转换讨论为字典"""
-    data = d.to_dict()
-    # 将 ForeignKey 字段 author 重命名为 author_id
-    if 'author' in data:
-        data['author_id'] = data.pop('author')
-    if d.author:
-        data['author_name'] = d.author.username or '匿名'
-    else:
-        data['author_name'] = '匿名'
-    # 当前用户是否点赞
-    data['is_liked'] = False
-    if current_user:
-        try:
-            data['is_liked'] = DiscussionLike.select().where(
-                (DiscussionLike.discussion == d) & (DiscussionLike.user == current_user)
-            ).exists()
-        except Exception:
-            pass
+def _lock(model, row_id):
+    query = model.select().where(model.id == row_id)
+    if get_database().__class__.__name__ != 'SqliteDatabase':
+        query = query.for_update()
+    return query.get()
+
+
+def _serialize(row, liked=False):
+    data = row.to_dict()
+    data['author_id'] = data.pop('author', row.author_id)
+    data['author_name'] = row.author.username or '匿名'
+    data['is_liked'] = liked
     return data
+
+
+def _liked_ids(model, field, rows, user):
+    if not user or not rows:
+        return set()
+    return {getattr(like, field.name + '_id') for like in model.select(field).where(
+        (field.in_([row.id for row in rows])) & (model.user == user.id))}
+
+
+def _replies(discussion_id, user):
+    limit, offset = _page()
+    rows = list(DiscussionReply.select(DiscussionReply, User).join(User).where(
+        DiscussionReply.discussion == discussion_id).order_by(DiscussionReply.created_at, DiscussionReply.id)
+        .limit(limit).offset(offset))
+    liked = _liked_ids(DiscussionReplyLike, DiscussionReplyLike.reply, rows, user)
+    return [_serialize(row, row.id in liked) for row in rows]
+
+
+def _content(data):
+    from werkzeug.exceptions import BadRequest
+    value = data.get('content')
+    if not isinstance(value, str) or not value.strip() or len(value.encode()) > 65536:
+        raise BadRequest('内容必须为非空字符串且不超过 64 KiB')
+    return value.strip()
 
 
 @api.route('/')
 class DiscussionListController(Resource):
-    @api.doc('list_discussions')
-    @api.param('category', '筛选分类')
     def get(self):
-        """获取讨论列表（按热度+时间排序）"""
+        from peewee import fn, SQL
+        limit, offset = _page()
+        user = _get_current_user()
+        columns = [f for f in Discussion._meta.sorted_fields if f.name != 'content']
+        query = Discussion.select(*columns, fn.SUBSTR(Discussion.content, 1, 200).alias('content'), User).join(User)
         category = request.args.get('category', '').strip()
-        db = get_database()
+        if category and category != '全部':
+            query = query.where(Discussion.category == category)
+        if get_database().__class__.__name__ == 'SqliteDatabase':
+            decay = fn.MAX(1.0, fn.julianday('now') - fn.julianday(Discussion.created_at))
+        else:
+            decay = fn.GREATEST(1.0, SQL('EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - "t1"."created_at")) / 86400.0'))
+        hotness = (Discussion.reply_count * 2 + Discussion.like_count * 3 + Discussion.view_count * 0.1) / decay
+        rows = list(query.order_by(Discussion.is_pinned.desc(), hotness.desc(), Discussion.id.desc()).limit(limit).offset(offset))
+        liked = _liked_ids(DiscussionLike, DiscussionLike.discussion, rows, user)
+        return [_serialize(row, row.id in liked) for row in rows], 200
 
-        try:
-            with ensure_connected(db):
-                current_user = _get_current_user()
-                query = Discussion.select()
-                if category and category != '全部':
-                    query = query.where(Discussion.category == category)
-
-                discussions = list(query)
-                # 置顶帖排最前，其余按热度降序
-                pinned = [d for d in discussions if d.is_pinned]
-                normal = [d for d in discussions if not d.is_pinned]
-                normal.sort(key=lambda d: _calc_hotness(d), reverse=True)
-                sorted_discussions = pinned + normal
-
-                return [_discussion_to_dict(d, current_user) for d in sorted_discussions], 200
-        except Exception as e:
-            return {'error': f'获取讨论列表失败: {str(e)}'}, 500
-
-    @api.expect(discussion_input)
     def post(self):
-        """发布讨论"""
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-
         data = request.get_json(silent=True) or {}
-        title = data.get('title', '').strip()
-        content = data.get('content', '').strip()
-        if not title or not content:
-            return {'error': '标题和内容不能为空'}, 400
-
-        db = get_database()
-        with ensure_connected(db):
-            discussion = Discussion.create(
-                title=title,
-                content=content,
-                author=user.id,
-                category=data.get('category', '全部'),
-                tags=data.get('tags', ''),
-            )
-        return _discussion_to_dict(discussion, user), 201
+        title = data.get('title', '')
+        if not isinstance(title, str) or not title.strip() or len(title) > 200:
+            return {'error': '标题不能为空且不能超过 200 字'}, 400
+        row = Discussion.create(author=user, title=title.strip(), content=_content(data),
+            category=data.get('category', '全部'), tags=data.get('tags', ''))
+        return _serialize(row), 201
 
 
 @api.route('/<int:discussion_id>')
 class DiscussionDetailController(Resource):
     def get(self, discussion_id):
-        """获取讨论详情（同时增加浏览量）"""
-        db = get_database()
         try:
-            with ensure_connected(db):
-                d = Discussion.get_by_id(discussion_id)
-                # 增加浏览量
-                d.view_count = (d.view_count or 0) + 1
-                d.save()
-                current_user = _get_current_user()
-                data = _discussion_to_dict(d, current_user)
-                # 获取回复（按时间正序）
-                replies = DiscussionReply.select().where(
-                    DiscussionReply.discussion == d
-                ).order_by(DiscussionReply.created_at)
-                data['replies'] = []
-                for r in replies:
-                    rd = r.to_dict()
-                    if 'author' in rd:
-                        rd['author_id'] = rd.pop('author')
-                    if r.author:
-                        rd['author_name'] = r.author.username or '匿名'
-                    else:
-                        rd['author_name'] = '匿名'
-                    # 回复的点赞状态
-                    rd['is_liked'] = False
-                    if current_user:
-                        from models.db_models import DiscussionReplyLike
-                        try:
-                            rd['is_liked'] = DiscussionReplyLike.select().where(
-                                (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == current_user)
-                            ).exists()
-                        except Exception:
-                            pass
-                    data['replies'].append(rd)
-                return data, 200
+            row = Discussion.select(Discussion, User).join(User).where(Discussion.id == discussion_id).get()
         except Discussion.DoesNotExist:
             return {'error': '讨论不存在'}, 404
+        Discussion.update(view_count=Discussion.view_count + 1).where(Discussion.id == row.id).execute()
+        row.view_count += 1
+        user = _get_current_user()
+        data = _serialize(row, row.id in _liked_ids(DiscussionLike, DiscussionLike.discussion, [row], user))
+        data['replies'] = _replies(row.id, user)
+        return data, 200
 
     def delete(self, discussion_id):
-        """删除讨论（作者或管理员）"""
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
+        with get_database().atomic():
+            try:
+                row = _lock(Discussion, discussion_id)
+            except Discussion.DoesNotExist:
+                return {'error': '讨论不存在'}, 404
+            if row.author_id != user.id and user.role != 'manager':
+                return {'error': '无权删除'}, 403
+            ids = DiscussionReply.select(DiscussionReply.id).where(DiscussionReply.discussion == row)
+            DiscussionReplyLike.delete().where(DiscussionReplyLike.reply.in_(ids)).execute()
+            DiscussionReply.delete().where(DiscussionReply.discussion == row).execute()
+            DiscussionLike.delete().where(DiscussionLike.discussion == row).execute()
+            row.delete_instance()
+        return {'success': True}, 200
 
-        db = get_database()
+
+def _set_like(model, likes, foreign_key, row_id):
+    user = _get_current_user()
+    if not user:
+        return {'error': '请先登录'}, 401
+    desired = (request.get_json(silent=True) or {}).get('liked')
+    if not isinstance(desired, bool):
+        return {'error': 'liked 必须为布尔值'}, 400
+    with get_database().atomic():
         try:
-            with ensure_connected(db):
-                d = Discussion.get_by_id(discussion_id)
-                if d.author_id != user.id and user.role != 'manager':
-                    return {'error': '无权删除'}, 403
-                # 先清理关联数据（回复及其点赞、讨论点赞），确保即使数据库
-                # 外键未配置级联删除，主帖也能被正常删除
-                reply_ids = DiscussionReply.select(DiscussionReply.id).where(
-                    DiscussionReply.discussion == d
-                )
-                DiscussionReplyLike.delete().where(
-                    DiscussionReplyLike.reply.in_(reply_ids)
-                ).execute()
-                DiscussionLike.delete().where(
-                    DiscussionLike.discussion == d
-                ).execute()
-                DiscussionReply.delete().where(
-                    DiscussionReply.discussion == d
-                ).execute()
-                d.delete_instance()
-            return {'success': True}, 200
-        except Discussion.DoesNotExist:
-            return {'error': '讨论不存在'}, 404
-        except Exception as e:
-            return {'error': f'删除失败: {str(e)}'}, 500
+            # 所有回复写操作遵循 Discussion → Reply 锁顺序，与删除主帖一致。
+            if model is DiscussionReply:
+                reply = model.get_or_none(model.id == row_id)
+                if not reply:
+                    return {'error': '内容不存在'}, 404
+                _lock(Discussion, reply.discussion_id)
+            row = _lock(model, row_id)
+        except (model.DoesNotExist, Discussion.DoesNotExist):
+            return {'error': '内容不存在'}, 404
+        query = likes.select().where((foreign_key == row.id) & (likes.user == user.id))
+        existing = query.first()
+        if desired and not existing:
+            likes.create(**{foreign_key.name: row.id, 'user': user.id})
+            model.update(like_count=model.like_count + 1).where(model.id == row.id).execute()
+        elif not desired and existing:
+            existing.delete_instance()
+            model.update(like_count=model.like_count - 1).where((model.id == row.id) & (model.like_count > 0)).execute()
+        count = model.get_by_id(row.id).like_count
+    return {'liked': desired, 'like_count': count}, 200
 
 
 @api.route('/<int:discussion_id>/like')
 class DiscussionLikeController(Resource):
     def post(self, discussion_id):
-        """点赞/取消点赞讨论"""
-        user = _get_current_user()
-        if not user:
-            return {'error': '请先登录'}, 401
-        db = get_database()
-        try:
-            with ensure_connected(db):
-                try:
-                    d = Discussion.get_by_id(discussion_id)
-                except Discussion.DoesNotExist:
-                    return {'error': '讨论不存在'}, 404
-
-                existing = DiscussionLike.select().where(
-                    (DiscussionLike.discussion == d) & (DiscussionLike.user == user)
-                ).first()
-                if existing:
-                    existing.delete_instance()
-                    d.like_count = max(0, (d.like_count or 0) - 1)
-                    d.save()
-                    return {'liked': False, 'like_count': d.like_count}, 200
-                else:
-                    DiscussionLike.create(discussion=d, user=user)
-                    d.like_count = (d.like_count or 0) + 1
-                    d.save()
-                    return {'liked': True, 'like_count': d.like_count}, 200
-        except Exception as e:
-            return {'error': f'操作失败: {str(e)}'}, 500
+        return _set_like(Discussion, DiscussionLike, DiscussionLike.discussion, discussion_id)
 
 
 @api.route('/<int:discussion_id>/replies')
 class DiscussionReplyListController(Resource):
-    @api.expect(reply_input)
+    def get(self, discussion_id):
+        if not Discussion.select().where(Discussion.id == discussion_id).exists():
+            return {'error': '讨论不存在'}, 404
+        return _replies(discussion_id, _get_current_user()), 200
+
     def post(self, discussion_id):
-        """发表回复"""
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-
-        db = get_database()
-        with ensure_connected(db):
+        content = _content(request.get_json(silent=True) or {})
+        with get_database().atomic():
             try:
-                d = Discussion.get_by_id(discussion_id)
+                row = _lock(Discussion, discussion_id)
             except Discussion.DoesNotExist:
                 return {'error': '讨论不存在'}, 404
-
-            if d.is_closed:
-                return {'error': '讨论已关闭'}, 400
-
-            data = request.get_json(silent=True) or {}
-            content = data.get('content', '').strip()
-            if not content:
-                return {'error': '回复内容不能为空'}, 400
-
-            reply = DiscussionReply.create(
-                discussion=d,
-                author=user.id,
-                content=content,
-            )
-            d.reply_count += 1
-            d.save()
-
-        rd = reply.to_dict()
-        if 'author' in rd:
-            rd['author_id'] = rd.pop('author')
-        rd['author_name'] = user.username or '匿名'
-        rd['is_liked'] = False
-        return rd, 201
+            if row.is_closed:
+                return {'error': '讨论已关闭'}, 409
+            reply = DiscussionReply.create(discussion=row, author=user, content=content)
+            Discussion.update(reply_count=Discussion.reply_count + 1).where(Discussion.id == row.id).execute()
+        return _serialize(reply), 201
 
 
 @api.route('/replies/<int:reply_id>/like')
 class DiscussionReplyLikeController(Resource):
     def post(self, reply_id):
-        """点赞/取消点赞回复"""
-        user = _get_current_user()
-        if not user:
-            return {'error': '请先登录'}, 401
-        db = get_database()
-        with ensure_connected(db):
-            try:
-                r = DiscussionReply.get_by_id(reply_id)
-            except DiscussionReply.DoesNotExist:
-                return {'error': '回复不存在'}, 404
-
-            from models.db_models import DiscussionReplyLike
-            existing = DiscussionReplyLike.select().where(
-                (DiscussionReplyLike.reply == r) & (DiscussionReplyLike.user == user)
-            ).first()
-            if existing:
-                existing.delete_instance()
-                r.like_count = max(0, (r.like_count or 0) - 1)
-                r.save()
-                return {'liked': False, 'like_count': r.like_count}, 200
-            else:
-                DiscussionReplyLike.create(reply=r, user=user)
-                r.like_count = (r.like_count or 0) + 1
-                r.save()
-                return {'liked': True, 'like_count': r.like_count}, 200
+        return _set_like(DiscussionReply, DiscussionReplyLike, DiscussionReplyLike.reply, reply_id)
 
 
 @api.route('/replies/<int:reply_id>')
 class DiscussionReplyDetailController(Resource):
     def delete(self, reply_id):
-        """删除回复（作者或管理员）"""
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-
-        db = get_database()
-        try:
-            with ensure_connected(db):
-                try:
-                    r = DiscussionReply.get_by_id(reply_id)
-                except DiscussionReply.DoesNotExist:
-                    return {'error': '回复不存在'}, 404
-
-                if r.author_id != user.id and user.role != 'manager':
-                    return {'error': '无权删除'}, 403
-
-                discussion = r.discussion
-                DiscussionReplyLike.delete().where(
-                    DiscussionReplyLike.reply == r
-                ).execute()
-                r.delete_instance()
-                if discussion:
-                    discussion.reply_count = max(0, (discussion.reply_count or 0) - 1)
-                    discussion.save()
-            return {'success': True}, 200
-        except Exception as e:
-            return {'error': f'删除失败: {str(e)}'}, 500
+        with get_database().atomic():
+            reply = DiscussionReply.get_or_none(DiscussionReply.id == reply_id)
+            if not reply:
+                return {'error': '回复不存在'}, 404
+            _lock(Discussion, reply.discussion_id)
+            if reply.author_id != user.id and user.role != 'manager':
+                return {'error': '无权删除'}, 403
+            DiscussionReplyLike.delete().where(DiscussionReplyLike.reply == reply_id).execute()
+            deleted = DiscussionReply.delete().where(DiscussionReply.id == reply_id).execute()
+            if deleted:
+                Discussion.update(reply_count=Discussion.reply_count - 1).where(
+                    (Discussion.id == reply.discussion_id) & (Discussion.reply_count > 0)).execute()
+        return {'success': True}, 200

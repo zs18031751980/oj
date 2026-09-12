@@ -1,3 +1,4 @@
+from services.contest_lifecycle import transactional, lock_contest
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -5,7 +6,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import (
     Contest, ContestParticipant, ContestProblem, ContestScoreboardSnapshot,
-    ContestSubmission, User, get_database,
+    ContestSubmission, ContestTeam, ContestTeamMember, User, get_database,
 )
 from controllers.contest_controller import _contest_is_frozen, _get_current_user
 from services.contest_lifecycle import can_view_rankings
@@ -78,7 +79,7 @@ def _wall_delta_minutes(a, b):
         return 0
 
 
-def _compute_rankings(contest_id: int, cutoff_at=None):
+def _compute_rankings(contest_id: int, cutoff_at=None, entry_ids=None):
     """根据比赛模式计算实时排行榜"""
     try:
         contest = Contest.get_by_id(contest_id)
@@ -87,7 +88,7 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
 
     mode = 'OI' if 'oi' in (contest.contest_type or '').lower() else 'ACM'
     # ACM 模式罚时：每道已解题的罚时 = 该题首次 AC 用时(分钟) + 此前失败次数 * 罚时(分钟)
-    penalty_minutes = int(getattr(contest, 'penalty_time', 20) or 20)
+    penalty_minutes = int(contest.penalty_time if contest.penalty_time is not None else 20)
 
     # 题目顺序（用于列展示）
     problems = list(
@@ -103,37 +104,54 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
     # ACM 走独立领域服务，保证 CE、首次 AC 和最后 AC tie-break 的规则与
     # 复判/增量榜单消费者复用同一实现。
     if mode == 'ACM':
+        teams = {t.id: t for t in ContestTeam.select().where(ContestTeam.contest == contest_id)}
+        members = {row.user_id: row.team_id for row in ContestTeamMember.select().where(ContestTeamMember.contest == contest_id)}
         entries = []
-        for participant in ContestParticipant.select().where(
+        for participant in ContestParticipant.select(ContestParticipant, User).join(User).where(
             ContestParticipant.contest_id == contest_id
         ):
             try:
-                user = User.get_by_id(participant.user_id)
+                user = participant.user
                 username = user.username or '匿名'
                 avatar_url = user.avatar_url or ''
             except Exception:
                 username = '匿名'
                 avatar_url = ''
+            team = teams.get(members.get(participant.user_id))
+            if team and team.captain_id != participant.user_id:
+                continue
+            if entry_ids is not None and participant.user_id not in entry_ids:
+                continue
             entries.append({
                 'entry_id': participant.user_id,
                 'user_id': participant.user_id,
-                'username': username,
+                'username': team.name if team else username,
                 'avatar_url': avatar_url,
             })
 
+        submission_query = ContestSubmission.select(ContestSubmission.id, ContestSubmission.user, ContestSubmission.team,
+            ContestSubmission.problem_index, ContestSubmission.status, ContestSubmission.verdict,
+            ContestSubmission.received_at, ContestSubmission.submitted_at).where(
+                ContestSubmission.contest_id == contest_id, ContestSubmission.contest_eligible == True)
+        from peewee import fn
+        received = fn.COALESCE(ContestSubmission.received_at, ContestSubmission.submitted_at)
+        if contest.start_time:
+            submission_query = submission_query.where(received >= contest.start_time)
+        if contest.end_time:
+            submission_query = submission_query.where(received < contest.end_time)
+        if entry_ids is not None:
+            affected_teams = [t.id for t in teams.values() if t.captain_id in entry_ids]
+            submission_query = submission_query.where((ContestSubmission.user.in_(entry_ids)) | (ContestSubmission.team.in_(affected_teams)))
         submissions = [
             {
                 'id': submission.id,
-                'entry_id': submission.user_id,
+                'entry_id': teams[submission.team_id].captain_id if submission.team_id in teams else submission.user_id,
                 'problem_index': submission.problem_index or '',
                 'status': submission.status,
                 'verdict': submission.verdict or submission.status,
                 'received_at': submission.received_at or submission.submitted_at,
             }
-            for submission in ContestSubmission.select().where(
-                ContestSubmission.contest_id == contest_id,
-                ContestSubmission.contest_eligible == True,
-            )
+            for submission in submission_query
         ]
         scored_rows = compute_acm_scoreboard(
             entries=entries,
@@ -160,6 +178,7 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
                 })
             rankings.append({
                 'rank': row['rank'],
+                '_last_ac_at': row['last_ac_at'].isoformat() if row['last_ac_at'] else None,
                 'user_id': row['user_id'],
                 'username': row['username'],
                 'avatar_url': row['avatar_url'],
@@ -178,7 +197,7 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
     # 拉取全部提交记录
     rows = list(
         ContestSubmission.select()
-        .where(ContestSubmission.contest_id == contest_id)
+        .where(ContestSubmission.contest_id == contest_id, ContestSubmission.contest_eligible == True)
         .order_by(ContestSubmission.submitted_at)
     )
     if cutoff_at is not None:
@@ -233,9 +252,10 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
 
     # 汇总
     results = []
+    users = {user.id: user for user in User.select().where(User.id.in_(list(user_stats)))}
     for uid, st in user_stats.items():
         try:
-            user = User.get_by_id(uid)
+            user = users[uid]
             username = user.username or '匿名'
             avatar_url = user.avatar_url or ''
         except Exception:
@@ -317,36 +337,23 @@ def _compute_rankings(contest_id: int, cutoff_at=None):
     }
 
 
-def _save_public_snapshot(contest: Contest, data: dict) -> None:
-    """比赛未封榜时覆盖保存公开榜；封榜后此快照成为唯一公开数据源。"""
+def _save_public_snapshot(contest: Contest, data: dict, event_cursor=0) -> None:
     payload = json.dumps(data, ensure_ascii=False, default=str)
-    # PostgreSQL UPSERT 消除首次并发读榜时 get_or_create 的唯一索引竞争。
-    (ContestScoreboardSnapshot.insert(
-        contest=contest,
-        snapshot_kind='PUBLIC_FREEZE',
-        payload=payload,
-        scoreboard_version=1,
-    ).on_conflict(
-        conflict_target=(
-            ContestScoreboardSnapshot.contest,
-            ContestScoreboardSnapshot.snapshot_kind,
-        ),
-        update={
-            ContestScoreboardSnapshot.payload: payload,
-            ContestScoreboardSnapshot.scoreboard_version:
-                ContestScoreboardSnapshot.scoreboard_version + 1,
-        },
-    ).execute())
+    (ContestScoreboardSnapshot.insert(contest=contest, snapshot_kind='PUBLIC_FREEZE',
+        payload=payload, scoreboard_version=contest.scoreboard_requested_version, event_cursor=event_cursor).on_conflict(
+            conflict_target=(ContestScoreboardSnapshot.contest, ContestScoreboardSnapshot.snapshot_kind),
+            update={ContestScoreboardSnapshot.payload: payload, ContestScoreboardSnapshot.event_cursor: event_cursor,
+                    ContestScoreboardSnapshot.scoreboard_version: contest.scoreboard_requested_version}).execute())
 
 
-def _save_live_projection(contest: Contest, data: dict) -> None:
+def _save_live_projection(contest: Contest, data: dict, event_cursor=0) -> None:
     """由判题完成事件推进的实时榜单投影，读榜不再全表聚合。"""
     payload = json.dumps(data, ensure_ascii=False, default=str)
     (ContestScoreboardSnapshot.insert(
         contest=contest,
         snapshot_kind='LIVE',
-        payload=payload,
-        scoreboard_version=1,
+        payload=payload, event_cursor=event_cursor,
+        scoreboard_version=contest.scoreboard_requested_version,
     ).on_conflict(
         conflict_target=(
             ContestScoreboardSnapshot.contest,
@@ -354,24 +361,90 @@ def _save_live_projection(contest: Contest, data: dict) -> None:
         ),
         update={
             ContestScoreboardSnapshot.payload: payload,
+            ContestScoreboardSnapshot.event_cursor: event_cursor,
             ContestScoreboardSnapshot.scoreboard_version:
-                ContestScoreboardSnapshot.scoreboard_version + 1,
+                contest.scoreboard_requested_version,
         },
     ).execute())
 
 
-def refresh_live_projection(contest_id: int) -> None:
-    """判题完成后的唯一榜单刷新入口；异常不得影响提交事实的持久化。"""
-    try:
-        contest = Contest.get_by_id(contest_id)
-        if contest.lifecycle_state in {'CANCELLED', 'FINALIZED'}:
-            return
-        data = _compute_rankings(contest_id)
-        if data is not None:
-            _save_live_projection(contest, data)
-    except Exception:
-        # 投影是可从提交事实重建的读模型，失败留待下一次完成事件或读榜重建。
-        return
+def _merge_entries(previous, changes):
+    result = dict(changes)
+    rows = {row['user_id']: row for row in previous['rankings']}
+    rows.update({row['user_id']: row for row in changes['rankings']})
+    ordered = sorted(rows.values(), key=lambda r: (-r['solved_count'], r['penalty'], r.get('_last_ac_at') or '9999', r['user_id']))
+    last, rank = None, 0
+    for position, row in enumerate(ordered, 1):
+        key = (row['solved_count'], row['penalty'], row.get('_last_ac_at'))
+        if key != last:
+            rank = position
+        row['rank'], last = rank, key
+    result['rankings'] = ordered
+    return result
+
+
+def refresh_live_projection(contest_id: int) -> bool:
+    """只重算发生变化的参赛实体；版本校验保证原子发布。"""
+    from models.db_models import ContestEvent
+    from peewee import fn
+    contest = Contest.get_by_id(contest_id)
+    if contest.lifecycle_state in {'CANCELLED', 'FINALIZED'}:
+        return False
+    version = contest.scoreboard_requested_version
+    live = ContestScoreboardSnapshot.get_or_none(ContestScoreboardSnapshot.contest == contest,
+        ContestScoreboardSnapshot.snapshot_kind == 'LIVE')
+    cursor = ContestEvent.select(fn.MAX(ContestEvent.id)).where(ContestEvent.contest == contest).scalar() or 0
+    changed_ids = None
+    if live and 'oi' not in (contest.contest_type or '').lower():
+        events = list(ContestEvent.select().where(ContestEvent.contest == contest,
+            ContestEvent.id > live.event_cursor, ContestEvent.id <= cursor))
+        if events and all(e.kind in {'submission', 'judgement'} for e in events):
+            submission_ids = [json.loads(e.payload).get('submission_id') for e in events]
+            teams = {t.id: t.captain_id for t in ContestTeam.select().where(ContestTeam.contest == contest)}
+            changed_ids = {teams.get(r.team_id, r.user_id) for r in ContestSubmission.select(
+                ContestSubmission.team, ContestSubmission.user).where(ContestSubmission.id.in_(submission_ids),
+                    ContestSubmission.contest == contest, ContestSubmission.contest_eligible == True)}
+    data = _compute_rankings(contest_id, entry_ids=changed_ids)
+    if changed_ids is not None:
+        data = _merge_entries(json.loads(live.payload), data)
+    public = None
+    if _contest_is_frozen(contest):
+        prior = ContestScoreboardSnapshot.get_or_none(ContestScoreboardSnapshot.contest == contest,
+            ContestScoreboardSnapshot.snapshot_kind == 'PUBLIC_FREEZE')
+        selected = changed_ids if prior else None
+        public = _compute_rankings(contest_id, cutoff_at=contest.freeze_time, entry_ids=selected)
+        if selected is not None:
+            public = _merge_entries(json.loads(prior.payload), public)
+    with get_database().atomic():
+        current = lock_contest(contest_id)
+        if (current.scoreboard_requested_version != version
+                or current.lifecycle_state in {'CANCELLED', 'FINALIZED'}):
+            return False
+        _save_live_projection(current, data, cursor)
+        if public is not None:
+            _save_public_snapshot(current, public, cursor)
+    return True
+
+
+def refresh_dirty_projections():
+    from peewee import JOIN, fn
+    snapshot = ContestScoreboardSnapshot
+    rows = (Contest.select(Contest.id).join(snapshot, JOIN.LEFT_OUTER, on=(
+        (snapshot.contest == Contest.id) & (snapshot.snapshot_kind == 'LIVE'))).where(
+        ((snapshot.id.is_null()) | (Contest.scoreboard_requested_version > fn.COALESCE(snapshot.scoreboard_version, 0)))
+        & (~Contest.lifecycle_state.in_(['CANCELLED', 'FINALIZED']))).limit(20))
+    for row in rows:
+        db = get_database()
+        if db.__class__.__name__ == 'SqliteDatabase':
+            refresh_live_projection(row.id)
+            continue
+        acquired = db.execute_sql('SELECT pg_try_advisory_lock(%s, %s)', (782041, row.id)).fetchone()[0]
+        if not acquired:
+            continue
+        try:
+            refresh_live_projection(row.id)
+        finally:
+            db.execute_sql('SELECT pg_advisory_unlock(%s, %s)', (782041, row.id))
 
 
 def _load_public_snapshot(contest: Contest) -> dict | None:
@@ -380,6 +453,10 @@ def _load_public_snapshot(contest: Contest) -> dict | None:
         ContestScoreboardSnapshot.snapshot_kind == 'PUBLIC_FREEZE',
     ).first()
     if not snapshot:
+        return None
+    try:
+        return json.loads(snapshot.payload)
+    except (TypeError, ValueError):
         return None
 
 
@@ -397,10 +474,6 @@ def _save_final_snapshot(contest: Contest, data: dict) -> dict:
         ContestScoreboardSnapshot.snapshot_kind == 'FINAL',
     ).get()
     return json.loads(snapshot.payload)
-    try:
-        return json.loads(snapshot.payload)
-    except (TypeError, ValueError):
-        return None
 
 
 @api.route('/<int:contest_id>/rankings')
@@ -415,53 +488,54 @@ class ContestRankingsController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         user = _get_current_user()
-        is_manager = bool(user and user.role == 'manager')
-        if not can_view_rankings(
+        from services.contest_operations import allowed
+        is_manager = allowed(contest_id, user, 'jury')
+        participant_view = bool(user and contest.lifecycle_state not in {'DRAFT', 'READY', 'CANCELLED'} and
+            ContestParticipant.select().where(ContestParticipant.contest == contest, ContestParticipant.user == user).exists())
+        if not participant_view and not can_view_rankings(
             contest.lifecycle_state, is_public=contest.is_public, is_manager=is_manager,
         ):
             return {'error': '比赛不存在'}, 404
-        if contest.lifecycle_state == 'FINALIZED':
-            snapshot = ContestScoreboardSnapshot.select().where(
-                ContestScoreboardSnapshot.contest == contest,
-                ContestScoreboardSnapshot.snapshot_kind == 'FINAL',
-            ).first()
-            if snapshot:
-                return json.loads(snapshot.payload), 200
         if _contest_is_frozen(contest) and not is_manager:
-            snapshot = _load_public_snapshot(contest)
-            if snapshot is not None:
-                return snapshot, 200
-            data = _compute_rankings(contest_id, cutoff_at=contest.freeze_time)
-            _save_public_snapshot(contest, data)
-            return data, 200
-        live_snapshot = ContestScoreboardSnapshot.select().where(
-            ContestScoreboardSnapshot.contest == contest,
-            ContestScoreboardSnapshot.snapshot_kind == 'LIVE',
-        ).first()
-        data = json.loads(live_snapshot.payload) if live_snapshot else _compute_rankings(contest_id)
-        if data is None:
-            return {'error': '比赛不存在'}, 404
-        if live_snapshot is None:
-            _save_live_projection(contest, data)
-        if not _contest_is_frozen(contest):
-            _save_public_snapshot(contest, data)
-        return data, 200
+            kind = 'PUBLIC_FREEZE'
+        elif contest.lifecycle_state == 'FINALIZED':
+            kind = f'FINAL:{contest.final_revision}' if contest.final_revision else 'FINAL'
+        else:
+            kind = 'LIVE'
+        snapshot = ContestScoreboardSnapshot.get_or_none(ContestScoreboardSnapshot.contest == contest,
+            ContestScoreboardSnapshot.snapshot_kind == kind)
+        if snapshot is None:
+            return {'error': '榜单正在生成，请稍后重试'}, 503, {'Retry-After': '2'}
+        import hashlib
+        etag = '"' + hashlib.sha256((kind + snapshot.payload).encode()).hexdigest() + '"'
+        headers = {'ETag': etag, 'Cache-Control': 'private, no-cache', 'Vary': 'Authorization'}
+        if request.headers.get('If-None-Match') == etag:
+            return {}, 304, headers
+        return json.loads(snapshot.payload), 200, headers
+
+
 
 
 @api.route('/<int:contest_id>/finalize')
 @api.param('contest_id', '比赛ID')
 class ContestRankingsFinalizeController(Resource):
+    @transactional
     def post(self, contest_id: int):
         """管理员在比赛结束、积压判题处理完后发布不可变最终榜。"""
         user = _get_current_user()
-        if not user or user.role != 'manager':
-            return {'error': '仅管理员可结算比赛'}, 403
+        from services.contest_operations import allowed, audit
+        if not allowed(contest_id, user, 'control'):
+            return {'error': '仅比赛负责人可结算比赛'}, 403
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
-        if contest.lifecycle_state == 'CANCELLED':
-            return {'error': '已取消比赛不能结算'}, 409
+        if contest.lifecycle_state in {'DRAFT', 'READY', 'CANCELLED'}:
+            return {'error': '未发布或已取消比赛不能结算'}, 409
+        if contest.lifecycle_state == 'FINALIZED':
+            snapshot = ContestScoreboardSnapshot.get(ContestScoreboardSnapshot.contest == contest,
+                ContestScoreboardSnapshot.snapshot_kind == (f'FINAL:{contest.final_revision}' if contest.final_revision else 'FINAL'))
+            return json.loads(snapshot.payload), 200
         now = datetime.now(timezone.utc)
         end_time = contest.end_time
         if end_time is not None:
@@ -470,13 +544,23 @@ class ContestRankingsFinalizeController(Resource):
                 return {'error': '比赛尚未结束，不能结算'}, 409
         unresolved = ContestSubmission.select().where(
             ContestSubmission.contest == contest,
-            ContestSubmission.status.in_(('Queued', 'Claimed', 'Compiling', 'Compiled', 'Checking', 'Running')),
+            ContestSubmission.contest_eligible == True,
+            ContestSubmission.status.in_(('Pending', 'Queued', 'Claimed', 'Compiling', 'Compiled', 'Checking', 'Running', 'SystemError', 'Cancelled')),
         ).exists()
         if unresolved:
             return {'error': '仍有判题任务未完成，不能结算'}, 409
+        from models.db_models import RejudgeBatch
+        if RejudgeBatch.select().where(RejudgeBatch.contest == contest, RejudgeBatch.state == 'PENDING').exists():
+            return {'error': '仍有未审核复判批次'}, 409
         data = _compute_rankings(contest_id)
+        if _contest_is_frozen(contest):
+            _save_public_snapshot(contest, _compute_rankings(contest_id, cutoff_at=contest.freeze_time))
         final = _save_final_snapshot(contest, data)
         contest.lifecycle_state = 'FINALIZED'
         contest.finalized_at = datetime.now(_CST).replace(tzinfo=None)
         contest.save()
+        import hashlib
+        audit(contest_id, user, 'finalize', '审核并确认最终成绩',
+            {'sha256': hashlib.sha256(json.dumps(final, sort_keys=True).encode()).hexdigest(),
+             'scoreboard_version': contest.scoreboard_requested_version})
         return final, 200

@@ -19,11 +19,10 @@ from uuid import uuid4
 
 from core.di_container import get_container
 from interfaces.service_interfaces import ICodeExecutionService, ILoggerService, IRedisService
-from models.db_models import ContestSubmission, Submission, Testcase
+from models.db_models import ContestSubmission, Submission, Testcase, Contest, get_database
 from models.glot_models import CodeExecutionRequest
 from controllers.contest_problem_controller import (
     _run_code,
-    _prepare_program,
     normalize_judge_output,
     _generate_testcases,
     _reference_looks_nondeterministic,
@@ -32,9 +31,11 @@ from controllers.contest_problem_controller import (
 from services.judge_state import (
     ACCEPTED, CHECKING, CLAIMED, COMPILATION_ERROR, COMPILED, COMPILING,
     MEMORY_LIMIT_EXCEEDED, PARTIAL, QUEUED, RUNNING, SYSTEM_ERROR,
-    OUTPUT_LIMIT_EXCEEDED, TIME_LIMIT_EXCEEDED, WRONG_ANSWER, can_transition, is_terminal,
+    OUTPUT_LIMIT_EXCEEDED, TIME_LIMIT_EXCEEDED, WRONG_ANSWER, TERMINAL_STATES, can_transition, is_terminal,
 )
 from services.contest_outbox import dispatch_pending_outbox
+from services.compile_cache import prepare_cached as _prepare_program
+from services.contest_operations import now as contest_now
 
 
 class JudgeWorker:
@@ -54,15 +55,59 @@ class JudgeWorker:
         self.last_completed_at = None
         self.active_job = None
         self.failure_count = 0
+        self.compile_cache_hits = 0
         self._last_recovery = 0.0
+        self._stop_event = threading.Event()
+        self._maintenance_thread = None
+        self._projection_thread = None
+        self._heartbeat_thread = None
+        self.pool = os.environ.get('JUDGE_WORKER_POOL', 'all')
+        if self.pool not in {'all', 'contest', 'practice', 'rejudge', 'validation'}:
+            raise ValueError('Invalid JUDGE_WORKER_POOL')
+        self._reconcile_cursors = {}
+
+    def queues(self):
+        pools = {'contest': [('contest_judge_queue', self._process_contest_task)],
+                 'practice': [('judge_queue', self._process_task), ('practice_judge_queue', self._process_contest_task)],
+                 'rejudge': [('rejudge_queue', self._process_contest_task)],
+                 'validation': [('testcase_gen_queue', self._process_gen_task)]}
+        return [item for values in pools.values() for item in values] if self.pool == 'all' else pools[self.pool]
+
+    def _background(self, operation, interval, uses_db=True):
+        while not self._stop_event.is_set():
+            try:
+                if uses_db:
+                    with get_database().connection_context():
+                        operation()
+                else:
+                    operation()
+            except Exception as exc:
+                self.logger.error('Worker background task failed', exc)
+            self._stop_event.wait(interval)
+
+    def _refresh_projections(self):
+        from controllers.contest_rankings_controller import refresh_dirty_projections
+        from services.ranking_projection import refresh_rankings
+        if self.pool in {'contest', 'all'}:
+            refresh_dirty_projections()
+        if self.pool in {'practice', 'all'}:
+            refresh_rankings()
 
     def start(self):
         """启动后台判题线程"""
         if self._running:
             return
         self._running = True
+        self._stop_event.clear()
         # 启动时仅回收租约已过期的任务，不搬走其他活跃 Worker 的任务。
-        self._recover_expired_jobs()
+        self._maintenance_thread = threading.Thread(target=self._maintenance, daemon=True)
+        self._maintenance_thread.start()
+        self._heartbeat_thread = threading.Thread(target=self._background, args=(
+            lambda: self.redis.set(f'judge:worker:{self.worker_id}', self.health(), 30), 5, False), daemon=True)
+        self._heartbeat_thread.start()
+        if self.pool in {'contest', 'practice', 'all'}:
+            self._projection_thread = threading.Thread(target=self._background, args=(self._refresh_projections, 2), daemon=True)
+            self._projection_thread.start()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         self.logger.info("JudgeWorker started")
@@ -70,6 +115,14 @@ class JudgeWorker:
     def stop(self):
         """停止后台判题线程"""
         self._running = False
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=30)
+        if self._maintenance_thread:
+            self._maintenance_thread.join(timeout=5)
+        for thread in (self._heartbeat_thread, self._projection_thread):
+            if thread:
+                thread.join(timeout=5)
         self.logger.info("JudgeWorker stopped")
 
     def _run_loop(self):
@@ -79,18 +132,8 @@ class JudgeWorker:
         try:
             while self._running:
                 try:
-                    if time.monotonic() - self._last_recovery >= 10:
-                        self._recover_expired_jobs()
-                        # Redis 短暂不可用时，比赛提交留在 PostgreSQL outbox；恢复后由
-                        # 任意 Worker 重投，不依赖用户手工再次提交。
-                        dispatch_pending_outbox(self.redis)
-                        self._last_recovery = time.monotonic()
                     # 轮转读取，避免普通题库提交持续涌入时比赛判题被永久饿死。
-                    queues = [
-                        ('judge_queue', self._process_task),
-                        ('contest_judge_queue', self._process_contest_task),
-                        ('testcase_gen_queue', self._process_gen_task),
-                    ]
+                    queues = self.queues()
                     task_found = False
                     for offset in range(len(queues)):
                         index = (self._queue_cursor + offset) % len(queues)
@@ -101,7 +144,28 @@ class JudgeWorker:
                             task = claim['payload']
                             self.last_claim_at = datetime.now(timezone.utc)
                             self.active_job = task.get('job_id') or task.get('submission_id')
-                            handled = handler(task)
+                            renew_stop = threading.Event()
+                            def renew():
+                                while not renew_stop.wait(20):
+                                    try:
+                                        if not self.redis.list_renew(f'{queue_name}:processing', claim['receipt']):
+                                            return
+                                    except Exception:
+                                        self.logger.warning('Job lease renewal failed')
+                            renew_thread = threading.Thread(target=renew, daemon=True)
+                            renew_thread.start()
+                            try:
+                                with get_database().connection_context():
+                                    handled = handler(task)
+                            except Exception:
+                                try:
+                                    self.redis.list_nack(queue_name, f'{queue_name}:processing', claim['receipt'])
+                                except Exception:
+                                    pass
+                                raise
+                            finally:
+                                renew_stop.set()
+                                renew_thread.join(timeout=5)
                             self.last_completed_at = datetime.now(timezone.utc)
                             self.active_job = None
                             # 只有处理函数正常返回后才确认；抛异常时任务留在 processing，
@@ -110,6 +174,7 @@ class JudgeWorker:
                                 self.logger.warning(
                                     f'Job from {queue_name} was not persisted; leaving it for retry'
                                 )
+                                self.redis.list_nack(queue_name, f'{queue_name}:processing', claim['receipt'])
                                 continue
                             if not self.redis.list_ack(f'{queue_name}:processing', claim['receipt']):
                                 self.logger.warning(f'Could not ack task from {queue_name}; it will be retried')
@@ -126,8 +191,93 @@ class JudgeWorker:
             self._loop.close()
             self._loop = None
 
+    def _maintenance(self):
+        from services.submission_outbox import dispatch_pending_regular
+        from services.reference_validation import dispatch_pending_validations
+        from controllers.contest_rankings_controller import refresh_dirty_projections
+        from services.ranking_projection import refresh_rankings
+        while not self._stop_event.is_set():
+            try:
+                with get_database().connection_context():
+                    self._recover_expired_jobs()
+                    self._persist_dead_jobs()
+                    self._reconcile_dispatched_jobs()
+                    dispatch_pending_outbox(self.redis)
+                    dispatch_pending_regular(self.redis)
+                    dispatch_pending_validations(self.redis)
+                    from services.contest_packages import dispatch_package_validation
+                    dispatch_package_validation(self.redis)
+            except Exception as exc:
+                self.logger.error('Judge maintenance failed', exc)
+            self._stop_event.wait(2)
+
+    def _persist_dead_jobs(self):
+        from models.db_models import ReferenceValidationJob, ContestProblem
+        for queue, model in (('judge_queue', Submission), ('contest_judge_queue', ContestSubmission), ('practice_judge_queue', ContestSubmission), ('rejudge_queue', ContestSubmission), ('testcase_gen_queue', None)):
+            for receipt in self.redis._client.lrange(queue + ':dead', 0, 99):
+                try:
+                    item = json.loads(receipt)
+                    task = item.get('payload', item)
+                    if not isinstance(task, dict):
+                        raise ValueError('invalid task')
+                except (ValueError, AttributeError):
+                    self.redis.archive_dead(queue, receipt)
+                    continue
+                with get_database().atomic():
+                    if model is not None:
+                        row = model.get_or_none((model.id == task.get('submission_id')) & (model.job_id == task.get('job_id')))
+                        if row and not is_terminal(row.status):
+                            values = {'status': SYSTEM_ERROR}
+                            if model == ContestSubmission:
+                                values.update(verdict=SYSTEM_ERROR, finished_at=contest_now())
+                            changed = model.update(**values).where((model.id == row.id) & (~model.status.in_(list(TERMINAL_STATES)))).execute()
+                            if changed and model == ContestSubmission and row.contest_eligible:
+                                Contest.update(scoreboard_requested_version=Contest.scoreboard_requested_version + 1).where(Contest.id == row.contest_id).execute()
+                    else:
+                        if task.get('package_digest'):
+                            from models.db_models import ContestPackage
+                            ContestPackage.update(validation_state='INVALID', validation_error='验证服务重试耗尽').where(
+                                ContestPackage.digest == task['package_digest'], ContestPackage.validation_state.in_(['PENDING', 'RUNNING'])).execute()
+                        job = ReferenceValidationJob.get_or_none(ReferenceValidationJob.id == task.get('job_id'))
+                        if job and job.state != 'DONE':
+                            ContestProblem.update(validation_status='INVALID', validation_error='执行服务多次失败，请重新保存题目以重试').where(
+                                (ContestProblem.id == job.problem_id) & (ContestProblem.validation_version == job.version)).execute()
+                            ReferenceValidationJob.update(state='DONE').where(ReferenceValidationJob.id == job.id).execute()
+                # 先提交数据库，再移动死信；重放不会再次推进终态版本。
+                self.redis.archive_dead(queue, receipt)
+
+    def _reconcile_dispatched_jobs(self):
+        """分页扫描未完成事实，Redis 全量丢失后也可补投；活跃任务由去重键保护。"""
+        from models.db_models import SubmissionOutbox, ContestJudgeOutbox, ReferenceValidationJob
+        from services.submission_outbox import dispatch_regular_entry
+        from services.contest_outbox import dispatch_outbox_entry
+        for queue, outbox, model, dispatch in (
+            ('judge_queue', SubmissionOutbox, Submission, dispatch_regular_entry),
+            ('contest_judge_queue', ContestJudgeOutbox, ContestSubmission, dispatch_outbox_entry),
+        ):
+            cursor = self._reconcile_cursors.get(queue, 0)
+            rows = list(outbox.select(outbox, model).join(model).where(
+                (outbox.id > cursor) & (outbox.state == 'DISPATCHED')
+                & (~model.status.in_(list(TERMINAL_STATES)))).order_by(outbox.id).limit(100))
+            for row in rows:
+                from services.contest_outbox import queue_for
+                actual_queue = queue_for(row.submission) if model == ContestSubmission else queue
+                if not self.redis._client.exists(f'judge:enqueued:{actual_queue}:{row.submission.job_id}'):
+                    row.state = 'PENDING'
+                    dispatch(self.redis, row)
+            self._reconcile_cursors[queue] = rows[-1].id if len(rows) == 100 else 0
+        queue = 'testcase_gen_queue'
+        cursor = self._reconcile_cursors.get(queue, '')
+        rows = list(ReferenceValidationJob.select().where((ReferenceValidationJob.id > cursor)
+            & (ReferenceValidationJob.state == 'DISPATCHED')).order_by(ReferenceValidationJob.id).limit(100))
+        for row in rows:
+            if not self.redis._client.exists(f'judge:enqueued:{queue}:{row.id}'):
+                ReferenceValidationJob.update(state='PENDING').where(ReferenceValidationJob.id == row.id).execute()
+        self._reconcile_cursors[queue] = rows[-1].id if len(rows) == 100 else ''
+
     def _recover_expired_jobs(self):
-        for queue_name in ('judge_queue', 'contest_judge_queue', 'testcase_gen_queue'):
+        for queue_name in ('judge_queue', 'contest_judge_queue', 'practice_judge_queue', 'rejudge_queue', 'testcase_gen_queue'):
+            self.redis.list_retry_due(queue_name)
             recovered = self.redis.list_recover(
                 f'{queue_name}:processing', queue_name,
             )
@@ -145,6 +295,8 @@ class JudgeWorker:
             'last_completed_at': self.last_completed_at.isoformat() if self.last_completed_at else None,
             'active_job': self.active_job,
             'failure_count': self.failure_count,
+            'compile_cache_hits': self.compile_cache_hits,
+            'pool': self.pool,
             'queue_length': self.redis.list_length('contest_judge_queue'),
             'processing_count': self.redis.list_length('contest_judge_queue:processing'),
         }
@@ -158,129 +310,33 @@ class JudgeWorker:
             pass
 
     def _process_task(self, task: dict):
-        """处理单个判题任务"""
-        submission_id = task.get("submission_id")
-        problem_id = task.get("problem_id")
-        code = task.get("code", "")
-        language = task.get("language", "cpp")
-        task_testcases = task.get("testcases", [])
-
-        submission = None
-        if submission_id:
-            try:
-                submission = Submission.get_by_id(submission_id)
-            except Exception:
-                pass
-
         from pages.problem_data import PROBLEMS
-        pdata = PROBLEMS.get(problem_id)
-        testcases = task_testcases or (pdata.get("testCases", []) if pdata else [])
-
-        if not testcases:
-            self.logger.warning(f"No testcases for problem {problem_id}, using empty")
-            result_data = {
-                'id': submission_id, 'status': 'AC', 'time_used': 0, 'memory_used': 0,
-                'testcase_results': [], 'fail_testcase_index': None,
-            }
-            self._save_to_redis(submission_id, result_data)
-            if submission:
-                submission.status = Submission.AC
-                submission.time_used = 0
-                submission.memory_used = 0
-                submission.testcase_results = json.dumps([])
-                try:
-                    submission.save()
-                except Exception:
-                    pass
-            return
-
-        if submission:
-            submission.status = Submission.RUNNING
-            try:
-                submission.save()
-            except Exception:
-                pass
-
+        submission = Submission.get_by_id(task['submission_id'])
+        if submission.job_id != task.get('job_id') or is_terminal(submission.status):
+            return True
+        old_attempt = submission.attempt_id
+        changed = Submission.update(status=Submission.RUNNING, attempt_id=old_attempt + 1).where(
+            (Submission.id == submission.id) & (Submission.attempt_id == old_attempt)
+            & (Submission.status == submission.status)).execute()
+        if changed != 1:
+            return False
+        testcases = PROBLEMS.get(submission.problem_id, {}).get('testCases', [])
         results = []
+        final_status = ACCEPTED if testcases else SYSTEM_ERROR
         first_failed = None
-        compile_error = None
-
-        for idx, tc in enumerate(testcases):
-            inp = tc.input_data if hasattr(tc, 'input_data') else tc['input']
-            outp = tc.output_data if hasattr(tc, 'output_data') else tc['output']
-            result = self._judge_single(code, language, inp, outp)
-            result['testCaseIndex'] = idx
-            if result["passed"]:
-                # 通过的用例不回传输入/期望输出，避免测试数据泄露
-                result['input'] = ''
-                result['expected'] = ''
-                results.append(result)
-                continue
-            result['input'] = inp
-            results.append(result)
-            if first_failed is None:
-                first_failed = idx
-            if result.get("stderr") and compile_error is None:
-                compile_error = result["stderr"]
-            # 性能优化：首个用例失败即停止后续执行（65 个用例无需全部跑完）
-            break
-
-        # 未执行的用例标记为失败，保持用例总数一致（整体结论已确定为 WA/CE）
-        if first_failed is not None:
-            for idx in range(len(results), len(testcases)):
-                results.append({
-                    "passed": False,
-                    "stdout": "",
-                    "stderr": "",
-                    "input": "",
-                    "expected": "",
-                    "skipped": True,
-                    "testCaseIndex": idx,
-                })
-
-        all_passed = first_failed is None
-
-        final_status = 'AC' if all_passed else (
-            'CE' if (first_failed is not None and results[first_failed].get("stderr")) else 'WA'
-        )
-
-        total_time = sum(r.get("time_used", 0) or 0 for r in results)
-
-        result_data = {
-            'id': submission_id,
-            'status': final_status,
-            'time_used': total_time,
-            'memory_used': 0,
-            'testcase_results': results,
-            'fail_testcase_index': first_failed,
-            'compile_error': (
-                results[first_failed].get("stderr")
-                if first_failed is not None and final_status == 'CE'
-                else None
-            ),
-        }
-        self._save_to_redis(submission_id, result_data)
-
-        if submission:
-            try:
-                db_status = {
-                    'AC': Submission.AC,
-                    'WA': Submission.WA,
-                    'CE': Submission.CE,
-                }.get(final_status, Submission.WA)
-                submission.status = db_status
-                submission.time_used = total_time
-                submission.memory_used = 0
-                submission.testcase_results = json.dumps(results)
-                submission.fail_testcase_index = first_failed
-                submission.save()
-            except Exception:
-                pass
-
-        self.logger.info(
-            f"Submission {submission_id} done: {final_status} "
-            f"(passed {sum(1 for r in results if r['passed'])}/{len(results)})"
-        )
+        for index, tc in enumerate(testcases):
+            result = self._judge_single(submission.code, submission.language, tc['input'], tc['output'])
+            results.append({'passed': result['passed'], 'status': result.get('status', WRONG_ANSWER),
+                            'testCaseIndex': index, 'time_used': result.get('time_used', 0)})
+            if not result['passed']:
+                final_status = result.get('status', WRONG_ANSWER)
+                first_failed = index
+                break
+        persisted = Submission.update(status=final_status, testcase_results=json.dumps(results),
+            time_used=sum(r['time_used'] for r in results), fail_testcase_index=first_failed).where(
+            (Submission.id == submission.id) & (Submission.attempt_id == old_attempt + 1)
+            & (Submission.status == Submission.RUNNING)).execute()
+        return bool(persisted)
 
     def _save_contest_result(self, submission_id, data):
         """将比赛判题结果写入 Redis 缓存（与通用提交共用键前缀风格）"""
@@ -305,133 +361,53 @@ class JudgeWorker:
         if not can_transition(expected, target):
             return False
         try:
+            archived_details = fields.pop('testcase_results', None) if is_terminal(target) else None
             fields.update(status=target, worker_id=self.worker_id)
-            updated = ContestSubmission.update(**fields).where(
-                (ContestSubmission.id == submission_id)
-                & (ContestSubmission.attempt_id == attempt_id)
-                & (ContestSubmission.status == expected)
-            ).execute()
-            if updated == 1 and is_terminal(target):
-                # 提交事实先落库，再异步刷新可重建的榜单投影；排行榜读取不再高频全表扫描。
-                try:
+            if is_terminal(target):
+                fields['testcase_results'] = None
+            with get_database().atomic():
+                from services.contest_lifecycle import lock_contest
+                current = ContestSubmission.get_by_id(submission_id)
+                lock_contest(current.contest_id)
+                updated = ContestSubmission.update(**fields).where(
+                    (ContestSubmission.id == submission_id)
+                    & (ContestSubmission.attempt_id == attempt_id)
+                    & (ContestSubmission.status == expected)).execute()
+                if updated == 1 and is_terminal(target):
+                    from services.contest_operations import archive_judgement, emit
+                    terminal = ContestSubmission.get_by_id(submission_id)
+                    terminal.testcase_results = archived_details or current.testcase_results
+                    archive_judgement(terminal, terminal.rejudge_batch_id)
+                    emit(current.contest_id, 'judgement', {'submission_id': submission_id, 'status': target})
+                if updated == 1 and is_terminal(target) and current.contest_eligible:
                     contest_id = ContestSubmission.get_by_id(submission_id).contest_id
-                    from controllers.contest_rankings_controller import refresh_live_projection
-                    refresh_live_projection(contest_id)
-                except Exception:
-                    pass
+                    Contest.update(scoreboard_requested_version=Contest.scoreboard_requested_version + 1).where(
+                        Contest.id == contest_id).execute()
             return updated == 1
-        except Exception as exc:
-            self.logger.error(
-                f'Contest submission state transition failed: {submission_id} '
-                f'{expected}->{target}', exc
-            )
-            return False
+        except Exception:
+            # 不把数据库失败伪装为状态冲突；外层保留 receipt 等待重试。
+            raise
 
     def _contest_submission(self, submission_id: int, job_id: str, attempt_id: int):
         try:
             submission = ContestSubmission.get_by_id(submission_id)
         except ContestSubmission.DoesNotExist:
             return None
-        if submission.job_id != job_id or submission.attempt_id != attempt_id:
+        if submission.job_id != job_id:
             return None
         return submission
 
-    def _process_gen_task(self, task: dict):
-        """后台生成比赛题目的测试用例（与判题解耦，避免阻塞建题请求）"""
-        from models.db_models import ContestProblem, ContestTestcase
+    def _process_gen_task(self, task):
+        if task.get('package_digest'):
+            from services.contest_packages import validate_staged_package
+            validate_staged_package(task['package_digest'])
+            return True
 
-        problem_id = task.get("problem_id")
-        correct_answer = task.get("correct_answer", "")
-        count = int(task.get("count", 100) or 100)
-        time_limit = int(task.get("time_limit", 1000) or 1000)
-        memory_limit = int(task.get("memory_limit", 256) or 256)
-
-        try:
-            problem = ContestProblem.get_by_id(problem_id)
-        except Exception:
-            return
-
-        self._save_gen_status(problem_id, {
-            "status": "generating", "generated": 0, "total": count,
-        })
-        try:
-            # 静态拦截非确定性参考代码：一旦依赖时间/随机种子，建题时答案能过、
-            # 正式比赛（不同时间/进程）提交却会出现“部分用例不通过”。直接拒绝生成，
-            # 倒逼修正参考代码使其确定性，从源头消除该问题。
-            lang = _detect_language(correct_answer)
-            flagged, reason = _reference_looks_nondeterministic(correct_answer, lang)
-            if flagged:
-                ContestTestcase.delete().where(
-                    ContestTestcase.contest_problem == problem
-                ).execute()
-                self._save_gen_status(problem_id, {
-                    "status": "error",
-                    "error": (
-                        f"参考代码疑似非确定性（{reason}）。非确定性代码在正式比赛提交时"
-                        "会出现“部分用例不通过”，因此无法生成可信测试用例。请移除对时间/随机"
-                        "种子的依赖（如 srand(time(NULL))、chrono::now()、random_device、"
-                        "Math.random()、random 未固定种子等），改为确定性实现后重新生成。"
-                    ),
-                    "generated": 0,
-                    "total": count,
-                })
-                self.logger.warning(
-                    f"Reference answer for problem {problem_id} is non-deterministic ({reason}); rejected."
-                )
-                return
-
-            # 先清掉旧用例，保证重生成时数据一致
-            ContestTestcase.delete().where(
-                ContestTestcase.contest_problem == problem
-            ).execute()
-
-            testcases = _generate_testcases(
-                correct_answer, count, time_limit, memory_limit
-            )
-
-            # 参考代码不可靠（非确定性或大量用例运行出错）时，拒绝生成：
-            # 这类用例在正式比赛（另一时刻/进程）提交时会出现“部分不通过”，
-            # 因此不保存任何用例，并给出明确错误，倒逼修正参考代码使其确定性。
-            if len(testcases) < count:
-                ContestTestcase.delete().where(
-                    ContestTestcase.contest_problem == problem
-                ).execute()
-                self._save_gen_status(problem_id, {
-                    "status": "error",
-                    "error": (
-                        "参考代码输出不稳定：在多次运行下结果不一致，或大量随机用例运行出错，"
-                        "无法生成足够且可信的测试用例。请确认参考代码：①不依赖随机/时间种子"
-                        "（如 srand(time(NULL))、chrono 取时间、random_device）；②无未初始化变量/"
-                        "数组越界等未定义行为；③对随机输入都能正确运行。修正后重新生成。"
-                    ),
-                    "generated": 0,
-                    "total": count,
-                })
-                self.logger.warning(
-                    f"Reference answer for problem {problem_id} is non-deterministic/unstable; "
-                    f"generated {len(testcases)}/{count}, rejected."
-                )
-                return
-
-            for idx, tc in enumerate(testcases):
-                ContestTestcase.create(
-                    contest_problem=problem,
-                    input_data=tc['input_data'],
-                    expected_output=tc['expected_output'],
-                    is_sample=tc['is_sample'],
-                    sort_order=tc['sort_order'],
-                )
-            self._save_gen_status(problem_id, {
-                "status": "done", "generated": len(testcases), "total": count,
-            })
-            self.logger.info(
-                f"Testcases generated for problem {problem_id}: {len(testcases)}/{count}"
-            )
-        except Exception as exc:
-            self.logger.error(f"Testcase generation failed for {problem_id}", exc)
-            self._save_gen_status(problem_id, {
-                "status": "error", "error": str(exc), "generated": 0, "total": count,
-            })
+        from services.reference_validation import process_validation
+        if task.get('kind') != 'reference_validation':
+            # 旧的通用随机生成任务不再执行：测试输入必须由出题人定义。
+            return True
+        return process_validation(task)
 
     def _process_contest_task(self, task: dict):
         """处理比赛题目判题任务（本地执行，对比题目存储的测试用例）"""
@@ -450,9 +426,9 @@ class JudgeWorker:
         submitted_at_raw = task.get("submitted_at")
 
         try:
-            submitted_at = datetime.fromisoformat(str(submitted_at_raw)) if submitted_at_raw else datetime.now()
+            submitted_at = datetime.fromisoformat(str(submitted_at_raw)) if submitted_at_raw else contest_now()
         except (TypeError, ValueError):
-            submitted_at = datetime.now()
+            submitted_at = contest_now()
 
         if submission_id is None:
             return True
@@ -463,6 +439,9 @@ class JudgeWorker:
             return True
         if is_terminal(submission.status):
             return True
+        if submission.rejudge_batch_id and submission.rejudge_batch.state != 'PENDING':
+            return True
+        attempt_id = submission.attempt_id
         if submission.status != QUEUED:
             # 同一 job 在租约过期后重新投递：提升 attempt 并把旧 Worker 隔离掉。
             # 旧 Worker 后续所有写入都带旧 attempt_id，因此不会覆盖本次重试。
@@ -480,7 +459,7 @@ class JudgeWorker:
             attempt_id += 1
         if not self._transition_contest(
             submission_id, attempt_id, QUEUED, CLAIMED,
-            judge_started_at=datetime.now(),
+            judge_started_at=contest_now(),
         ):
             # 可能是重复投递或另一个 Worker 已经认领；不能执行两次。
             return True
@@ -501,20 +480,28 @@ class JudgeWorker:
                 submission_id, attempt_id, CLAIMED, SYSTEM_ERROR,
                 verdict=SYSTEM_ERROR,
                 error_message='比赛题目不存在或读取失败',
-                finished_at=datetime.now(),
+                finished_at=contest_now(),
             )
             return True
 
-        # 每个测试点独立执行，并严格使用题目设置的毫秒时限；编译耗时不计入
-        # 运行时限（符合主流 OJ 规则），但会受到独立的编译超时保护。
-        time_limit_sec = (problem.time_limit or 1000) / 1000.0
-        memory_limit = problem.memory_limit or None
-
-        testcases = list(
-            ContestTestcase.select()
-            .where(ContestTestcase.contest_problem == problem)
-            .order_by(ContestTestcase.sort_order)
-        )
+        from services.contest_packages import publish_package, load_package, check_output
+        from types import SimpleNamespace
+        try:
+            if not submission.package_digest:
+                submission.package_digest = publish_package(problem).digest
+                ContestSubmission.update(package_digest=submission.package_digest).where(
+                    ContestSubmission.id == submission.id, ContestSubmission.attempt_id == attempt_id).execute()
+            package = load_package(submission.package_digest)
+            if os.environ.get('APP_ENV') == 'production' and package['runtime_image'] != os.environ.get('JUDGE_SANDBOX_IMAGE'):
+                raise ValueError('Judge runtime differs from package')
+        except ValueError:
+            self._transition_contest(submission_id, attempt_id, CLAIMED, SYSTEM_ERROR,
+                verdict=SYSTEM_ERROR, error_message='题包缺失、损坏或执行环境不匹配', finished_at=contest_now())
+            return True
+        from services.contest_packages import runtime_limits
+        time_limit_sec, memory_limit = runtime_limits(package, language)
+        testcases = [SimpleNamespace(**tc) for tc in package['cases']]
+        is_acm = 'oi' not in (problem.contest.contest_type or '').lower()
 
         if not testcases:
             self._save_contest_result(submission_id, {
@@ -529,7 +516,7 @@ class JudgeWorker:
                 submission_id, attempt_id, CLAIMED, SYSTEM_ERROR,
                 verdict=SYSTEM_ERROR,
                 error_message='题目没有可用测试用例',
-                finished_at=datetime.now(),
+                finished_at=contest_now(),
             )
             return True
 
@@ -537,10 +524,12 @@ class JudgeWorker:
         # C++/Java/Go 的排队时间放大两个数量级。
         if not self._transition_contest(
             submission_id, attempt_id, CLAIMED, COMPILING,
-            compile_started_at=datetime.now(),
+            compile_started_at=contest_now(),
         ):
             return True
         program, compile_error, compile_stderr = _prepare_program(code, language)
+        if getattr(program, 'cache_hit', False):
+            self.compile_cache_hits += 1
 
         if program is None:
             self._save_contest_result(submission_id, {
@@ -552,14 +541,14 @@ class JudgeWorker:
                 submission_id, attempt_id, COMPILING, COMPILATION_ERROR,
                 verdict=COMPILATION_ERROR,
                 total=len(testcases),
-                compile_finished_at=datetime.now(),
-                finished_at=datetime.now(),
+                compile_finished_at=contest_now(),
+                finished_at=contest_now(),
                 error_message=compile_stderr or compile_error or '编译失败',
             )
             return True
         if not self._transition_contest(
             submission_id, attempt_id, COMPILING, COMPILED,
-            compile_finished_at=datetime.now(),
+            compile_finished_at=contest_now(),
         ):
             program.close()
             return True
@@ -594,7 +583,7 @@ class JudgeWorker:
                     "signal": metrics.get('signal'),
                 }
             actual = output or ""
-            passed = normalize_judge_output(actual) == normalize_judge_output(expected)
+            passed = checker.check(actual, expected, tc.input_data)
             return {
                 "passed": passed,
                 "status": "AC" if passed else "WA",
@@ -611,20 +600,30 @@ class JudgeWorker:
 
         if not self._transition_contest(
             submission_id, attempt_id, COMPILED, RUNNING,
-            execution_started_at=datetime.now(),
+            execution_started_at=contest_now(),
         ):
             program.close()
             return True
 
         # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
         # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
+        from services.contest_packages import OutputChecker
+        checker = None
         try:
-            details = [_judge_one(tc) for tc in testcases]
+            checker = OutputChecker(package['checker_config'])
+            details = []
+            for tc in testcases:
+                result = _judge_one(tc)
+                details.append(result)
+                if is_acm and not result['passed']:
+                    break
         finally:
+            if checker is not None:
+                checker.close()
             if program is not None:
                 program.close()
 
-        execution_finished_at = datetime.now()
+        execution_finished_at = contest_now()
         total_cpu_time = sum(d.get('cpu_time', 0) or 0 for d in details)
         peak_memory = max((d.get('memory', 0) or 0 for d in details), default=0)
         output_size = sum(d.get('output_size', 0) or 0 for d in details)
@@ -648,7 +647,7 @@ class JudgeWorker:
             status = "OLE"
         elif "RE" in status_set:
             status = "RE"
-        elif passed > 0:
+        elif passed > 0 and not is_acm:
             status = "Partial"
         else:
             status = "WA"
@@ -661,6 +660,8 @@ class JudgeWorker:
         else:
             score = 0
 
+        if is_acm:
+            score = 0
         result_payload = {
             "problem_id": problem_id,
             "contest_id": contest_id,
@@ -687,7 +688,7 @@ class JudgeWorker:
             "OLE": OUTPUT_LIMIT_EXCEEDED,
             "RE": "RE",
         }
-        runtime_status = next((direct_runtime_states[s] for s in status_set if s in direct_runtime_states), None)
+        runtime_status = direct_runtime_states.get(status)
         if runtime_status:
             persisted = self._transition_contest(
                 submission_id, attempt_id, RUNNING, runtime_status,
@@ -717,15 +718,15 @@ class JudgeWorker:
                 output_size=output_size,
                 exit_code=exit_codes[-1] if exit_codes else None,
                 signal=signals[-1] if signals else None,
-                testcase_results=json.dumps(details, ensure_ascii=False),
                 execution_finished_at=execution_finished_at,
             )
             persisted = claimed_for_check and self._transition_contest(
                 submission_id, attempt_id, CHECKING,
                 ACCEPTED if status == ACCEPTED else PARTIAL if status == PARTIAL else WRONG_ANSWER,
                 verdict=status,
-                finished_at=datetime.now(),
-                checked_at=datetime.now(),
+                testcase_results=json.dumps(details, ensure_ascii=False),
+                finished_at=contest_now(),
+                checked_at=contest_now(),
             )
         if not persisted:
             return False
@@ -741,22 +742,22 @@ class JudgeWorker:
             response = self._loop.run_until_complete(self.code_service.execute_code(request))
         except Exception as e:
             self.logger.error(f"Judge execution error", e)
-            return {
-                "passed": False,
-                "stdout": "",
-                "stderr": str(e),
-                "expected": expected,
-                "time_used": 0,
-            }
+            raise RuntimeError('执行服务暂时不可用，等待重试') from e
+
+        if getattr(response, 'verdict', None) == SYSTEM_ERROR:
+            raise RuntimeError('执行服务暂时不可用，等待重试')
 
         stdout = (response.stdout or "").strip()
         stderr = (response.stderr or "").strip()
         expected_stripped = expected.strip()
 
-        passed = bool(not stderr and stdout == expected_stripped)
+        status = getattr(response, 'verdict', None)
+        passed = bool(response.success and stdout == expected_stripped)
+        status = ACCEPTED if passed else (status if status and status != ACCEPTED else WRONG_ANSWER)
 
         return {
             "passed": passed,
+            "status": status,
             "stdout": stdout,
             "stderr": stderr,
             "expected": expected,

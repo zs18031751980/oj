@@ -36,45 +36,18 @@ _actual_db: Optional[PooledPostgresqlExtDatabase] = None
 
 
 def _create_actual_db() -> PooledPostgresqlExtDatabase:
-    try:
-        from core.di_container import get_container
-        from interfaces.service_interfaces import IConfigService
-
-        config_service = get_container().resolve(IConfigService)
-        db_config = config_service.get_database_config()
-
-        connect_kwargs = dict(
-            database=db_config["database"],
-            user=db_config["username"],
-            password=db_config["password"],
-            host=db_config["host"],
-            port=db_config["port"],
-            max_connections=db_config["max_connections"],
-            stale_timeout=db_config["stale_timeout"],
-            options="-c timezone=Asia/Shanghai",
-        )
-        # 仅在需要时使用 SSL（如 Zeabur DATABASE_URL 含 ?sslmode=require）
-        if db_config.get("ssl"):
-            connect_kwargs["ssl"] = True
-
-        db = PooledPostgresqlExtDatabase(**connect_kwargs)
-        print(f"[DB] 数据库连接已创建: {db_config['host']}:{db_config['port']}/{db_config['database']}"
-              f"{' (ssl)' if db_config.get('ssl') else ''}")
-        return db
-    except Exception:
-        config = DatabaseConfig()
-        db = PooledPostgresqlExtDatabase(
-            config.database,
-            user=config.username,
-            password=config.password,
-            host=config.host,
-            port=config.port,
-            max_connections=config.max_connections,
-            stale_timeout=config.stale_timeout,
-            options="-c timezone=Asia/Shanghai"
-        )
-        print(f"[DB] 数据库连接已创建(fallback): {config.host}:{config.port}/{config.database}")
-        return db
+    from core.di_container import get_container
+    from interfaces.service_interfaces import IConfigService
+    service = get_container().resolve(IConfigService)
+    config = service.get_database_config()
+    statement_timeout = max(1000, int(service.get_config('DB_STATEMENT_TIMEOUT_MS', 15000)))
+    return PooledPostgresqlExtDatabase(
+        config['database'], user=config['username'], password=config['password'],
+        host=config['host'], port=int(config['port']),
+        max_connections=int(config['max_connections']), stale_timeout=int(config['stale_timeout']),
+        timeout=int(config.get('pool_timeout', 5)), connect_timeout=5,
+        sslmode=config.get('sslmode', 'prefer'),
+        options=f'-c timezone=Asia/Shanghai -c statement_timeout={statement_timeout} -c lock_timeout=5000 -c idle_in_transaction_session_timeout=30000')
 
 
 def init_database():
@@ -162,7 +135,9 @@ class User(BaseModel):
     email = CharField(max_length=100, unique=True, null=True, verbose_name="邮箱")
     password_hash = CharField(max_length=255, null=True, verbose_name="密码哈希")
     is_active = BooleanField(default=True, verbose_name="是否激活")
-    role = CharField(max_length=20, default="member", verbose_name="用户角色")
+    role = CharField(max_length=20, default="member", verbose_name="生效角色")
+    provider_role = CharField(max_length=20, null=True, verbose_name="提供商角色")
+    local_role = CharField(max_length=20, null=True, verbose_name="显式本地角色覆盖")
     last_login = DateTimeField(null=True, verbose_name="最后登录时间")
     provider = CharField(max_length=50, null=True, verbose_name="登录提供商")
     provider_id = CharField(max_length=255, null=True, verbose_name="提供商用户ID")
@@ -182,8 +157,57 @@ class User(BaseModel):
         """
         data = super().to_dict()
         data.pop("password_hash", None)
+        data.pop("provider_role", None)
+        data.pop("local_role", None)
         return data
 
+
+
+class AuthSession(BaseModel):
+    """可撤销会话；只存刷新令牌摘要，所有时间均为 UTC。"""
+    id = CharField(primary_key=True, max_length=64)
+    user = ForeignKeyField(User, backref='auth_sessions', on_delete='CASCADE')
+    refresh_hash = CharField(max_length=64)
+    previous_refresh_hash = CharField(max_length=64, null=True)
+    refresh_request_id = CharField(max_length=128, null=True)
+    refresh_retry_ciphertext = TextField(null=True)
+    refresh_retry_until = DateTimeField(null=True)
+    expires_at = DateTimeField()
+    revoked = BooleanField(default=False)
+
+    class Meta:
+        table_name = 'auth_sessions'
+
+
+class UserJudgeStats(BaseModel):
+    user = ForeignKeyField(User, primary_key=True, on_delete='CASCADE')
+    rank = IntegerField(index=True)
+    solved_count = IntegerField(default=0)
+    rating = IntegerField(default=0)
+    easy_count = IntegerField(default=0)
+    medium_count = IntegerField(default=0)
+    hard_count = IntegerField(default=0)
+
+    class Meta:
+        table_name = 'user_judge_stats'
+
+
+class RankingProjectionState(BaseModel):
+    id = IntegerField(primary_key=True, default=1)
+    built_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = 'ranking_projection_state'
+
+
+class OAuthGrant(BaseModel):
+    id = CharField(primary_key=True, max_length=64)
+    user = ForeignKeyField(User, on_delete='CASCADE')
+    binding_hash = CharField(max_length=64)
+    expires_at = DateTimeField()
+
+    class Meta:
+        table_name = 'oauth_grants'
 
 # ============================================================
 # 3. 题目、测试用例、提交记录模型
@@ -261,6 +285,10 @@ class Submission(BaseModel):
     testcase_results = TextField(null=True, verbose_name="各测试点结果(JSON)")
     fail_testcase_index = IntegerField(null=True, verbose_name="首个失败测试点索引")
 
+    job_id = CharField(max_length=64, null=True, unique=True)
+    attempt_id = IntegerField(default=0)
+    idempotency_key = CharField(max_length=128, null=True)
+
     class Meta:
         table_name = "submissions"
 
@@ -335,9 +363,40 @@ class Contest(BaseModel):
     freeze_time = DateTimeField(null=True, verbose_name="封榜时间")
     published_at = DateTimeField(null=True, verbose_name="发布时间")
     finalized_at = DateTimeField(null=True, verbose_name="最终榜发布时间")
+    thawed_at = DateTimeField(null=True)
+    final_revision = IntegerField(default=0)
+    rules_version = CharField(default='acm-2026-v1')
+    allowed_languages = TextField(default='["cpp","python","java","go","javascript"]')
+    active_submission_limit = IntegerField(default=3)
+
+    scoreboard_requested_version = IntegerField(default=0)
 
     class Meta:
         table_name = "contests"
+
+
+class ContestRole(BaseModel):
+    contest = ForeignKeyField(Contest)
+    user = ForeignKeyField(User)
+    role = CharField()
+    class Meta:
+        indexes = ((('contest', 'user'), True),)
+
+
+class ContestTeam(BaseModel):
+    contest = ForeignKeyField(Contest)
+    captain = ForeignKeyField(User)
+    name = CharField(max_length=120)
+    class Meta:
+        indexes = ((('contest', 'captain'), True), (('contest', 'name'), True))
+
+
+class ContestTeamMember(BaseModel):
+    contest = ForeignKeyField(Contest)
+    team = ForeignKeyField(ContestTeam)
+    user = ForeignKeyField(User)
+    class Meta:
+        indexes = ((('contest', 'user'), True),)
 
 
 class ContestParticipant(BaseModel):
@@ -429,8 +488,31 @@ class ContestProblem(BaseModel):
     score = IntegerField(default=100, verbose_name="题目满分(OI模式计分用)")
     sort_order = IntegerField(default=0, verbose_name="排序序号")
 
+    validation_version = IntegerField(default=1)
+    validation_status = CharField(max_length=20, default='PENDING')
+    validation_error = TextField(null=True)
+    checker_config = TextField(default='{"checker":"text"}')
+    package_digest = CharField(max_length=64, null=True)
+
     class Meta:
         table_name = "contest_problems"
+
+
+class ContestPackage(BaseModel):
+    digest = CharField(primary_key=True, max_length=64)
+    problem = ForeignKeyField(ContestProblem)
+    payload = TextField()
+    actor_id = IntegerField(null=True)
+    validation_state = CharField(default='VALID')
+    validation_error = TextField(null=True)
+
+
+class RejudgeBatch(BaseModel):
+    contest = ForeignKeyField(Contest)
+    actor = ForeignKeyField(User)
+    reason = TextField()
+    state = CharField(default='PENDING')
+    reviewed_by = IntegerField(null=True)
 
 
 class ContestSubmission(BaseModel):
@@ -465,14 +547,60 @@ class ContestSubmission(BaseModel):
     output_size = BigIntegerField(null=True, verbose_name="输出大小(bytes)")
     exit_code = IntegerField(null=True, verbose_name="退出码")
     signal = IntegerField(null=True, verbose_name="终止信号")
+    testcase_results = TextField(null=True)
     error_message = TextField(null=True, verbose_name="判题错误信息")
     idempotency_key = CharField(max_length=128, null=True, verbose_name="提交幂等键")
     received_at = DateTimeField(null=True, verbose_name="服务端受理时间")
+    team = ForeignKeyField(ContestTeam, null=True)
+    package_digest = CharField(max_length=64, null=True)
+    rejudge_batch = ForeignKeyField(RejudgeBatch, null=True)
+    rejudge_of = IntegerField(null=True)
+    rejudge_base_attempt = IntegerField(null=True)
+    request_digest = CharField(max_length=64, null=True)
     contest_eligible = BooleanField(default=True, verbose_name="是否计入比赛成绩")
     submitted_at = DateTimeField(default=datetime.now, verbose_name="提交时间")
 
     class Meta:
         table_name = "contest_submissions"
+        indexes = ((('contest', 'user', 'idempotency_key'), True),
+                   (('contest', 'team', 'idempotency_key'), True))
+
+
+class Judgement(BaseModel):
+    submission = ForeignKeyField(ContestSubmission)
+    attempt_id = IntegerField()
+    status = CharField()
+    payload = TextField()
+    package_digest = CharField(max_length=64, null=True)
+    batch_id = IntegerField(null=True)
+
+
+class ContestAudit(BaseModel):
+    contest = ForeignKeyField(Contest)
+    actor = ForeignKeyField(User)
+    action = CharField()
+    reason = TextField()
+    payload = TextField(default='{}')
+
+
+class ContestEvent(BaseModel):
+    contest = ForeignKeyField(Contest)
+    kind = CharField()
+    audience = CharField(default='jury')
+    recipient_id = IntegerField(null=True)
+    payload = TextField()
+    class Meta:
+        indexes = ((('contest', 'id'), False),)
+
+
+class ContestClarification(BaseModel):
+    contest = ForeignKeyField(Contest)
+    author = ForeignKeyField(User)
+    question = TextField()
+    answer = TextField(null=True)
+    claimed_by = IntegerField(null=True)
+    answered_by = IntegerField(null=True)
+    broadcast = BooleanField(default=False)
 
 
 class ContestScoreboardSnapshot(BaseModel):
@@ -482,15 +610,17 @@ class ContestScoreboardSnapshot(BaseModel):
     snapshot_kind = CharField(max_length=20, verbose_name="PUBLIC_FREEZE/FINAL")
     payload = TextField(verbose_name="排行榜 JSON")
     scoreboard_version = IntegerField(default=0)
+    event_cursor = BigIntegerField(default=0)
 
     class Meta:
         table_name = "contest_scoreboard_snapshots"
+        indexes = ((('contest', 'snapshot_kind'), True),)
 
 
 class ContestJudgeOutbox(BaseModel):
     """数据库事实与 Redis 队列之间的可靠投递记录。"""
     id = AutoField(primary_key=True)
-    submission = ForeignKeyField(ContestSubmission, backref="outbox", unique=True)
+    submission = ForeignKeyField(ContestSubmission, backref="outbox", unique=True, on_delete="CASCADE")
     state = CharField(max_length=20, default="PENDING")
     dispatch_attempts = IntegerField(default=0)
     last_error = TextField(null=True)
@@ -498,6 +628,27 @@ class ContestJudgeOutbox(BaseModel):
 
     class Meta:
         table_name = "contest_judge_outbox"
+
+
+class SubmissionOutbox(BaseModel):
+    submission = ForeignKeyField(Submission, backref='outbox', unique=True, on_delete='CASCADE')
+    state = CharField(max_length=20, default='PENDING', index=True)
+    dispatch_attempts = IntegerField(default=0)
+    last_error = TextField(null=True)
+    dispatched_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = 'submission_outbox'
+
+
+class ReferenceValidationJob(BaseModel):
+    id = CharField(primary_key=True, max_length=64)
+    problem = ForeignKeyField(ContestProblem, on_delete='CASCADE')
+    version = IntegerField()
+    state = CharField(max_length=20, default='PENDING', index=True)
+
+    class Meta:
+        table_name = 'reference_validation_jobs'
 
 
 class ContestTestcase(BaseModel):
@@ -545,10 +696,11 @@ class LearnBrowsingHistory(BaseModel):
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
-          Contest, ContestParticipant, Discussion, DiscussionReply,
-          ContestProblem, ContestTestcase, ContestSubmission, ContestScoreboardSnapshot,
-          ContestJudgeOutbox, LearnFavorite, LearnBrowsingHistory]
+MODELS = [User, UserJudgeStats, RankingProjectionState, AuthSession, OAuthGrant, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
+          Contest, ContestRole, ContestTeam, ContestTeamMember, ContestParticipant, Discussion, DiscussionReply, DiscussionLike, DiscussionReplyLike,
+          ContestProblem, ContestTestcase, ContestPackage, RejudgeBatch, ContestSubmission, Judgement,
+          ContestAudit, ContestEvent, ContestClarification, ContestScoreboardSnapshot,
+          ContestJudgeOutbox, SubmissionOutbox, ReferenceValidationJob, LearnFavorite, LearnBrowsingHistory]
 
 
 def create_tables():
@@ -865,6 +1017,65 @@ _SCHEMA_MIGRATIONS = [
             "ON contest_judge_outbox(state, created_at) WHERE state = 'PENDING';",
         ],
     ),
+    ('0017_backend_hardening', [
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS testcase_results TEXT;",
+        "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS job_id VARCHAR(64);",
+        "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS attempt_id INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE submissions ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(128);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_submission_job ON submissions(job_id);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_submission_idempotency ON submissions(user_id, idempotency_key) WHERE idempotency_key IS NOT NULL;",
+        "CREATE INDEX IF NOT EXISTS idx_submission_history ON submissions(user_id, id DESC);",
+        "CREATE INDEX IF NOT EXISTS idx_submission_accepted ON submissions(user_id, problem_id) WHERE status = 'AC';",
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS scoreboard_requested_version INTEGER NOT NULL DEFAULT 0;",
+        "UPDATE contests SET scoreboard_requested_version = COALESCE((SELECT MAX(scoreboard_version) FROM contest_scoreboard_snapshots s WHERE s.contest_id=contests.id), 0) + 1;",
+        "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS validation_version INTEGER NOT NULL DEFAULT 1;",
+        "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS validation_status VARCHAR(20) NOT NULL DEFAULT 'PENDING';",
+        "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS validation_error TEXT;",
+        # 已发布比赛不改变判题规则；草稿在部署后安排验证。
+        "UPDATE contest_problems SET validation_status='VALID' WHERE contest_id IN (SELECT id FROM contests WHERE lifecycle_state NOT IN ('DRAFT', 'READY'));",
+        "UPDATE submissions SET status='SystemError' WHERE job_id IS NULL AND status IN ('Pending', 'Running');",
+        "CREATE INDEX IF NOT EXISTS idx_contest_submission_board ON contest_submissions(contest_id, user_id, problem_index, received_at) WHERE contest_eligible=true;",
+        "ALTER TABLE contest_judge_outbox DROP CONSTRAINT IF EXISTS contest_judge_outbox_submission_id_fkey;",
+        "ALTER TABLE contest_judge_outbox ADD CONSTRAINT contest_judge_outbox_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES contest_submissions(id) ON DELETE CASCADE;",
+    ]),
+    ('0018_browser_sessions', [
+        "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS previous_refresh_hash VARCHAR(64);",
+        "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS refresh_request_id VARCHAR(128);",
+        "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS refresh_retry_ciphertext TEXT;",
+        "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS refresh_retry_until TIMESTAMP;",
+        "CREATE INDEX IF NOT EXISTS idx_discussion_reply_page ON discussion_replies(discussion_id, created_at, id);",
+        "CREATE INDEX IF NOT EXISTS idx_discussion_category ON discussions(category, is_pinned, created_at);",
+    ]),
+    ('0019_role_authority_and_freeze', [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_role VARCHAR(20);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS local_role VARCHAR(20);",
+        # 旧版本曾在未封榜时写入该派生缓存；只清理可重建快照，保留正式最终榜。
+        "DELETE FROM contest_scoreboard_snapshots WHERE snapshot_kind='PUBLIC_FREEZE';",
+    ]),
+
+    ('0020_acm_control', [
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS thawed_at TIMESTAMP;",
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS final_revision INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE contest_scoreboard_snapshots ADD COLUMN IF NOT EXISTS event_cursor BIGINT NOT NULL DEFAULT 0;",
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS rules_version VARCHAR(255) NOT NULL DEFAULT 'acm-2026-v1';",
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS allowed_languages TEXT NOT NULL DEFAULT '[\"cpp\",\"python\",\"java\",\"go\",\"javascript\"]';",
+        "ALTER TABLE contests ADD COLUMN IF NOT EXISTS active_submission_limit INTEGER NOT NULL DEFAULT 3;",
+        "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS checker_config TEXT NOT NULL DEFAULT '{\"checker\":\"text\"}';",
+        "ALTER TABLE contest_problems ADD COLUMN IF NOT EXISTS package_digest VARCHAR(64);",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS team_id INTEGER REFERENCES contestteam(id);",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS package_digest VARCHAR(64);",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS rejudge_batch_id INTEGER REFERENCES rejudgebatch(id);",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS rejudge_of INTEGER;",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS rejudge_base_attempt INTEGER;",
+        "ALTER TABLE contest_submissions ADD COLUMN IF NOT EXISTS request_digest VARCHAR(64);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_contest_team_idempotency ON contest_submissions(contest_id, team_id, idempotency_key) WHERE team_id IS NOT NULL AND idempotency_key IS NOT NULL;",
+        "CREATE INDEX IF NOT EXISTS idx_contest_rejudge ON contest_submissions(rejudge_batch_id, rejudge_of);",
+        "CREATE INDEX IF NOT EXISTS idx_contest_waiting ON contest_submissions(received_at) WHERE contest_eligible AND status IN ('Pending', 'Queued');",
+        "CREATE INDEX IF NOT EXISTS idx_contest_finished ON contest_submissions(finished_at DESC) WHERE contest_eligible;",
+        "UPDATE contests SET thawed_at=COALESCE(finalized_at,end_time) WHERE lifecycle_state='FINALIZED' AND thawed_at IS NULL;",
+        "UPDATE contests SET scoreboard_requested_version=GREATEST(scoreboard_requested_version,COALESCE((SELECT MAX(s.scoreboard_version) FROM contest_scoreboard_snapshots s WHERE s.contest_id=contests.id),0))+1 WHERE lifecycle_state NOT IN ('FINALIZED','CANCELLED');",
+        "DELETE FROM contest_scoreboard_snapshots WHERE snapshot_kind='PUBLIC_FREEZE';",
+    ]),
 ]
 
 
@@ -875,56 +1086,35 @@ def _apply_migrations(db):
     迁移记录保存在 schema_migrations 表中；若该表无法创建，
     仍会继续执行迁移（迁移语句本身幂等，可重复运行）。
     """
-    try:
-        db.execute_sql(
-            "CREATE TABLE IF NOT EXISTS schema_migrations ("
-            "name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT now())"
-        )
-    except Exception:
-        pass
-
-    applied = set()
-    try:
-        applied = {
-            row[0]
-            for row in db.execute_sql("SELECT name FROM schema_migrations").fetchall()
-        }
-    except Exception:
-        applied = set()
-
+    db.execute_sql("CREATE TABLE IF NOT EXISTS schema_migrations (name VARCHAR(255) PRIMARY KEY, applied_at TIMESTAMP DEFAULT now())")
+    applied = {row[0] for row in db.execute_sql('SELECT name FROM schema_migrations').fetchall()}
     for name, sqls in _SCHEMA_MIGRATIONS:
         if name in applied:
             continue
-        try:
-            with db.atomic():
-                for sql in sqls:
-                    db.execute_sql(sql)
-            try:
-                db.execute_sql(
-                    "INSERT INTO schema_migrations(name) VALUES (%s) "
-                    "ON CONFLICT (name) DO NOTHING",
-                    (name,),
-                )
-            except Exception:
-                pass
-            print(f"[DB] 迁移已应用: {name}")
-        except Exception as e:
-            print(f"[DB] 迁移失败(已跳过): {name}: {sanitize_db_error(str(e))}")
+        with db.atomic():
+            for sql in sqls:
+                db.execute_sql(sql)
+            db.execute_sql('INSERT INTO schema_migrations(name) VALUES (%s)', (name,))
 
 
 def run_schema_migrations():
-    """
-    执行所有数据库迁移。
-
-    在连接建立（含自动重连）后应用迁移，数据库暂时不可用时安全跳过，
-    不会阻塞应用启动。
-    """
+    """显式部署步骤：互斥迁移，任意错误立即失败，迁移记录与 DDL 同事务。"""
     db = get_database()
-    try:
-        with ensure_connected(db):
+    with db.connection_context():
+        db.execute_sql('SELECT pg_advisory_lock(735194002)')
+        try:
+            for model in MODELS:
+                if not model.table_exists():
+                    model.create_table()
             _apply_migrations(db)
-    except DatabaseUnavailableError as e:
-        print(f"[DB] 迁移跳过(数据库不可用): {sanitize_db_error(str(e))}")
+            # 新草稿补入持久化验证任务，重复部署不重复创建。
+            from uuid import uuid4
+            for problem in ContestProblem.select().where(ContestProblem.validation_status == 'PENDING'):
+                if not ReferenceValidationJob.select().where(
+                    (ReferenceValidationJob.problem == problem) & (ReferenceValidationJob.version == problem.validation_version)).exists():
+                    ReferenceValidationJob.create(id=uuid4().hex, problem=problem, version=problem.validation_version)
+        finally:
+            db.execute_sql('SELECT pg_advisory_unlock(735194002)')
 
 
 def migrate_add_role_column():
@@ -935,39 +1125,17 @@ def migrate_add_role_column():
 
 
 def seed_problem_catalog():
-    """
-    将内存题库（pages.problem_data.PROBLEMS）同步到 PostgreSQL 的 problems 表。
-
-    启动时调用，幂等：只插入缺失的题目，不更新已有记录。
-    这样 submissions / favorites 等外键引用 problems 表时不会违约。
-    数据库不可用时安全跳过。
-    """
+    """显式部署步骤：幂等补齐题库；任意失败回滚并让命令非零退出。"""
     from pages.problem_data import PROBLEMS
-
     db = get_database()
-    inserted = 0
-    try:
-        with ensure_connected(db):
-            for problem_id, pdata in PROBLEMS.items():
-                try:
-                    exists = Problem.select().where(Problem.id == problem_id).exists()
-                    if exists:
-                        continue
-                    Problem.create(
-                        id=problem_id,
-                        title=pdata.get('title', f'题目 {problem_id}'),
-                        description=pdata.get('description', ''),
-                        input_desc=pdata.get('inputFormat', ''),
-                        output_desc=pdata.get('outputFormat', ''),
-                        difficulty=pdata.get('difficulty', '简单'),
-                        time_limit=pdata.get('timeLimit', 1000),
-                        memory_limit=pdata.get('memoryLimit', 256),
-                        is_public=True,
-                    )
-                    inserted += 1
-                except Exception as e:
-                    print(f"[DB] 题目 {problem_id} 同步失败(已跳过): {sanitize_db_error(str(e))}")
-        if inserted:
-            print(f"[DB] 题库同步完成: 新增 {inserted} 道题目")
-    except DatabaseUnavailableError as e:
-        print(f"[DB] 题库同步跳过(数据库不可用): {sanitize_db_error(str(e))}")
+    with db.connection_context(), db.atomic():
+        for problem_id, pdata in PROBLEMS.items():
+            (Problem.insert(id=problem_id,
+                title=pdata.get('title', f'题目 {problem_id}'),
+                description=pdata.get('description', ''),
+                input_desc=pdata.get('inputFormat', ''),
+                output_desc=pdata.get('outputFormat', ''),
+                difficulty=pdata.get('difficulty', '简单'),
+                time_limit=pdata.get('timeLimit', 1000),
+                memory_limit=pdata.get('memoryLimit', 256), is_public=True)
+             .on_conflict_ignore().execute())

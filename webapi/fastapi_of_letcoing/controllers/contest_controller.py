@@ -1,3 +1,4 @@
+from services.contest_lifecycle import transactional, lock_contest
 import json
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
@@ -5,7 +6,7 @@ from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import (
     Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission,
-    ContestJudgeOutbox, get_database,
+    ContestJudgeOutbox, ContestTeamMember, get_database,
 )
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
@@ -93,18 +94,22 @@ def _parse_dt(value):
         return None
 
 
-def _contest_time_error(contest):
+def _contest_time_error(contest, received_at=None):
     """返回当前时间不在比赛设定范围内时的错误提示，否则返回 None。
 
     数据库 start_time/end_time 为 timestamp without time zone，按项目约定以
     Asia/Shanghai（UTC+8）墙钟存储/传输；读出时为 naive 值，这里统一当作 UTC+8
     解释再与 UTC 当前时间比较，避免被误当作 UTC 而产生时区偏移。
     """
-    if contest.lifecycle_state == 'DRAFT':
+    if contest.lifecycle_state == 'FINALIZED':
+        return '比赛已结算'
+    if contest.lifecycle_state in {'DRAFT', 'READY'}:
         return '比赛尚未发布'
     if contest.lifecycle_state == 'CANCELLED':
         return '比赛已取消'
-    now = datetime.now(timezone.utc)
+    now = received_at or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=_CST)
 
     def _aware(dt):
         if dt is None:
@@ -115,7 +120,7 @@ def _contest_time_error(contest):
     end = _aware(contest.end_time)
     if start is not None and now < start:
         return '比赛尚未开始'
-    if end is not None and now > end:
+    if end is not None and now >= end:
         return '比赛已结束'
     return None
 
@@ -125,14 +130,15 @@ def _contest_status(contest):
     error = _contest_time_error(contest)
     if error in ('比赛尚未发布', '比赛尚未开始'):
         return 'upcoming'
-    if error in ('比赛已取消', '比赛已结束'):
+    if error in ('比赛已取消', '比赛已结束', '比赛已结算'):
         return 'past'
     return 'ongoing'
 
 
 def _contest_is_frozen(contest) -> bool:
     """封榜只影响对参赛者的公开可见性，不停止判题或真实计分。"""
-    if not contest.freeze_time or _contest_status(contest) != 'ongoing':
+    if (not contest.freeze_time or contest.thawed_at
+            or contest.lifecycle_state in {'DRAFT', 'READY', 'CANCELLED'}):
         return False
     freeze_time = contest.freeze_time
     if freeze_time.tzinfo is None:
@@ -154,6 +160,9 @@ def _public_problem_data(problem):
     """对参赛者返回题面，不暴露参考答案或任何隐藏测试数据。"""
     data = problem.to_dict()
     data.pop('correct_answer', None)
+    data.pop('validation_error', None)
+    data.pop('checker_config', None)
+    data.pop('package_digest', None)
     return data
 
 
@@ -297,6 +306,7 @@ class ContestDetailController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
 
+    @transactional
     def put(self, contest_id):
         """更新比赛"""
         user = _get_current_user()
@@ -306,7 +316,7 @@ class ContestDetailController(Resource):
             return {'error': '仅管理员可管理比赛'}, 403
 
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         if contest.lifecycle_state not in ('DRAFT', 'READY'):
@@ -351,6 +361,7 @@ class ContestDetailController(Resource):
         return _contest_to_dict(contest), 200
 
 
+    @transactional
     def delete(self, contest_id):
         """删除比赛"""
         user = _get_current_user()
@@ -360,7 +371,7 @@ class ContestDetailController(Resource):
             return {'error': '仅管理员可管理比赛'}, 403
 
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         if not can_delete_contest(contest.lifecycle_state):
@@ -392,11 +403,12 @@ class ContestDetailController(Resource):
             contest.delete_instance()
             return {'success': True}, 200
         except Exception as exc:
-            return {'error': f'删除失败: {exc}'}, 500
+            return {'error': '服务暂时不可用'}, 503
 
 
 @api.route('/<int:contest_id>/cancel')
 class ContestCancelController(Resource):
+    @transactional
     def post(self, contest_id):
         """取消比赛但保留题目、提交和操作痕迹，避免破坏审计链。"""
         user = _get_current_user()
@@ -405,7 +417,7 @@ class ContestCancelController(Resource):
         if user.role != 'manager':
             return {'error': '仅管理员可管理比赛'}, 403
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         if contest.lifecycle_state == 'FINALIZED':
@@ -430,6 +442,7 @@ class ContestManageListController(Resource):
 
 @api.route('/<int:contest_id>/publish')
 class ContestPublishController(Resource):
+    @transactional
     def post(self, contest_id):
         """发布比赛：冻结发布版本前，必须保证每题均有可用隐藏测试数据。"""
         user = _get_current_user()
@@ -438,7 +451,7 @@ class ContestPublishController(Resource):
         if user.role != 'manager':
             return {'error': '仅管理员可发布比赛'}, 403
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         if contest.lifecycle_state not in ('DRAFT', 'READY'):
@@ -449,12 +462,19 @@ class ContestPublishController(Resource):
         if not problems:
             return {'error': '发布比赛至少需要一道题目'}, 400
         for problem in problems:
+            if problem.validation_status != 'VALID':
+                return {'error': f'题目 {problem.problem_index} 的参考答案尚未验证通过'}, 409
             has_hidden_testcase = ContestTestcase.select().where(
                 ContestTestcase.contest_problem == problem,
                 ContestTestcase.is_sample == False,
             ).exists()
             if not has_hidden_testcase:
                 return {'error': f'题目 {problem.problem_index} 缺少隐藏测试数据'}, 400
+        from services.contest_packages import publish_package
+        for problem in problems:
+            problem.package_digest = publish_package(problem, user.id).digest
+            problem.save(only=[ContestProblem.package_digest])
+        contest.scoreboard_requested_version += 1
         contest.lifecycle_state = 'SCHEDULED'
         contest.published_at = datetime.now(_CST).replace(tzinfo=None)
         contest.save()
@@ -463,34 +483,27 @@ class ContestPublishController(Resource):
 
 @api.route('/<int:contest_id>/join')
 class ContestJoinController(Resource):
+    @transactional
     def post(self, contest_id):
-        """参加比赛"""
         user = _get_current_user()
         if not user:
             return {'error': '请先登录'}, 401
-
         try:
-            contest = Contest.get_by_id(contest_id)
+            contest = lock_contest(contest_id)
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
-
-        time_error = _contest_time_error(contest)
-        if time_error:
-            return {'error': time_error}, 400
-
-        exists = ContestParticipant.select().where(
-            ContestParticipant.contest == contest,
-            ContestParticipant.user == user,
-        ).exists()
-        if exists:
-            return {'success': True, 'message': '已参加比赛', 'already_joined': True}, 200
-
-        try:
-            ContestParticipant.create(contest=contest, user=user)
-        except Exception:
-            # 并发报名时唯一索引可能先于本次请求写入；按幂等成功处理。
-            return {'success': True, 'message': '已参加比赛', 'already_joined': True}, 200
-        return {'success': True, 'message': '已参加比赛'}, 201
+        if ContestParticipant.select().where(ContestParticipant.contest == contest,
+                ContestParticipant.user == user).exists():
+            return {'success': True, 'already_joined': True}, 200
+        from services.contest_operations import now, emit
+        if contest.lifecycle_state not in {'SCHEDULED', 'RUNNING'} or not contest.is_public:
+            return {'error': '比赛未开放报名'}, 409
+        if not contest.start_time or now() >= contest.start_time:
+            return {'error': '比赛开始后名单已锁定'}, 409
+        ContestParticipant.create(contest=contest, user=user)
+        Contest.update(scoreboard_requested_version=Contest.scoreboard_requested_version+1).where(Contest.id == contest_id).execute()
+        emit(contest_id, 'entry', {'entry_id': user.id})
+        return {'success': True, 'message': '报名成功'}, 201
 
 
 @api.route('/<int:contest_id>/problems/<int:problem_id>/submit')
@@ -510,9 +523,6 @@ class ContestProblemSubmitController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
 
-        time_error = _contest_time_error(contest)
-        if time_error:
-            return {'error': time_error}, 400
         if not _require_participant(contest, user):
             return {'error': '请先参加比赛'}, 403
 
@@ -525,19 +535,26 @@ class ContestProblemSubmitController(Resource):
             return {'error': '题目不属于该比赛'}, 400
 
         data = request.get_json(silent=True) or {}
-        code = str(data.get('code', ''))
-        language = str(data.get('language', 'cpp') or 'cpp')
-        if not code.strip():
-            return {'error': '代码不能为空'}, 400
+        from utils.request_validation import execution_fields
+        try:
+            code, language, _ = execution_fields(data, 'cpp', set(json.loads(contest.allowed_languages)))
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
 
-        idempotency_key = request.headers.get('Idempotency-Key', '').strip()[:128] or None
+        member = ContestTeamMember.get_or_none(ContestTeamMember.contest == contest_id, ContestTeamMember.user == user.id)
+        owner = (ContestSubmission.team == member.team_id) if member else (ContestSubmission.user == user.id)
+        idempotency_key = request.headers.get('Idempotency-Key', '').strip() or None
+        if idempotency_key and len(idempotency_key) > 128:
+            return {'error': '幂等键过长'}, 400
         if idempotency_key:
             existing = ContestSubmission.select().where(
                 ContestSubmission.contest == contest,
-                ContestSubmission.user == user,
+                owner,
                 ContestSubmission.idempotency_key == idempotency_key,
             ).first()
             if existing:
+                if (existing.contest_problem_id != problem.id or existing.language != language or existing.code != code):
+                    return {'error': '幂等键已用于不同提交'}, 409
                 return {
                     'submission_id': existing.id,
                     'job_id': existing.job_id,
@@ -550,17 +567,41 @@ class ContestProblemSubmitController(Resource):
         job_id = uuid4().hex
         # 排行榜罚时以用户提交进入系统的时刻为准，绝不能使用 Worker 排队完成时刻。
         received_at = datetime.now(_CST).replace(tzinfo=None)
-        if contest.end_time and received_at > contest.end_time.replace(tzinfo=None):
-            return {'error': '比赛已结束'}, 400
+        time_error = _contest_time_error(contest, received_at)
+        if time_error:
+            return {'error': time_error}, 400
         submitted_at = received_at.isoformat()
 
         # PostgreSQL 是提交事实源：先创建记录，再把 job 放入队列。
         # 数据库不可用时直接拒绝提交，避免产生 Redis 中永久 Pending 的幽灵任务。
         try:
             with get_database().atomic():
+                contest = lock_contest(contest_id)
+                time_error = _contest_time_error(contest, received_at)
+                if time_error:
+                    return {'error': time_error}, 409
+                from services.contest_operations import entry_user
+                entry_id = entry_user(contest_id, user.id)
+                member = ContestTeamMember.get_or_none(ContestTeamMember.contest == contest_id, ContestTeamMember.user == user.id)
+                if get_database().__class__.__name__ != 'SqliteDatabase':
+                    User.select().where(User.id == entry_id).for_update().get()
+                from services.judge_state import TERMINAL_STATES
+                owner = (ContestSubmission.team == member.team_id) if member else (ContestSubmission.user == user.id)
+                active = ContestSubmission.select().where(owner, ContestSubmission.contest == contest,
+                    ContestSubmission.contest_eligible == True,
+                    ~ContestSubmission.status.in_(list(TERMINAL_STATES))).count()
+                if active >= contest.active_submission_limit:
+                    return {'error': '最多同时处理 3 个比赛提交'}, 429, {'Retry-After': '5'}
+                from services.contest_packages import publish_package, canonical
+                import hashlib
+                if not problem.package_digest:
+                    problem.package_digest = publish_package(problem, user.id).digest
+                    problem.save(only=[ContestProblem.package_digest])
+                digest = hashlib.sha256(canonical([contest_id, entry_id, problem_id, language, code]).encode()).hexdigest()
                 submission = ContestSubmission.create(
                     contest=contest,
-                    user=user,
+                    user=user, team=member.team_id if member else None,
+                    package_digest=problem.package_digest, request_digest=digest,
                     contest_problem=problem,
                     problem_index=problem.problem_index or '',
                     status=QUEUED,
@@ -577,15 +618,20 @@ class ContestProblemSubmitController(Resource):
                     idempotency_key=idempotency_key,
                 )
                 outbox = ContestJudgeOutbox.create(submission=submission)
+                Contest.update(scoreboard_requested_version=Contest.scoreboard_requested_version+1).where(Contest.id == contest_id).execute()
+                from services.contest_operations import emit
+                emit(contest_id, 'submission', {'submission_id': submission.id, 'entry_id': entry_id}, 'jury')
         except Exception:
             # 并发重试可能由唯一幂等索引先完成写入；把它视为同一提交。
             if idempotency_key:
                 existing = ContestSubmission.select().where(
                     ContestSubmission.contest == contest,
-                    ContestSubmission.user == user,
+                    owner,
                     ContestSubmission.idempotency_key == idempotency_key,
                 ).first()
                 if existing:
+                    if (existing.contest_problem_id != problem.id or existing.language != language or existing.code != code):
+                        return {'error': '幂等键已用于不同提交'}, 409
                     return {
                         'submission_id': existing.id,
                         'job_id': existing.job_id,
@@ -621,19 +667,21 @@ class ContestProblemSubmissionResultController(Resource):
             submission = ContestSubmission.get_by_id(submission_id)
         except ContestSubmission.DoesNotExist:
             return {'error': '提交记录不存在'}, 404
+        if submission.rejudge_of is not None or not submission.contest_eligible:
+            return {'error': '提交记录不存在'}, 404
         if (
-            submission.user_id != user.id
+            (submission.user_id != user.id and not (
+                submission.team_id and ContestTeamMember.select().where(
+                    ContestTeamMember.team == submission.team_id,
+                    ContestTeamMember.user == user.id).exists()))
             or submission.contest_id != contest_id
             or submission.contest_problem_id != problem_id
         ):
             return {'error': '无权访问该提交'}, 403
         result = _submission_to_result(submission)
-        # ICPC 封榜后，参赛者继续收到错误结果，但不能从 AC 结果推断真实榜单。
-        if _contest_is_frozen(Contest.get_by_id(contest_id)) and user.role != 'manager':
-            if result['status'] == 'AC':
-                result['status'] = 'Frozen'
-                result['verdict'] = 'Frozen'
-                result['details'] = []
+        # 封榜保护其他队伍结果；队伍始终可以查看自己的判定。
+        if 'oi' not in (submission.contest.contest_type or '').lower():
+            result.update(passed=0, total=0, score=0, details=[])
         return result, 200
 
 
@@ -657,7 +705,7 @@ class ContestProblemListPublicController(Resource):
         except Contest.DoesNotExist:
             return {'error': '比赛不存在'}, 404
         except Exception as e:
-            return {'error': str(e)}, 500
+            return {'error': '服务暂时不可用'}, 503
 
 
 @api.route('/<int:contest_id>/statuses')
@@ -672,19 +720,14 @@ class ContestProblemStatusesController(Resource):
             contest = Contest.get_by_id(contest_id)
             if not _require_participant(contest, user):
                 return {'error': '请先参加比赛'}, 403
-            subs = (
-                ContestSubmission.select()
-                .where(
-                    ContestSubmission.contest == contest_id,
-                    ContestSubmission.user == user,
-                )
-                .order_by(ContestSubmission.submitted_at.desc())
-            )
+            member = ContestTeamMember.get_or_none(ContestTeamMember.contest == contest_id, ContestTeamMember.user == user.id)
+            owner = (ContestSubmission.team == member.team_id) if member else (ContestSubmission.user == user.id)
+            subs = (ContestSubmission.select(ContestSubmission.contest_problem, ContestSubmission.status)
+                .where(ContestSubmission.contest == contest_id, owner, ContestSubmission.contest_eligible == True)
+                .order_by(ContestSubmission.received_at.desc(), ContestSubmission.id.desc()))
             best: dict = {}
             for s in subs:
                 pid = s.contest_problem_id
-                if _contest_is_frozen(contest) and user.role != 'manager' and s.status == 'AC':
-                    continue
                 if pid not in best:
                     best[pid] = {'status': s.status, 'solved': s.status == 'AC'}
                 elif not best[pid]['solved'] and s.status == 'AC':
@@ -715,7 +758,7 @@ class ContestProblemDetailPublicController(Resource):
                 return {'error': '请先参加比赛'}, 403
             return _public_problem_data(problem), 200
         except Exception as e:
-            return {'error': str(e)}, 500
+            return {'error': '服务暂时不可用'}, 503
 
 
 @api.route('/problems/<int:problem_id>')

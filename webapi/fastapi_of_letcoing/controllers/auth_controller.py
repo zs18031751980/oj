@@ -1,3 +1,4 @@
+from services.browser_session import browser_tokens, clear_refresh_cookie, require_browser_request, COOKIE_NAME
 """
 认证 API 控制器模块
 
@@ -19,13 +20,18 @@ from urllib.parse import urlparse, urlunparse, urlencode  # URL 解析与构建
 
 import jwt             # PyJWT 库，用于解码未经验证的 JWT 令牌
 import requests        # HTTP 请求库，用于调用外部认证服务
-from flask import redirect, request, session    # Flask 核心模块
+from flask import redirect, request, session, current_app    # Flask 核心模块
 from flask_restx import Namespace, Resource, fields  # Flask-RESTX：API 命名空间、资源、模型字段
 from werkzeug.security import check_password_hash   # Werkzeug 安全工具，用于密码哈希验证
 
 from core.di_container import inject  # 依赖注入辅助函数
 from interfaces.service_interfaces import IConfigService, IJWTService, ILoggerService, IOIDCService, IUserService
 from models.auth_models import TokenResponse, UserInfo
+from middleware.auth_middleware import RateLimitMiddleware
+from models.db_models import OAuthGrant, User, get_database
+from services.jwt_service import token_hash, utcnow
+from datetime import timedelta
+import secrets
 from utils.identity_utils import extract_account_status
 from utils.oauth_utils import normalize_provider_scope
 from utils.role_utils import extract_highest_role, pick_highest_role
@@ -55,7 +61,7 @@ password_login_request_model = api.model('PasswordLoginRequest', {
 
 # 令牌刷新请求模型
 token_request_model = api.model('TokenRequest', {
-    'refresh_token': fields.String(required=True, description='刷新令牌（Refresh Token）'),
+    'remember': fields.Boolean(description='保持会话；刷新凭证通过 HttpOnly Cookie 提供'),
 })
 
 # ---------- 响应模型 ----------
@@ -70,7 +76,6 @@ login_response_model = api.model('LoginResponse', {
 # 令牌响应模型（包含访问令牌和刷新令牌）
 token_response_model = api.model('TokenResponse', {
     'access_token': fields.String(description='访问令牌（Access Token）'),
-    'refresh_token': fields.String(description='刷新令牌（Refresh Token）'),
     'expires_in': fields.Integer(description='令牌有效期（秒）'),
     'token_type': fields.String(description='令牌类型（如 Bearer）'),
     'user_info': fields.Raw(description='用户信息'),
@@ -121,18 +126,13 @@ def _frontend_callback_url(tokens: TokenResponse, user_info: UserInfo, next_path
     Returns:
         完整的前端回调 URL
     """
-    frontend_url = _get_frontend_url()
-    safe_next = next_path if next_path.startswith('/') else '/'
-    query = urlencode({
-        'access_token': tokens.access_token,
-        'refresh_token': tokens.refresh_token,
-        'expires_in': tokens.expires_in,
-        'token_type': tokens.token_type,
-        'user_info': json.dumps(user_info.to_dict(), ensure_ascii=False),
-        'provider': user_info.provider,
-        'next': safe_next,
-    })
-    return f'{frontend_url}/auth/callback?{query}'
+    binding = session.get('oauth_exchange_binding') or secrets.token_urlsafe(32)
+    session['oauth_exchange_binding'] = binding
+    code = secrets.token_urlsafe(32)
+    OAuthGrant.create(id=token_hash(code), user=int(user_info.id), binding_hash=token_hash(binding),
+                      expires_at=utcnow() + timedelta(seconds=60))
+    safe_next = next_path if next_path.startswith('/') and not next_path.startswith('//') and '\\' not in next_path else '/'
+    return f"{_get_frontend_url()}/auth/callback?{urlencode({'code': code, 'next': safe_next})}"
 
 
 def _frontend_error_callback_url(
@@ -249,88 +249,16 @@ def _provider_scope(provider: str, provider_config: dict) -> str:
     return normalize_provider_scope(provider, '')
 
 
-def _decode_unverified_jwt(token: str) -> dict:
-    """
-    解码但不对 JWT 令牌进行签名验证
-
-    用于从外部提供商返回的令牌中提取声明信息（如 sub、email 等），
-    这些令牌是由外部提供商签发的，我们只关心其中的用户信息。
-
-    Args:
-        token: JWT 字符串
-
-    Returns:
-        解码后的声明字典，解码失败返回空字典
-    """
-    try:
-        payload = jwt.decode(token, options={'verify_signature': False, 'verify_exp': False})
-        return payload if isinstance(payload, dict) else {}
-    except Exception:
-        return {}
-
-
 def _user_info_from_provider_token(provider: str, identifier: str, token: str) -> dict:
-    """
-    从外部提供商签发的 JWT 令牌中提取用户信息
-
-    这些令牌由第三方认证服务签发（如 IOSClub），其中包含了用户的身份信息。
-    函数从令牌的声明中提取各种用户字段（sub、username、email 等）。
-
-    Args:
-        provider: 提供商名称
-        identifier: 用户标识（如用户名）
-        token: 提供商签发的 JWT 令牌
-
-    Returns:
-        包含用户信息的字典
-    """
-    claims = _decode_unverified_jwt(token)
-
-    logger_service = inject(ILoggerService)
-    claim_names = sorted(key for key in claims if not key.startswith('_'))
-    logger_service.info(f'JWT claim fields for {provider}: {",".join(claim_names)}')
-
-    subject = (
-        claims.get('sub')
-        or claims.get('id')
-        or claims.get('user_id')
-        or claims.get('uid')
-        or claims.get('userId')
-        or identifier
-    )
-    username = (
-        claims.get('name')
-        or claims.get('preferred_username')
-        or claims.get('nickname')
-        or claims.get('username')
-        or claims.get('userId')
-        or identifier
-    )
-    email = claims.get('email') or None
-    name = claims.get('name') or claims.get('nickname') or username or email or str(subject)
-
-    role = extract_highest_role(claims)
-    result = {
-        'id': str(subject),
-        'username': str(username or ''),
-        'email': str(email or ''),
-        'name': str(name or ''),
-        'avatar_url': (
-            claims.get('picture')
-            or claims.get('avatar')
-            or claims.get('avatar_url')
-            or ''
-        ),
-        'provider': provider,
-        'role': role,
-    }
-    account_status = extract_account_status(claims)
-    if account_status is not None:
-        result['is_active'] = account_status
-    return result
+    service = inject(IOIDCService)
+    client = service._oauth.create_client(provider)
+    info = service._get_user_info(provider, client, {'access_token': token, 'token_type': 'Bearer'})
+    if not info:
+        raise ValueError('提供商未返回经过认证的用户资料')
+    return info
 
 
-def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
+def _issue_tokens_for_provider_user(provider: str, user_info_data: dict, issue_tokens=True):
     """
     为通过外部提供商登录的用户签发 JWT 令牌
 
@@ -367,6 +295,8 @@ def _issue_tokens_for_provider_user(provider: str, user_info_data: dict):
 
     jwt_service = inject(IJWTService)
     user_info = _build_user_info(provider, user_info_data)
+    if not issue_tokens:
+        return user_info, None
     jwt_tokens = jwt_service.generate_tokens(user_info.to_dict())
     token_response = TokenResponse(
         access_token=jwt_tokens.access_token,
@@ -531,6 +461,7 @@ class AuthPasswordLoginController(Resource):
     @api.response(200, 'Success', auth_result_model)
     @api.response(400, 'Bad Request')
     @api.response(401, 'Unauthorized')
+    @RateLimitMiddleware.rate_limit(10, 60, account_max_requests=20)
     def post(self):
         """通过用户名或邮箱进行本地账号密码登录"""
         jwt_service = inject(IJWTService)
@@ -593,7 +524,7 @@ class AuthPasswordLoginController(Resource):
         return {
             'success': True,
             'user_info': user_info.to_dict(),
-            'tokens': token_response.to_dict(),
+            'tokens': browser_tokens(token_response.to_dict()),
         }, 200
 
 
@@ -611,6 +542,7 @@ class AuthProviderPasswordLoginController(Resource):
     @api.response(200, 'Success', auth_result_model)
     @api.response(400, 'Bad Request')
     @api.response(401, 'Unauthorized')
+    @RateLimitMiddleware.rate_limit(10, 60, account_max_requests=20)
     def post(self, provider: str):
         """通过已配置的 OIDC 提供商进行密码登录（绕过 OAuth 浏览器跳转）"""
         oidc_service = inject(IOIDCService)
@@ -717,7 +649,7 @@ class AuthProviderPasswordLoginController(Resource):
         return {
             'success': True,
             'user_info': user_info.to_dict(),
-            'tokens': token_response.to_dict(),
+            'tokens': browser_tokens(token_response.to_dict()),
         }, 200
 
 
@@ -794,6 +726,7 @@ class AuthCallbackController(Resource):
             user_info, token_response = _issue_tokens_for_provider_user(
                 resolved_provider,
                 user_info_data,
+                issue_tokens=request.args.get('format') == 'json',
             )
         except PermissionError:
             if request.args.get('format') == 'json':
@@ -821,7 +754,7 @@ class AuthCallbackController(Resource):
             return {
                 'success': True,
                 'user_info': user_info.to_dict(),
-                'tokens': token_response.to_dict(),
+                'tokens': browser_tokens(token_response.to_dict()),
             }, 200
 
         return redirect(_frontend_callback_url(token_response, user_info, next_path))
@@ -840,43 +773,23 @@ class AuthRefreshController(Resource):
     @api.doc('refresh_token')
     @api.response(200, 'Success', token_response_model)
     @api.response(400, 'Bad Request')
+    @RateLimitMiddleware.rate_limit(60, 60)
     def post(self):
         """使用刷新令牌获取新的访问令牌"""
         jwt_service = inject(IJWTService)
         data = request.get_json(silent=True) or {}
-        refresh_token = data.get('refresh_token', '')
+        require_browser_request()
+        refresh_token = request.cookies.get(COOKIE_NAME, '')
 
         if not refresh_token:
             return {'error': 'refresh_token is required'}, 400
 
-        new_tokens = jwt_service.refresh_access_token(refresh_token)
+        new_tokens = jwt_service.refresh_browser_session(refresh_token, request.headers.get('Idempotency-Key', ''))
         if not new_tokens:
             return {'error': 'refresh_token is invalid or expired'}, 400
 
-        # 从新的访问令牌中解析用户信息
         user_info = jwt_service.verify_access_token(new_tokens.access_token)
-        if user_info:
-            # 从数据库获取最新角色，避免刷新后仍持有过期角色
-            try:
-                from models.db_models import User
-                user = User.get_by_id(int(user_info.get('id', 0)))
-                if user and user.role != user_info.get('role'):
-                    user_info['role'] = user.role
-                    # 更新 Redis 缓存并重新签发包含正确角色的令牌
-                    jwt_service.refresh_cached_user(str(user.id), user_info)
-                    new_tokens = jwt_service.generate_tokens(user_info)
-                    user_info = jwt_service.verify_access_token(new_tokens.access_token)
-            except Exception:
-                pass
-
-        user_obj = UserInfo(**user_info) if user_info else None
-        token_response = TokenResponse(
-            access_token=new_tokens.access_token,
-            refresh_token=new_tokens.refresh_token,
-            expires_in=new_tokens.expires_in,
-            user_info=user_obj,
-        )
-        return token_response.to_dict(), 200
+        return {**browser_tokens(new_tokens.to_dict()), 'user_info': user_info}, 200
 
 
 @api.route('/logout')
@@ -893,15 +806,16 @@ class AuthLogoutController(Resource):
     @api.response(400, 'Bad Request')
     def post(self):
         """撤销当前访问令牌（登出）"""
+        require_browser_request()
         jwt_service = inject(IJWTService)
+        cookie = request.cookies.get(COOKIE_NAME)
+        if cookie:
+            jwt_service.revoke_refresh_cookie(cookie)
         auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return {'error': 'invalid authorization header'}, 400
-
-        token = auth_header[7:]
-        if jwt_service.revoke_token(token):
-            return {'message': 'logout successful'}, 200
-        return {'error': 'failed to revoke token'}, 400
+        if auth_header.startswith('Bearer '):
+            jwt_service.revoke_token(auth_header[7:])
+        clear_refresh_cookie()
+        return {'message': 'logout successful'}, 200
 
 
 @api.route('/verify')
@@ -999,3 +913,30 @@ class AuthProvidersController(Resource):
         """获取支持的认证提供商列表"""
         oidc_service = inject(IOIDCService)
         return {'providers': oidc_service.get_supported_providers()}, 200
+
+
+@api.route('/exchange')
+class OAuthExchangeController(Resource):
+    @RateLimitMiddleware.rate_limit(30, 60)
+    def post(self):
+        from utils.request_validation import json_object
+        data = json_object()
+        code = data.get('code')
+        binding = session.get('oauth_exchange_binding')
+        if not isinstance(code, str) or len(code) > 128 or not binding:
+            return {'error': '登录凭证无效或已过期'}, 400
+        with get_database().atomic():
+            grant = OAuthGrant.get_or_none(OAuthGrant.id == token_hash(code))
+            if not grant or grant.expires_at <= utcnow() or not secrets.compare_digest(grant.binding_hash, token_hash(binding)):
+                return {'error': '登录凭证无效或已过期'}, 400
+            consumed = OAuthGrant.delete().where((OAuthGrant.id == grant.id)
+                & (OAuthGrant.expires_at > utcnow())).execute()
+            if not consumed:
+                return {'error': '登录凭证已使用'}, 400
+            user = User.get_by_id(grant.user_id)
+            if not user.is_active:
+                return {'error': '账号已停用'}, 403
+            service = inject(IJWTService)
+            tokens = service.generate_tokens(user.to_dict())
+        session.pop('oauth_exchange_binding', None)
+        return {**browser_tokens(tokens.to_dict()), 'user_info': service.verify_access_token(tokens.access_token)}, 200

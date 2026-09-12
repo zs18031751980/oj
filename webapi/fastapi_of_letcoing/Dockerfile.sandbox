@@ -1,0 +1,8 @@
+FROM public.ecr.aws/docker/library/python:3.13-slim-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ nodejs openjdk-17-jdk golang-go \
+    && rm -rf /var/lib/apt/lists/*
+COPY services/execution_runtime.py /opt/execution_runtime.py
+USER 65534:65534
+WORKDIR /work
+CMD ["python3", "/opt/execution_runtime.py"]

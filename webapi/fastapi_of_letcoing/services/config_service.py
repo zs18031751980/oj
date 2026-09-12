@@ -79,11 +79,13 @@ class ConfigService(IConfigService):
             包含所有数据库连接参数的字典
         """
         # Zeabur 等平台可能直接提供 DATABASE_URL，优先在缺少 DB_HOST 时使用
-        if not os.environ.get("DB_HOST"):
-            database_url = os.environ.get("DATABASE_URL")
+        if not self.get_config("DB_HOST"):
+            database_url = self.get_config("DATABASE_URL")
             if database_url:
                 try:
                     parsed = urllib.parse.urlparse(database_url)
+                    if parsed.scheme not in ('postgres', 'postgresql') or not parsed.hostname:
+                        raise ValueError('invalid database URL')
                     # 解析查询参数（如 Zeabur 常见的 ?sslmode=require）
                     query = urllib.parse.parse_qs(parsed.query)
                     sslmode = (query.get("sslmode", [""])[0] or "").lower()
@@ -97,22 +99,22 @@ class ConfigService(IConfigService):
                         "host": parsed.hostname or "localhost",
                         "port": parsed.port or 5432,
                         "database": db_name,
-                        "username": parsed.username or "postgres",
-                        "password": parsed.password or "",
-                        "ssl": use_ssl,
+                        "username": urllib.parse.unquote(parsed.username or "postgres"),
+                        "password": urllib.parse.unquote(parsed.password or ""),
+                        "sslmode": sslmode or "prefer",
                         "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
                         "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
                     }
-                except Exception:
-                    pass
+                except Exception as exc:
+                    raise ValueError('DATABASE_URL 格式无效') from exc
 
         return {
-            "host": self.get_config("DB_HOST", "localhost"),
+            "host": self.get_config("DB_HOST") or "localhost",
             "port": self.get_config("DB_PORT", 5432),
             "database": self.get_config("DB_NAME", "letcoding"),
             "username": self.get_config("DB_USER", "postgres"),
             "password": self.get_config("DB_PASSWORD", ""),
-            "ssl": False,
+            "sslmode": self.get_config("DB_SSLMODE", "prefer"),
             "max_connections": self.get_config("DB_MAX_CONNECTIONS", 20),
             "stale_timeout": self.get_config("DB_STALE_TIMEOUT", 300),
         }

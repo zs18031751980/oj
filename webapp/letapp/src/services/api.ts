@@ -3,11 +3,14 @@ import { useAuthStore } from '../stores/auth';
 const resolveApiBaseUrl = () => {
   const envBaseUrl = String(import.meta.env.VITE_API_BASE_URL || '').trim();
   if (envBaseUrl) {
-    return envBaseUrl;
+    const url = new URL(envBaseUrl, window.location.origin);
+    if (import.meta.env.PROD && url.protocol !== 'https:') throw new Error('生产 API 必须使用 HTTPS');
+    return url.href.replace(/\/$/, '');
   }
 
   // 生产环境：自动使用当前页面的 host，端口改为 6173
   if (typeof window !== 'undefined') {
+    if (import.meta.env.PROD) return `${window.location.origin}/api`;
     const { protocol, hostname } = window.location;
     return `${protocol}//${hostname}:6173`;
   }
@@ -33,7 +36,7 @@ export interface UserInfo {
 
 export interface TokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
   token_type: string;
   user_info?: UserInfo;
@@ -76,36 +79,67 @@ export const getAuthStorage = (mode: AuthStorageMode = getAuthStorageMode()) => 
 );
 
 const getStoredAccessToken = () => getAuthStorage().getItem('access_token');
-const getStoredRefreshToken = () => getAuthStorage().getItem('refresh_token');
+// 超时覆盖响应体读取；调用方取消与请求截止时间合并。
+export const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> => {
+  const controller = new AbortController();
+  const abort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => controller.abort(new DOMException('请求超时', 'TimeoutError')), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    // API 返回体有服务端上限，先读完可避免 headers 到达后 body 永远挂起。
+    const body = await response.blob();
+    return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers });
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
+  }
+};
 
-let isRefreshing = false;
+let refreshPromise: Promise<TokenResponse> | null = null;
+const REFRESH_REQUEST_KEY = 'auth_refresh_request';
+
+export const refreshSessionTokens = (): Promise<TokenResponse> => {
+  if (refreshPromise) return refreshPromise;
+  const perform = async (): Promise<TokenResponse> => {
+    // 只保存请求编号，刷新凭证由所有标签页共用的 HttpOnly Cookie 携带。
+    let requestId = localStorage.getItem(REFRESH_REQUEST_KEY);
+    if (!requestId) {
+      requestId = crypto.randomUUID();
+      localStorage.setItem(REFRESH_REQUEST_KEY, requestId);
+    }
+    const response = await fetchWithTimeout(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Protection': '1', 'Idempotency-Key': requestId },
+      body: JSON.stringify({ remember: getAuthStorageMode() === 'local' }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      if (response.status < 500) localStorage.removeItem(REFRESH_REQUEST_KEY);
+      throw new ApiError(data.error || '刷新失败', response.status, data);
+    }
+    localStorage.removeItem(REFRESH_REQUEST_KEY);
+    const tokens = data as TokenResponse;
+    delete tokens.refresh_token;
+    localStorage.removeItem('refresh_token'); sessionStorage.removeItem('refresh_token');
+    const storage = getAuthStorage();
+    storage.setItem('access_token', tokens.access_token);
+    if (tokens.user_info) storage.setItem('user_info', JSON.stringify(tokens.user_info));
+    useAuthStore().accessToken = tokens.access_token;
+    if (tokens.user_info) useAuthStore().userInfo = tokens.user_info;
+    return tokens;
+  };
+  const pending = (async (): Promise<TokenResponse> => {
+    if (!navigator.locks) throw new Error('此浏览器不支持安全会话协调，请升级浏览器并使用 HTTPS');
+    return navigator.locks.request('letcoding-token-refresh', { signal: AbortSignal.timeout(20000) }, perform);
+  })();
+  refreshPromise = pending.finally(() => { refreshPromise = null; });
+  return refreshPromise;
+};
 
 const tryRefreshToken = async (): Promise<boolean> => {
-  if (isRefreshing) return false;
-  isRefreshing = true;
-  try {
-    const refreshToken = getStoredRefreshToken();
-    if (!refreshToken) return false;
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    const storage = getAuthStorage();
-    storage.setItem('access_token', data.access_token);
-    storage.setItem('refresh_token', data.refresh_token);
-    if (data.user_info) {
-      storage.setItem('user_info', JSON.stringify(data.user_info));
-      useAuthStore().userInfo = data.user_info;
-    }
-    return true;
-  } catch {
-    return false;
-  } finally {
-    isRefreshing = false;
-  }
+  try { await refreshSessionTokens(); return true; } catch { return false; }
 };
 
 const parseResponse = async (response: Response) => {
@@ -122,6 +156,10 @@ const parseResponse = async (response: Response) => {
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { skipAuth, headers, body, ...init } = options;
   const requestHeaders = new Headers(headers);
+  if (path.startsWith('/auth/')) {
+    init.credentials = 'include';
+    requestHeaders.set('X-CSRF-Protection', '1');
+  }
 
   if (body && !(body instanceof FormData) && !requestHeaders.has('Content-Type')) {
     requestHeaders.set('Content-Type', 'application/json');
@@ -134,7 +172,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
   }
 
-  let response = await fetch(`${API_BASE_URL}${path}`, {
+  let response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     ...init,
     body,
     headers: requestHeaders,
@@ -148,7 +186,7 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
       if (newToken) {
         requestHeaders.set('Authorization', `Bearer ${newToken}`);
       }
-      response = await fetch(`${API_BASE_URL}${path}`, {
+      response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
         ...init,
         body,
         headers: requestHeaders,
@@ -227,12 +265,12 @@ export const listAnnouncements = (options: { includeUnpublished?: boolean } = {}
   const includeUnpublished = options.includeUnpublished === true;
   return apiRequest<AnnouncementData[]>(
     `/announcement/${includeUnpublished ? '?include_unpublished=true' : ''}`,
-    { skipAuth: !includeUnpublished },
+    {},
   );
 };
 
 export const getAnnouncement = (id: number) =>
-  apiRequest<AnnouncementData>(`/announcement/${id}`, { skipAuth: true });
+  apiRequest<AnnouncementData>(`/announcement/${id}`);
 
 export const createAnnouncement = (data: AnnouncementInput) =>
   apiRequest<AnnouncementData>('/announcement/', {
@@ -402,8 +440,8 @@ export const listContests = (status?: string) =>
 export const listManagedContests = () =>
   apiRequest<ContestData[]>('/contests/manage');
 
-export const getContest = (id: number) =>
-  apiRequest<ContestData>(`/contests/${id}`);
+export const getContest = (id: number, signal?: AbortSignal) =>
+  apiRequest<ContestData>(`/contests/${id}`, { signal });
 
 export const createContest = (data: { title: string; description?: string; contest_type?: string; start_time?: string; end_time?: string; freeze_time?: string; penalty_time?: number }) =>
   apiRequest<ContestData>('/contests/', {
@@ -452,8 +490,11 @@ export interface DiscussionReplyData {
   created_at: string;
 }
 
-export const listDiscussions = (category?: string) =>
-  apiRequest<DiscussionData[]>(`/discussions/${category ? `?category=${encodeURIComponent(category)}` : ''}`);
+export const listDiscussions = (category = '', offset = 0, signal?: AbortSignal) =>
+  apiRequest<DiscussionData[]>(`/discussions/?category=${encodeURIComponent(category)}&limit=30&offset=${offset}`, { signal });
+
+export const listDiscussionReplies = (id: number, offset: number, signal?: AbortSignal) =>
+  apiRequest<DiscussionReplyData[]>(`/discussions/${id}/replies?limit=30&offset=${offset}`, { signal });
 
 export const getDiscussion = (id: number) =>
   apiRequest<DiscussionData>(`/discussions/${id}`);
@@ -464,9 +505,9 @@ export const createDiscussion = (data: { title: string; content: string; categor
     body: JSON.stringify(data),
   });
 
-export const likeDiscussion = (discussionId: number) =>
+export const likeDiscussion = (discussionId: number, liked: boolean) =>
   apiRequest<{ liked: boolean; like_count: number }>(`/discussions/${discussionId}/like`, {
-    method: 'POST',
+    method: 'POST', body: JSON.stringify({ liked }),
   });
 
 export const replyToDiscussion = (discussionId: number, content: string) =>
@@ -475,9 +516,9 @@ export const replyToDiscussion = (discussionId: number, content: string) =>
     body: JSON.stringify({ content }),
   });
 
-export const likeDiscussionReply = (replyId: number) =>
+export const likeDiscussionReply = (replyId: number, liked: boolean) =>
   apiRequest<{ liked: boolean; like_count: number }>(`/discussions/replies/${replyId}/like`, {
-    method: 'POST',
+    method: 'POST', body: JSON.stringify({ liked }),
   });
 
 export const deleteDiscussion = (discussionId: number) =>
@@ -568,8 +609,8 @@ export interface ContestRankingsData {
   rankings: ContestRankingData[];
 }
 
-export const listContestRankings = (contestId: number) =>
-  apiRequest<ContestRankingsData>(`/contests/${contestId}/rankings`);
+export const listContestRankings = (contestId: number, signal?: AbortSignal) =>
+  apiRequest<ContestRankingsData>(`/contests/${contestId}/rankings`, { signal });
 
 export interface ProblemDetailData {
   id: number;
@@ -630,9 +671,7 @@ export interface SubmissionResponse {
 
 /** 轮询比赛题库题目的判题结果 */
 export const getLibrarySubmission = (submissionId: number) =>
-  apiRequest<SubmissionResponse>(`/problems/library/submission/${submissionId}`, {
-    skipAuth: true,
-  });
+  apiRequest<SubmissionResponse>(`/problems/library/submission/${submissionId}`);
 
 /**
  * 将后端返回的样例数据统一归一化为「{ input, output } 对象数组」。

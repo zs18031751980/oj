@@ -13,11 +13,11 @@ from datetime import datetime
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import (
-    Contest, ContestParticipant, ContestProblem, ContestTestcase, ContestSubmission, User
+    Contest, ContestParticipant, ContestProblem, ContestTestcase, ContestSubmission, User, get_database, ReferenceValidationJob
 )
 from core.di_container import inject
 from interfaces.service_interfaces import IJWTService, IRedisService
-from services.contest_lifecycle import can_edit_contest_assets
+from services.contest_lifecycle import can_edit_contest_assets, transactional, lock_contest
 
 api = Namespace('admin/contests', description='比赛管理接口（管理员）')
 
@@ -74,6 +74,7 @@ def _require_manager():
 
 def _require_editable_contest(contest: Contest):
     """发布即冻结题目、参考答案和隐藏数据，防止赛中变更判题标准。"""
+    contest = lock_contest(contest.id)
     if not can_edit_contest_assets(contest.lifecycle_state):
         return {'error': '比赛已发布，题目与测试数据已冻结'}, 409
     return None
@@ -328,7 +329,7 @@ def _generate_random_input(seed: int, size: int = 1) -> str:
     return ' '.join(nums)
 
 
-_MAX_OUTPUT_BYTES = 64 * 1024 * 1024
+_MAX_OUTPUT_BYTES = 1024 * 1024
 _MAX_PROCESSES = 1024
 
 
@@ -336,129 +337,19 @@ class _OutputLimitExceeded(Exception):
     """子进程输出超过硬上限。"""
 
 
-def _build_preexec(memory_mb: int | None, cpu_seconds: int | None = None,
-                   process_limit: int | None = _MAX_PROCESSES):
-    """构造 Linux rlimit：内存、CPU、进程数和文件大小均由内核限制。"""
-    try:
-        import resource
-
-        limit = int(memory_mb) * 1024 * 1024 if memory_mb and memory_mb > 0 else None
-
-        def _limit():
-            try:
-                if limit:
-                    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-                if cpu_seconds and cpu_seconds > 0:
-                    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
-                if process_limit:
-                    resource.setrlimit(resource.RLIMIT_NPROC, (process_limit, process_limit))
-                resource.setrlimit(resource.RLIMIT_FSIZE, (_MAX_OUTPUT_BYTES, _MAX_OUTPUT_BYTES))
-            except Exception:
-                pass
-
-        return _limit
-    except Exception:
-        return None
-
-
 def _exec_command(cmd: list, stdin: str, timeout: float, memory_mb: int | None,
                   cwd: str | None = None, output_limit: int = _MAX_OUTPUT_BYTES,
                   process_limit: int | None = _MAX_PROCESSES):
     """
-    执行命令并返回 (stdout, stderr, returncode, timed_out, mem_exceeded)。
-    通过 preexec_fn 限制内存，可区分 TLE 与 MLE。
+    执行命令并返回输出、终止原因及进程树资源指标。
+    生产环境由独立容器及 cgroup 承担隔离和资源限制。
     """
-    preexec = _build_preexec(memory_mb, max(1, int(timeout)), process_limit)
-    try:
-        import resource
-        usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=False,
-            preexec_fn=preexec,
-            start_new_session=True,
-            cwd=cwd,
-            # 运行用户代码时不传递数据库、JWT 等服务进程环境变量。
-            env={'PATH': os.environ.get('PATH', ''), 'LANG': 'C.UTF-8'},
-        )
-        output_exceeded = threading.Event()
-        stdout_data: list[bytes] = []
-        stderr_data: list[bytes] = []
-
-        def _read_limited(stream, target):
-            chunks = []
-            size = 0
-            while True:
-                chunk = stream.read(65536)
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > output_limit:
-                    output_exceeded.set()
-                    break
-                chunks.append(chunk)
-            target.append(b''.join(chunks))
-
-        stdout_thread = threading.Thread(target=_read_limited, args=(process.stdout, stdout_data), daemon=True)
-        stderr_thread = threading.Thread(target=_read_limited, args=(process.stderr, stderr_data), daemon=True)
-        stdout_thread.start()
-        stderr_thread.start()
-        started = time.monotonic()
-        try:
-            process.stdin.write((stdin or '').encode('utf-8'))
-            process.stdin.close()
-            while process.poll() is None:
-                if output_exceeded.is_set():
-                    raise _OutputLimitExceeded
-                if time.monotonic() - started >= timeout:
-                    raise subprocess.TimeoutExpired(cmd, timeout)
-                time.sleep(0.005)
-        except (_OutputLimitExceeded, subprocess.TimeoutExpired):
-            # 终止整个进程组，防止提交代码 fork 后子进程继续占用主机资源。
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            process.wait()
-            stdout_thread.join(timeout=1)
-            stderr_thread.join(timeout=1)
-            for stream in (process.stdin, process.stdout, process.stderr):
-                if stream and not stream.closed:
-                    stream.close()
-            usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
-            return (
-                None, None, None, not output_exceeded.is_set(), False,
-                output_exceeded.is_set(),
-                int((usage_after.ru_utime + usage_after.ru_stime - usage_before.ru_utime - usage_before.ru_stime) * 1000),
-                int(max(0, usage_after.ru_maxrss) * 1024),
-            )
-        process.wait()
-        stdout_thread.join(timeout=1)
-        stderr_thread.join(timeout=1)
-        for stream in (process.stdin, process.stdout, process.stderr):
-            if stream and not stream.closed:
-                stream.close()
-        stdout = (stdout_data[0] if stdout_data else b'').decode('utf-8', errors='replace')
-        stderr = (stderr_data[0] if stderr_data else b'').decode('utf-8', errors='replace')
-        usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
-        cpu_ms = int((usage_after.ru_utime + usage_after.ru_stime - usage_before.ru_utime - usage_before.ru_stime) * 1000)
-        memory_bytes = int(max(0, usage_after.ru_maxrss) * 1024)
-        if output_exceeded.is_set():
-            return (stdout, stderr, process.returncode, False, False, True, cpu_ms, memory_bytes)
-        if memory_mb and process.returncode != 0 and 'MemoryError' in stderr:
-            # RLIMIT_AS 触发 Python 内存错误：标记为内存超限
-            return (stdout, stderr, process.returncode, False, True, False, cpu_ms, memory_bytes)
-        return (stdout, stderr, process.returncode, False, False, False, cpu_ms, memory_bytes)
-    except (MemoryError, OSError) as exc:
-        # setrlimit 生效时可能抛出 MemoryError / OSError(12, 'Cannot allocate memory')
-        if isinstance(exc, MemoryError) or (isinstance(exc, OSError) and exc.errno == 12):
-            return (None, None, None, False, True, False, 0, 0)
-        return (None, None, None, False, False, False, 0, 0)
-    except Exception:
-        return (None, None, None, False, False, False, 0, 0)
+    from services.sandbox_service import execute
+    result = execute(cmd, stdin, timeout, memory_mb, cwd, output_limit,
+                     compiling=process_limit is None and cmd[0] in ('g++', 'javac', 'go'))
+    return (result['stdout'], result['stderr'], result['returncode'], result['timed_out'],
+            result['memory_exceeded'], result['output_exceeded'], result['cpu_ms'], result['memory_bytes'],
+            result.get('wall_ms', 0))
 
 
 class PreparedProgram:
@@ -466,7 +357,7 @@ class PreparedProgram:
 
     比赛判题会对同一提交运行多组数据；将编译移出测试点循环可显著降低
     C++/Java/Go 的队列耗时，也保证 Java 的 ``public class Main`` 使用正确文件名。
-    这不是安全沙箱：生产环境必须在容器执行器中运行本对象。
+    生产默认使用容器执行器，本地路径仅供显式启用的开发测试使用。
     """
 
     def __init__(self, command: list[str], workdir: str, language: str):
@@ -488,10 +379,10 @@ class PreparedProgram:
         # 其他进程；生产执行器应使用 cgroup 的 pids.max 做进程树限制。
         process_limit = None if self.language == 'java' else _MAX_PROCESSES
         result = _exec_command(
-            command, stdin, timeout, os_memory_limit, cwd=self.workdir,
+            command, stdin, timeout, memory_limit, cwd=self.workdir,
             process_limit=process_limit,
         )
-        elapsed = int((time.perf_counter() - started) * 1000)
+        elapsed = result[8] if len(result) > 8 else int((time.perf_counter() - started) * 1000)
         stdout, error_type, stderr = _interpret(result, is_compiled=True)
         self.last_metrics = {
             'cpu_time': result[6] if len(result) > 6 else elapsed,
@@ -508,7 +399,7 @@ class PreparedProgram:
 
 def _compile_command(cmd: list[str], workdir: str, timeout: float):
     """在同样的进程组、输出和资源限制下执行编译器。"""
-    result = _exec_command(cmd, '', timeout, None, cwd=workdir, process_limit=None)
+    result = _exec_command(cmd, '', timeout, 512, cwd=workdir, process_limit=None)
     return result[0] or '', result[1] or '', result[2], result[3], result[5]
 
 
@@ -520,7 +411,10 @@ def _prepare_program(code: str, language: str, compile_timeout: float = 20.0):
     if normalized not in {'python', 'cpp', 'java', 'go', 'javascript'}:
         return None, 'CE', f'不支持的比赛语言: {language}'
 
-    workdir = tempfile.mkdtemp(prefix='letcoding-judge-')
+    work_root = os.environ.get('JUDGE_WORK_ROOT')
+    if work_root:
+        os.makedirs(work_root, exist_ok=True)
+    workdir = tempfile.mkdtemp(prefix='letcoding-judge-', dir=work_root)
     try:
         if normalized == 'python':
             source = os.path.join(workdir, 'main.py')
@@ -579,7 +473,7 @@ def _prepare_program(code: str, language: str, compile_timeout: float = 20.0):
         return None, 'CE', '编译超时'
     except Exception as exc:
         shutil.rmtree(workdir, ignore_errors=True)
-        return None, 'CE', str(exc)
+        raise RuntimeError('执行器准备失败') from exc
 
 
 def _interpret(result, is_compiled: bool):
@@ -668,8 +562,10 @@ def _normalize_testcases(raw_testcases, raw_samples) -> list[dict]:
     for index, item in enumerate(source):
         if not isinstance(item, dict) or 'input' not in item or 'output' not in item:
             raise ValueError(f'第 {index + 1} 组测试数据必须包含 input 与 output')
-        input_data, output_data = str(item['input']), str(item['output'])
-        if len(input_data) > 65536 or len(output_data) > 65536:
+        input_data, output_data = item['input'], item['output']
+        if not isinstance(input_data, str) or not isinstance(output_data, str):
+            raise ValueError(f'第 {index + 1} 组测试数据的 input 与 output 必须是字符串')
+        if len(input_data.encode()) > 65536 or len(output_data.encode()) > 65536:
             raise ValueError(f'第 {index + 1} 组测试数据过大（上限 64KB）')
         normalized.append({
             'input_data': input_data,
@@ -737,6 +633,7 @@ class ContestProblemListController(Resource):
 
     @api.expect(contest_problem_input)
     @api.param('contest_id', '比赛ID')
+    @transactional
     def post(self):
         """创建比赛题目（自动生成测试用例）"""
         user, err = _require_manager()
@@ -769,10 +666,6 @@ class ContestProblemListController(Resource):
 
         try:
             testcases = _normalize_testcases(data.get('testcases'), data.get('samples'))
-            _verify_reference_answer(
-                data['correct_answer'], data.get('language', 'cpp'), testcases,
-                time_limit, memory_limit,
-            )
         except ValueError as exc:
             return {'error': str(exc)}, 400
 
@@ -796,7 +689,8 @@ class ContestProblemListController(Resource):
         _replace_testcases(problem, testcases)
 
         result = _problem_to_dict(problem)
-        result['testcase_generation'] = 'done'
+        _queue_reference_validation(problem)
+        result['testcase_generation'] = 'pending'
         return result, 201
 
 
@@ -820,6 +714,7 @@ class ContestProblemDetailController(Resource):
             return {'error': '题目不存在'}, 404
 
     @api.expect(contest_problem_input)
+    @transactional
     def put(self, problem_id):
         """更新比赛题目"""
         user, err = _require_manager()
@@ -869,18 +764,18 @@ class ContestProblemDetailController(Resource):
         if 'testcases' in data or 'samples' in data:
             try:
                 replacement_testcases = _normalize_testcases(data.get('testcases'), data.get('samples'))
-                _verify_reference_answer(
-                    data.get('correct_answer', problem.correct_answer),
-                    data.get('language', problem.language), replacement_testcases,
-                    time_limit, memory_limit,
-                )
             except ValueError as exc:
                 return {'error': str(exc)}, 400
+        problem.validation_version += 1
+        problem.validation_status = 'PENDING'
+        problem.validation_error = None
         problem.save()
         if replacement_testcases is not None:
             _replace_testcases(problem, replacement_testcases)
+        _queue_reference_validation(problem)
         return _problem_to_dict(problem), 200
 
+    @transactional
     def delete(self, problem_id):
         """删除比赛题目（同时清理其测试用例与提交记录）"""
         user, err = _require_manager()
@@ -907,7 +802,7 @@ class ContestProblemDetailController(Resource):
             problem.delete_instance()
             return {'success': True}, 200
         except Exception as exc:
-            return {'error': f'删除失败: {exc}'}, 500
+            return {'error': '服务暂时不可用'}, 503
 
 
 @api.route('/<int:problem_id>/regenerate-testcases')
@@ -939,21 +834,13 @@ class TestcaseGenerationStatusController(Resource):
         except ContestProblem.DoesNotExist:
             return {'error': '题目不存在'}, 404
 
-        redis_service = inject(IRedisService)
-        status = redis_service.get(f"testcase_gen:{problem_id}")
-        if not status:
-            # 无记录：可能是任务刚入队、worker 尚未写入 generating（存在竞态窗口），
-            # 也可能是生成完成且缓存已过期。以数据库实际用例数区分，避免把“尚未开始”
-            # 误报为“已完成 0 组”，导致前端提前停止轮询、误显示生成了 0 组。
-            try:
-                from models.db_models import ContestTestcase
-                count = ContestTestcase.select().where(
-                    ContestTestcase.contest_problem == problem_id
-                ).count()
-                if count == 0:
-                    status = {'status': 'pending', 'generated': 0, 'total': 0}
-                else:
-                    status = {'status': 'done', 'generated': count, 'total': count}
-            except Exception:
-                status = {'status': 'pending', 'generated': 0, 'total': 0}
-        return status, 200
+        problem = ContestProblem.get_by_id(problem_id)
+        count = ContestTestcase.select().where(ContestTestcase.contest_problem == problem).count()
+        state = {'PENDING': 'pending', 'VALID': 'done', 'INVALID': 'error'}[problem.validation_status]
+        return {'status': state, 'total': count, 'generated': count if state == 'done' else 0,
+                'error': problem.validation_error}, 200
+
+
+def _queue_reference_validation(problem):
+    from uuid import uuid4
+    ReferenceValidationJob.create(id=uuid4().hex, problem=problem.id, version=problem.validation_version)

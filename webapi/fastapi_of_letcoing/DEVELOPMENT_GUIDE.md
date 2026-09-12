@@ -1,3 +1,5 @@
+> 2026-09 后端改造说明：应用工厂为 `app_factory.create_app`；数据库迁移和 Worker 已拆为 `manage.py` 命令；远程执行使用 Judge0。以下保留分层开发示例，启动、鉴权、队列与部署细节以 [README.md](README.md) 和 [HARDENING.md](HARDENING.md) 为准。
+
 # LetCoding API 开发新手教程
 
 本教程将指导新手如何在 LetCoding API 项目中进行服务开发，包括依赖注入、控制器编写、Redis缓存使用和路由注册等核心概念。

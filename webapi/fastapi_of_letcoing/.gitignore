@@ -15,6 +15,9 @@ dist-ssr
 .env.local
 .env.development.local
 .env.production.local
+.env.*
+!.env.example
+.pytest_cache/
 
 # Editor directories and files
 .vscode/*

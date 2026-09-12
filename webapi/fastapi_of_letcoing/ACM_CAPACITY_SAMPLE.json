@@ -1,0 +1,11 @@
+{
+  "environment": "isolated PostgreSQL / Flask test client; no network or Docker",
+  "participants": 300,
+  "submissions": 3001,
+  "source_bytes_per_initial_submission": 4096,
+  "full_live_and_frozen_ms": 90.15,
+  "incremental_live_and_frozen_ms": 28.13,
+  "conditional_read_p95_ms": 1.89,
+  "conditional_reads": 100,
+  "projection_matches_full_rebuild": true
+}

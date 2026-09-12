@@ -5,7 +5,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4173',
     headless: true,
-    launchOptions: { executablePath: '/usr/bin/google-chrome' },
+    launchOptions: process.env.CI ? {} : { executablePath: '/usr/bin/google-chrome' },
   },
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 4173',

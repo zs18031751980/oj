@@ -59,6 +59,21 @@ def _require_editor() -> (dict | tuple):
     return user_info
 
 
+def _visible_announcements():
+    """列表与详情使用同一授权查询；未知 permission 默认不可公开。"""
+    role = 'member'
+    auth = request.headers.get('Authorization', '')
+    if auth.startswith('Bearer '):
+        info = inject(IJWTService).verify_access_token(auth[7:])
+        if info:
+            role = info.get('role', 'member')
+    if role == 'manager':
+        return Announcement.select()
+    permissions = ['member', 'public'] + (['staff'] if role == 'staff' else [])
+    return Announcement.select().where(Announcement.is_published == True,
+        Announcement.permission.in_(permissions))
+
+
 @api.route('/')
 class AnnouncementListController(Resource):
     @api.doc('list_announcements')
@@ -73,7 +88,7 @@ class AnnouncementListController(Resource):
                 return result
             query = Announcement.select()
         else:
-            query = Announcement.select().where(Announcement.is_published == True)
+            query = _visible_announcements().where(Announcement.is_published == True)
 
         announcements = query.order_by(
             Announcement.published_at.desc(),
@@ -92,6 +107,8 @@ class AnnouncementListController(Resource):
             return result
 
         data = request.get_json(silent=True) or {}
+        if 'permission' in data and data['permission'] not in {'member', 'public', 'staff', 'manager'}:
+            return {'error': 'permission 无效'}, 400
         title = data.get('title', '').strip()
         content = data.get('content', '').strip()
         if not title or not content:
@@ -117,11 +134,7 @@ class AnnouncementDetailController(Resource):
     @api.response(404, 'Not Found')
     def get(self, announcement_id: int):
         try:
-            announcement = Announcement.get_by_id(announcement_id)
-            if not announcement.is_published:
-                result = _require_editor()
-                if isinstance(result, tuple):
-                    return {'error': '公告不存在'}, 404
+            announcement = _visible_announcements().where(Announcement.id == announcement_id).get()
             return announcement.to_dict(), 200
         except Announcement.DoesNotExist:
             return {'error': '公告不存在'}, 404
@@ -143,6 +156,8 @@ class AnnouncementDetailController(Resource):
             return {'error': '公告不存在'}, 404
 
         data = request.get_json(silent=True) or {}
+        if 'permission' in data and data['permission'] not in {'member', 'public', 'staff', 'manager'}:
+            return {'error': 'permission 无效'}, 400
         if 'title' in data:
             title = str(data['title'] or '').strip()
             if not title:

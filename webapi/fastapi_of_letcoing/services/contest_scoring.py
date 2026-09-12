@@ -6,13 +6,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Iterable, Mapping
 
 
 ACCEPTED_VERDICTS = frozenset({"AC", "Accepted"})
 PENALIZED_REJECTIONS = frozenset(
-    {"WA", "RE", "TLE", "MLE", "OLE", "NO_OUTPUT", "Partial"}
+    {"WA", "RE", "TLE", "MLE", "OLE", "NO_OUTPUT", "Partial", "SIGSEGV", "SIGSYS"}
 )
 
 
@@ -29,9 +29,9 @@ def _as_datetime(value: Any) -> datetime | None:
         return None
     # 排名域统一使用 UTC naive，兼容历史数据库墙钟与 API ISO 时间，避免排序时
     # aware/naive 混用导致整个榜单 500。
-    if parsed.tzinfo is not None:
-        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
-    return parsed
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone(timedelta(hours=8)))
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _minutes_since(submitted_at: datetime | None, start_at: datetime) -> int:
@@ -59,6 +59,8 @@ def compute_acm_scoreboard(
     ``entries`` 必须包含所有有效参赛实体，所以没有提交的参赛者也会出现在榜单。
     ``submissions`` 只应包含比赛有效窗口内、最终判题完成的提交。
     """
+    start_at = _as_datetime(start_at)
+    cutoff_at = _as_datetime(cutoff_at)
     problem_order = list(problem_indexes)
     state_by_entry: dict[int, dict[str, Any]] = {}
     for entry in entries:
@@ -91,9 +93,13 @@ def compute_acm_scoreboard(
         problem = entry_state["problems"][problem_index]
         verdict = str(submission.get("verdict") or submission.get("status") or "")
         submitted_at = _as_datetime(submission.get("received_at"))
-        if cutoff_at is not None and submitted_at is not None and submitted_at > cutoff_at:
+        if submitted_at is None or start_at is None or submitted_at < start_at:
             continue
-        problem["submissions"] += 1
+        problem['submissions'] += 1
+        if cutoff_at is not None and submitted_at is not None and submitted_at >= cutoff_at:
+            if not problem['solved']:
+                problem['status'] = 'Pending'
+            continue
 
         if problem["solved"]:
             continue
@@ -139,6 +145,12 @@ def compute_acm_scoreboard(
             row["entry_id"],
         )
     )
+    previous = None
+    rank = 0
     for position, row in enumerate(rows, 1):
-        row["rank"] = position
+        key = (row["solved_count"], row["penalty"], row["last_ac_at"])
+        if key != previous:
+            rank = position
+        row["rank"] = rank
+        previous = key
     return rows

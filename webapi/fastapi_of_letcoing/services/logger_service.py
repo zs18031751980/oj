@@ -9,8 +9,34 @@
 """
 
 import logging
+import json
+import re
+import traceback
 from typing import Optional
 from interfaces.service_interfaces import ILoggerService
+
+
+class SafeJSONFormatter(logging.Formatter):
+    """日志不含请求体或异常参数；保留定位所需的文件、函数和行号。"""
+    def format(self, record):
+        message = record.getMessage()
+        message = re.sub(r'(?i)Bearer\s+[^\s,]+', 'Bearer [REDACTED]', message)
+        message = re.sub(r'(?i)((?:password|secret|token|code)\s*[=:]\s*)[^\s&,]+', r'\1[REDACTED]', message)
+        message = re.sub(r'(https?://[^\s?]+)\?[^\s]+', r'\1?[REDACTED]', message)
+        message = re.sub(r'(\w+://)[^/\s@]+@', r'\1[REDACTED]@', message)
+        payload = {'time': self.formatTime(record), 'level': record.levelname,
+                   'logger': record.name, 'message': message}
+        try:
+            from flask import g, has_request_context
+            if has_request_context():
+                payload['request_id'] = getattr(g, 'request_id', '')
+        except ImportError:
+            pass
+        if record.exc_info:
+            payload['exception_type'] = record.exc_info[0].__name__
+            payload['frames'] = [{'file': frame.filename, 'line': frame.lineno, 'function': frame.name}
+                                 for frame in traceback.extract_tb(record.exc_info[2])]
+        return json.dumps(payload, ensure_ascii=False)
 
 
 class LoggerService(ILoggerService):
@@ -38,13 +64,12 @@ class LoggerService(ILoggerService):
             handler = logging.StreamHandler()
 
             # 设置日志格式：时间 - 名称 - 级别 - 消息
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
+            formatter = SafeJSONFormatter()
             handler.setFormatter(formatter)
             self._logger.addHandler(handler)
 
         self._logger.setLevel(level)
+        self._logger.propagate = False
 
     def info(self, message: str) -> None:
         """记录信息级别的日志，用于正常的业务操作记录"""
@@ -61,7 +86,7 @@ class LoggerService(ILoggerService):
             exception: 关联的异常对象（可选），用于记录堆栈跟踪
         """
         if exception:
-            self._logger.error(f"{message}: {str(exception)}", exc_info=True)
+            self._logger.error(message, exc_info=(type(exception), exception, exception.__traceback__))
         else:
             self._logger.error(message)
 

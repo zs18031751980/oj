@@ -78,30 +78,23 @@ def ensure_connected(database: Database):
             db.execute_sql("SELECT 1")
     若重连后仍不可用，抛出 DatabaseUnavailableError（已脱敏）。
     """
-    last_exc: Exception | None = None
-    for attempt in range(2):
-        try:
-            if database.is_closed() or not database.is_connection_usable():
-                database.connect()
-            try:
-                yield
-                return
-            finally:
-                # 使用结束后把连接归还连接池，避免连接泄漏
-                database.close()
-        except RETRYABLE_DB_ERRORS as exc:
-            last_exc = exc
-            if attempt == 0:
-                continue
-            break
-    raise DatabaseUnavailableError() from last_exc
+    try:
+        if not database.is_closed() and not database.is_connection_usable():
+            database.close()
+        database.connect(reuse_if_open=True)
+        yield
+    except RETRYABLE_DB_ERRORS as exc:
+        raise DatabaseUnavailableError() from exc
+    finally:
+        if not database.is_closed() and not database.in_transaction():
+            database.close()
 
 
 def run_db_operation(
     database: Database,
     operation: Callable[[], T],
     *,
-    retries: int = 1,
+    retries: int = 0,
 ) -> T:
     """
     在数据库连接上执行操作，遇到瞬时故障自动重连并重试。
@@ -109,7 +102,7 @@ def run_db_operation(
     Args:
         database: Peewee 数据库连接实例
         operation: 无参可调用对象，返回结果（可安全重复执行）
-        retries: 最大重试次数（默认 1，即总共最多尝试 2 次）
+        retries: 最大重试次数（默认 0；仅显式幂等的操作可启用重试）
 
     Raises:
         DatabaseUnavailableError: 多次重试后仍不可用
@@ -118,13 +111,16 @@ def run_db_operation(
     for attempt in range(retries + 1):
         try:
             if database.is_closed() or not database.is_connection_usable():
+                if not database.is_closed():
+                    database.close()
                 database.connect()
             try:
                 return operation()
             finally:
                 # 操作结束后务必把连接归还连接池，避免连接泄漏导致
                 # "Exceeded maximum connections"
-                database.close()
+                if not database.in_transaction():
+                    database.close()
         except RETRYABLE_DB_ERRORS as exc:
             last_exc = exc
             if attempt < retries:

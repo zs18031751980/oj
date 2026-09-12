@@ -11,7 +11,7 @@ import mdSup from 'markdown-it-sup';
 import mdMark from 'markdown-it-mark';
 import markdownItAnchor from 'markdown-it-anchor';
 import markdownItContainer from 'markdown-it-container';
-import markdownItMermaid from '@jsonlee_12138/markdown-it-mermaid';
+import DOMPurify from 'dompurify';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import Prism from 'prismjs';
@@ -89,7 +89,7 @@ const normalizeLanguage = (language: string) => {
     script: 'javascript',
   };
 
-  const key = language.trim().toLowerCase();
+  const key = language.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
   return aliases[key] || key;
 };
 
@@ -122,10 +122,17 @@ const md = new MarkdownIt({
     }
 
     const highlighted = highlightSafe(code, targetLang);
-    const escapedCode = code.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    return `<div class="code-block-wrapper" data-lang="${targetLang}"><div class="code-block-header"><span class="code-lang-label">${targetLang}</span><button class="code-copy-btn" onclick="window.__copyCode(this)" data-code="${escapedCode}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> 复制</button></div><pre class="language-${targetLang}"><code class="language-${targetLang}">${highlighted}</code></pre></div>`;
+    const escapedCode = escapeHtml(code);
+    return `<div class="code-block-wrapper" data-lang="${targetLang}"><div class="code-block-header"><span class="code-lang-label">${targetLang}</span><button class="code-copy-btn" data-code="${escapedCode}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> 复制</button></div><pre class="language-${targetLang}"><code class="language-${targetLang}">${highlighted}</code></pre></div>`;
   },
 });
+
+// 用户原始 HTML 不能带样式覆盖页面；KaTeX 生成的布局样式在最终净化时保留。
+for (const rule of ['html_block', 'html_inline']) {
+  md.renderer.rules[rule] = (tokens, index) => DOMPurify.sanitize(tokens[index]?.content || '', {
+    FORBID_TAGS: ['style', 'form', 'iframe', 'object', 'embed'], FORBID_ATTR: ['style', 'srcdoc'],
+  });
+}
 
 md.use(markdownItAnchor, {
   permalink: markdownItAnchor.permalink.ariaHidden({
@@ -142,8 +149,14 @@ md.use(markdownitAttrs, {
 });
 md.use(mdExpandTabs)
   .use(mdSup)
-  .use(mdMark)
-  .use(markdownItMermaid({ delay: 100 }));
+  .use(mdMark);
+const defaultFence = md.renderer.rules.fence!;
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  if (tokens[idx]?.info.trim() === 'mermaid') return `<pre class="mermaid">${escapeHtml(tokens[idx]!.content)}</pre>`;
+  const token = tokens[idx];
+  if (token && options.highlight) return options.highlight(token.content, token.info, '') || defaultFence(tokens, idx, options, env, self);
+  return defaultFence(tokens, idx, options, env, self);
+};
 
 // 公式渲染：行内 $...$ 与块级 $$...$$ 交由 KaTeX 处理
 const renderKatex = (md: any): void => {
@@ -322,8 +335,7 @@ md.core.ruler.push('resolve_images', (state) => {
   });
 });
 
-const extractHeadings = (markdown: string) => {
-  const tokens = md.parse(markdown, {});
+const extractHeadings = (tokens: ReturnType<typeof md.parse>) => {
   const extractedHeadings: HeadingItem[] = [];
 
   for (let i = 0; i < tokens.length; i += 1) {
@@ -388,17 +400,15 @@ const buildHeadingTree = (flatHeadings: HeadingItem[]) => {
 };
 
 const render = async (markdown: string) => {
-  headings.value = buildHeadingTree(extractHeadings(markdown));
-  const renderedHtml = md.render(markdown, { baseDir: props.baseDir });
+  const env = { baseDir: props.baseDir };
+  const tokens = md.parse(markdown, env);
+  headings.value = buildHeadingTree(extractHeadings(tokens));
+  const renderedHtml = md.renderer.render(tokens, md.options, env);
   const finalHtml = props.showHeadingLinks
     ? renderedHtml
     : renderedHtml.replace(/<a\b[^>]*class="[^"]*heading-anchor[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
-  await nextTick();
-  setTimeout(() => {
-    Prism.highlightAll();
-    processCodeBlocks();
-  }, 50);
-  return finalHtml;
+  return DOMPurify.sanitize(finalHtml, { FORBID_TAGS: ['style', 'iframe', 'object', 'embed', 'form'],
+    FORBID_ATTR: ['srcdoc'], ADD_ATTR: ['target'], ALLOW_DATA_ATTR: true });
 };
 
 const processCodeBlocks = () => {
@@ -442,11 +452,25 @@ const copyCode = async (code: string, index?: number) => {
   }
 };
 
+let renderVersion = 0;
 watch(
-  () => [props.content, props.source, props.showHeadingLinks] as const,
+  () => [props.content, props.source, props.showHeadingLinks, props.baseDir] as const,
   async ([content, source]) => {
-    const md = content?.content || source || '';
-    html.value = md ? await render(md) : '';
+    const version = ++renderVersion;
+    const sourceText = content?.content || source || '';
+    html.value = sourceText ? await render(sourceText) : '';
+    await nextTick();
+    if (version !== renderVersion) return;
+    processCodeBlocks(); // Prism 已在 Markdown 渲染时高亮，不再重复遍历整个页面。
+    const nodes = markdownBody.value?.querySelectorAll<HTMLElement>('.mermaid');
+    if (nodes?.length) {
+      try {
+        const { default: mermaid } = await import('mermaid');
+        if (version !== renderVersion) return;
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', maxTextSize: 50000 });
+        await mermaid.run({ nodes: Array.from(nodes) });
+      } catch { /* 保留转义的图表源代码作为可读回退。 */ }
+    }
   },
   { immediate: true },
 );
@@ -469,6 +493,8 @@ let scrollTicking = false;
 
 const handleMarkdownClick = (event: Event) => {
   const target = event.target as HTMLElement;
+  const button = target.closest<HTMLElement>('.code-copy-btn');
+  if (button) { handleCopyButton(button); return; }
   const anchor = target.closest('a');
   if (!anchor) return;
   const mdLink = anchor.getAttribute('data-md-link');
@@ -487,7 +513,7 @@ const handleScroll = () => {
     const docHeight = document.documentElement.scrollHeight - window.innerHeight;
     readingProgress.value = docHeight > 0 ? Math.min((scrollTop / docHeight) * 100, 100) : 0;
 
-    const articleHeadings = document.querySelectorAll('.markdown-content h1, .markdown-content h2, .markdown-content h3, .markdown-content h4, .markdown-content h5, .markdown-content h6');
+    const articleHeadings = markdownBody.value?.querySelectorAll('h1, h2, h3, h4, h5, h6') || [];
     let foundId = '';
 
     for (let i = articleHeadings.length - 1; i >= 0; i -= 1) {
@@ -503,12 +529,9 @@ const handleScroll = () => {
   });
 };
 
-onMounted(() => {
-  window.addEventListener('scroll', handleScroll, { passive: true });
-  (window as any).__copyCode = (btn: HTMLElement) => {
+const handleCopyButton = (btn: HTMLElement) => {
     const code = btn.getAttribute('data-code') || '';
-    const decoded = code.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-    copyCode(decoded);
+    copyCode(code);
     const originalHTML = btn.innerHTML;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已复制';
     btn.classList.add('copied');
@@ -517,6 +540,9 @@ onMounted(() => {
       btn.classList.remove('copied');
     }, 2000);
   };
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true });
   if (markdownBody.value) {
     markdownBody.value.addEventListener('click', handleMarkdownClick);
   }
@@ -524,7 +550,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
-  delete (window as any).__copyCode;
+  renderVersion += 1;
   if (markdownBody.value) {
     markdownBody.value.removeEventListener('click', handleMarkdownClick);
   }

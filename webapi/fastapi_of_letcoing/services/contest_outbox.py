@@ -9,6 +9,12 @@ from datetime import datetime, timezone
 from models.db_models import ContestJudgeOutbox, ContestSubmission
 
 
+def queue_for(submission):
+    if submission.rejudge_batch_id:
+        return 'rejudge_queue'
+    return 'contest_judge_queue' if submission.contest_eligible else 'practice_judge_queue'
+
+
 def _task_for(submission: ContestSubmission) -> dict:
     return {
         'submission_id': submission.id,
@@ -17,6 +23,7 @@ def _task_for(submission: ContestSubmission) -> dict:
         'contest_id': submission.contest_id,
         'problem_id': submission.contest_problem_id,
         'user_id': submission.user_id,
+        'entry_id': f'team:{submission.team_id}' if submission.team_id else f'user:{submission.user_id}',
         'language': submission.language,
         'submitted_at': (submission.received_at or submission.submitted_at).isoformat(),
     }
@@ -42,7 +49,7 @@ def dispatch_outbox_entry(redis_service, outbox: ContestJudgeOutbox) -> bool:
                 'details': [],
             },
             3600,
-            'contest_judge_queue',
+            queue_for(submission),
             _task_for(submission),
         )
     except Exception as exc:

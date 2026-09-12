@@ -1,3 +1,5 @@
+> 2026-09 后端改造说明：应用工厂为 `app_factory.create_app`；数据库迁移和 Worker 已拆为 `manage.py` 命令；远程执行使用 Judge0。以下保留分层开发示例，启动、鉴权、队列与部署细节以 [README.md](README.md) 和 [HARDENING.md](HARDENING.md) 为准。
+
 # CLAUDE.md
 
 **请使用中文回答和中文解释**

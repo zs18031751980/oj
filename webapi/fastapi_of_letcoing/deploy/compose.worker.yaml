@@ -1,0 +1,28 @@
+# 在独立判题主机部署，绝不与 API 共用 Docker socket。
+services:
+  worker:
+    image: letcoding-worker:local
+    restart: unless-stopped
+    env_file: ../.env.worker.production
+    environment:
+      JUDGE_BACKEND: docker
+      JUDGE_WORK_ROOT: /var/lib/letcoding/jobs
+      JUDGE_SANDBOX_IMAGE: "${JUDGE_SANDBOX_IMAGE:?Pin the exact sandbox image digest}"
+      JUDGE_COMPILE_CACHE: /var/lib/letcoding/cache
+      JUDGE_CACHE_MAX_MB: "512"
+      JUDGE_WORKER_POOL: "${JUDGE_WORKER_POOL:-contest}"
+      JUDGE_CPUSET: "${JUDGE_CPUSET:?Allocate one distinct host CPU per worker slot}"
+    group_add: ["${DOCKER_GID:?Set the host Docker socket group ID}"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=128m,mode=1777]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker daemon 解析宿主机路径，两侧必须是同一个绝对路径。
+      - /var/lib/letcoding/jobs:/var/lib/letcoding/jobs
+      - /var/lib/letcoding/cache:/var/lib/letcoding/cache
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 128
+    stop_grace_period: 45s

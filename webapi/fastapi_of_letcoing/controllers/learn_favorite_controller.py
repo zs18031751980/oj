@@ -75,7 +75,7 @@ class LearnFavoriteToggleController(Resource):
                 LearnFavorite.create(user=user_id, resource_id=resource_id)
                 return {'success': True, 'favorited': True}, 201
             except Exception as e:
-                return {'error': f'收藏失败: {e}'}, 500
+                return {'error': '服务暂时不可用'}, 503
 
         return {'success': True, 'favorited': True, 'message': '已收藏过'}, 200
 

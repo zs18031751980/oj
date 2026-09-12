@@ -4,20 +4,13 @@ import shutil
 import unittest
 from datetime import datetime, timedelta
 
-IMPORT_ERROR = None
-try:
-    from controllers.contest_controller import SUPPORTED_CONTEST_MODES, _safe_submission_result
-    from controllers.contest_problem_controller import _exec_command, _prepare_program, normalize_judge_output
-    from services.redis_service import RedisService
-    from services.judge_state import ACCEPTED, CLAIMED, QUEUED, RUNNING, can_transition
-    from services.contest_scoring import compute_acm_scoreboard
-except ModuleNotFoundError as exc:
-    # 让刚拉取源码但尚未安装 requirements 的开发环境得到明确的跳过结果，
-    # 而不是把环境问题误报成业务回归。
-    IMPORT_ERROR = exc
+from controllers.contest_controller import SUPPORTED_CONTEST_MODES, _safe_submission_result
+from controllers.contest_problem_controller import _exec_command, _prepare_program, normalize_judge_output
+from services.redis_service import RedisService
+from services.judge_state import ACCEPTED, CLAIMED, QUEUED, RUNNING, can_transition
+from services.contest_scoring import compute_acm_scoreboard
 
 
-@unittest.skipIf(IMPORT_ERROR is not None, 'requires backend dependencies')
 class ContestSecurityTests(unittest.TestCase):
     def test_only_two_scoring_modes_are_supported(self):
         self.assertEqual(SUPPORTED_CONTEST_MODES, {'ACM', 'OI'})
@@ -49,7 +42,6 @@ class ContestSecurityTests(unittest.TestCase):
         self.assertFalse(can_transition(ACCEPTED, RUNNING))
 
 
-@unittest.skipIf(IMPORT_ERROR is not None, 'requires backend dependencies')
 class AcmScoreboardTests(unittest.TestCase):
     def test_only_pre_ac_non_ce_rejections_contribute_to_penalty(self):
         start = datetime(2026, 1, 1, 9, 0)
@@ -99,61 +91,15 @@ class AcmScoreboardTests(unittest.TestCase):
         self.assertEqual(rows[0]['rank'], 1)
 
 
-class _NoopLogger:
-    def error(self, *args):
-        raise AssertionError(args)
-
-
-class _ListClient:
-    def __init__(self):
-        self.lists = {}
-
-    def lpush(self, key, *values):
-        values_list = self.lists.setdefault(key, [])
-        for value in values:
-            values_list.insert(0, value)
-        return len(values_list)
-
-    def rpoplpush(self, source, destination):
-        values = self.lists.setdefault(source, [])
-        if not values:
-            return None
-        value = values.pop()
-        self.lists.setdefault(destination, []).insert(0, value)
-        return value
-
-    def lrem(self, key, count, value):
-        values = self.lists.setdefault(key, [])
-        try:
-            values.remove(value)
-            return 1
-        except ValueError:
-            return 0
-
-
-@unittest.skipIf(IMPORT_ERROR is not None, 'requires backend dependencies')
-class ReliableQueueTests(unittest.TestCase):
-    def test_claim_ack_and_recovery_never_drop_or_duplicate_a_task(self):
-        service = object.__new__(RedisService)
-        service._client = _ListClient()
-        service._connected = True
-        service._logger_service = _NoopLogger()
-        service.list_push('q', {'id': 1}, {'id': 2})
-
-        first = service.list_claim('q', 'q:processing')
-        second = service.list_claim('q', 'q:processing')
-        self.assertEqual({first['payload']['id'], second['payload']['id']}, {1, 2})
-        self.assertTrue(service.list_ack('q:processing', first['receipt']))
-        self.assertEqual(service.list_recover('q:processing', 'q'), 1)
-
-        recovered = service.list_claim('q', 'q:processing')
-        self.assertEqual(recovered['payload']['id'], second['payload']['id'])
-        self.assertTrue(service.list_ack('q:processing', recovered['receipt']))
-
-
-@unittest.skipIf(IMPORT_ERROR is not None, 'requires backend dependencies')
 @unittest.skipUnless(shutil.which('javac') and shutil.which('java'), 'requires a Java toolchain')
 class PreparedProgramTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        self.environment = patch.dict('os.environ', {
+            'APP_ENV': 'test', 'JUDGE_BACKEND': 'local', 'ALLOW_UNSAFE_LOCAL_JUDGE': '1'})
+        self.environment.start()
+        self.addCleanup(self.environment.stop)
+
     def test_java_main_is_compiled_once_with_a_correct_source_filename(self):
         code = (
             'public class Main { '

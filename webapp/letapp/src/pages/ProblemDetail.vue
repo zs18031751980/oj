@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { startPolling } from '../services/polling';
 import { computed, markRaw, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Icon } from '@iconify/vue';
@@ -16,7 +17,6 @@ import {
   listMySubmissions,
   normalizeSamples,
   submitLibraryProblem,
-  getLibrarySubmission,
   type SubmissionResponse,
 } from '../services/api';
 import { useProblemStats } from '../composables/useProblemStats';
@@ -172,7 +172,7 @@ const updateLanguage = async (lang: string) => {
     code.value = saved || languageTemplates[lang] || '';
     submitResult.value = null;
     if (pollTimer.value) {
-      clearInterval(pollTimer.value);
+      pollTimer.value();
       pollTimer.value = null;
     }
     saveStatus.value = 'saved';
@@ -211,7 +211,8 @@ const judgePhase = ref<'idle' | 'received' | 'compiling' | 'judging' | 'done'>('
 
 const passedCount = computed(() => testResults.value.filter((t) => t.passed).length);
 
-const pollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const pollTimer = ref<(() => void) | null>(null);
+let pageDisposed = false;
 const { getStats, incrementSubmissions, incrementAccepted } = useProblemStats();
 
 const submitCode = async () => {
@@ -235,7 +236,7 @@ const submitCode = async () => {
     return;
   }
   if (pollTimer.value) {
-    clearInterval(pollTimer.value);
+    pollTimer.value();
     pollTimer.value = null;
   }
   isSubmitting.value = true;
@@ -262,41 +263,20 @@ const submitCode = async () => {
             language: language.value,
           }),
         })).id;
-    const pollUrl = isLibrary
-      ? () => getLibrarySubmission(createdId)
-      : () => apiRequest<SubmissionResponse>(`/submissions/${createdId}`);
+    if (pageDisposed || problem.value?.id !== p.id) return;
+    const pollUrl = (signal: AbortSignal) => apiRequest<SubmissionResponse>(isLibrary
+      ? `/problems/library/submission/${createdId}` : `/submissions/${createdId}`, { signal });
     incrementSubmissions(p.id);
     judgePhase.value = 'judging';
-    let judged = false;
-    const settle = (res: SubmissionResponse) => {
-      if (judged) return;
-      if (res.status !== 'Pending' && res.status !== 'Running') {
-        judged = true;
-        if (pollTimer.value) {
-          clearInterval(pollTimer.value);
-          pollTimer.value = null;
-        }
-        _handleJudgeResult(res, p);
-      }
-    };
-    if (createdId != null) {
-      pollTimer.value = setInterval(async () => {
-        try {
-          const res = await pollUrl();
-          settle(res);
-        } catch {
-          if (judged) return;
-          judged = true;
-          if (pollTimer.value) {
-            clearInterval(pollTimer.value);
-            pollTimer.value = null;
-          }
-          isSubmitting.value = false;
-          judgePhase.value = 'done';
-          message.error('查询判题结果失败');
-        }
-      }, 1000);
-    }
+    const pending = new Set(['Pending', 'Queued', 'Claimed', 'Compiling', 'Compiled', 'Running', 'Checking']);
+    pollTimer.value = startPolling(pollUrl, res => {
+      if (pending.has(res.status)) return false;
+      _handleJudgeResult(res, p);
+      return true;
+    }, error => {
+      isSubmitting.value = false; judgePhase.value = 'done';
+      message.error(error instanceof Error ? error.message : '查询判题结果失败');
+    });
   } catch (e: any) {
     message.error(e?.message || '提交失败');
     isSubmitting.value = false;
@@ -767,6 +747,8 @@ onMounted(async () => {
   document.addEventListener('fullscreenchange', onFullscreenChange);
 });
 watch(problemId, () => {
+  pollTimer.value?.(); pollTimer.value = null;
+  isSubmitting.value = false;
   loadProblem();
   learningMarkdown.value = undefined;
   learningError.value = '';
@@ -778,10 +760,11 @@ watch(activeTab, (t) => {
   if (t === 'submissions') loadProblemSubmissions();
 });
 onUnmounted(() => {
+  pageDisposed = true;
   saveCode(problemId.value, language.value, code.value);
   window.removeEventListener('keydown', handleKeyboard);
   document.removeEventListener('fullscreenchange', onFullscreenChange);
-  if (pollTimer.value) clearInterval(pollTimer.value);
+  if (pollTimer.value) pollTimer.value();
   document.documentElement.classList.remove('focus-mode');
 });
 </script>

@@ -37,7 +37,7 @@ onMounted(async () => {
   retryNext.value = resolveNextPath();
 
   try {
-    authStore.completeOAuthCallback(route.query);
+    await authStore.completeOAuthCallback(route.query);
     message.success('登录成功');
     await router.replace(retryNext.value);
   } catch (error) {

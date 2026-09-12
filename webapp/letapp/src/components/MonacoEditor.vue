@@ -3,12 +3,18 @@ import { onMounted, onUnmounted, ref, watch } from "vue";
 // 按需引入 Monaco（性能优化）：只加载编辑器核心 + 本项目用到的 c/cpp/python/java
 // 语法高亮，不再引入完整的 monaco-editor（含 typescript/json/css/html 语言服务，
 // 体积约 3.7MB）。这些语言服务本题库用不到，统一走基础 editor.worker。
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
-import "monaco-editor/esm/vs/editor/editor.all";
-import "monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution";
-import "monaco-editor/esm/vs/basic-languages/python/python.contribution";
-import "monaco-editor/esm/vs/basic-languages/java/java.contribution";
-import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
+import * as monaco from "monaco-editor/editor/editor.api";
+import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js";
+import "monaco-editor/editor/contrib/clipboard/browser/clipboard.js";
+import "monaco-editor/editor/contrib/comment/browser/comment.js";
+import "monaco-editor/editor/contrib/find/browser/findController.js";
+import "monaco-editor/editor/contrib/folding/browser/folding.js";
+import "monaco-editor/editor/contrib/suggest/browser/suggestController.js";
+import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js";
+import "monaco-editor/languages/definitions/cpp/register.js";
+import "monaco-editor/languages/definitions/python/register.js";
+import "monaco-editor/languages/definitions/java/register.js";
+import EditorWorker from "monaco-editor/editor/editor.worker?worker";
 
 const props = withDefaults(
   defineProps<{

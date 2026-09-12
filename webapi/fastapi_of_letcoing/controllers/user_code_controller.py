@@ -86,7 +86,7 @@ class UserCodeListController(Resource):
                     code=code,
                 )
         except Exception as e:
-            return {'error': f'保存失败: {str(e)}'}, 500
+            return {'error': '服务暂时不可用'}, 503
         finally:
             if not db.is_closed():
                 db.close()
@@ -116,7 +116,7 @@ class UserCodeListController(Resource):
                 })
             return {'data': result}, 200
         except Exception as e:
-            return {'error': f'查询失败: {str(e)}'}, 500
+            return {'error': '服务暂时不可用'}, 503
         finally:
             if not db.is_closed():
                 db.close()
@@ -150,7 +150,7 @@ class UserCodeController(Resource):
                 }, 200
             return {'code': None}, 200
         except Exception as e:
-            return {'error': f'查询失败: {str(e)}'}, 500
+            return {'error': '服务暂时不可用'}, 503
         finally:
             if not db.is_closed():
                 db.close()

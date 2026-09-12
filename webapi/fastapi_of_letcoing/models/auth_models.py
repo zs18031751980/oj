@@ -83,7 +83,7 @@ class UserInfo:
             'is_active': self.is_active,
             'last_login': self.last_login,
             'theme_preference': self.theme_preference,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at
         }
 
 

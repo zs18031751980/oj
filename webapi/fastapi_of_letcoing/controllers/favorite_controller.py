@@ -100,7 +100,7 @@ class FavoriteToggleController(Resource):
                 Favorite.create(user=user_id, problem_id=problem_id)
                 return {'success': True, 'favorited': True}, 201
             except Exception as e:
-                return {'error': f'收藏失败: {e}'}, 500
+                return {'error': '服务暂时不可用'}, 503
 
         return {'success': True, 'favorited': True, 'message': '已收藏过'}, 200
 

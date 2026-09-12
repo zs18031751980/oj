@@ -9,48 +9,22 @@ This document provides guidelines for agentic coding agents working on this Flas
 This is a Flask web API service that provides code execution capabilities by integrating with the Glot.io API. The service supports 30+ programming languages and uses asynchronous HTTP requests for better performance.
 
 **Architecture:**
-- `main.py` - Flask application entry point with API routes
-- `services/glot_service.py` - Core service for Glot.io API integration
-- `controller/` - Directory for future controller implementations
+- `app_factory.py` - Flask application factory with API registration
+- `services/glot_service.py` - Judge0 client with a dedicated event loop and pooled HTTP connections
+- `controllers/` - Flask-RESTX controllers; `services/` - session, outbox, queue, execution and scoring services
 
 ## Development Commands
 
-### Running the Application
-```bash
-# Install dependencies
-pip install -r requirements.txt
+See `README.md`, `HARDENING.md` and `JUDGE_ARCHITECTURE.md` for current architecture.
 
-# Start development server
-python3 main.py
-```
-
-The application runs on `http://localhost:5000` by default.
-
-### Testing
-This project currently does not have a formal test suite. When implementing tests:
-
-```bash
-# Run pytest (if added)
-python3 -m pytest
-
-# Run specific test file
-python3 -m pytest tests/test_service.py
-
-# Run with coverage
-python3 -m pytest --cov=services
-```
-
-### Code Quality
-```bash
-# Check syntax
-python3 -m py_compile main.py services/glot_service.py
-
-# Format code (if black is added)
-black main.py services/
-
-# Lint (if flake8 is added)
-flake8 main.py services/
-```
+- Install: `pip install -r requirements-dev.txt`.
+- Migration: `python manage.py migrate`, then `python manage.py seed`; errors must fail the deployment.
+- Development API: `python main.py` (localhost:6173).
+- Production API: `gunicorn --config gunicorn.conf.py 'app_factory:create_app()'`.
+- Dedicated Worker: `python manage.py worker`; never start inside API requests/imports.
+- Regression: `python -m pytest -q` (real isolated Redis/PostgreSQL required).
+- Sandbox gate: `python -m pytest tests/sandbox_integration.py -q` (Docker + cgroup v2 required; do not skip missing dependencies).
+- Local execution is allowed only with APP_ENV=test/development and ALLOW_UNSAFE_LOCAL_JUDGE=1. Never use it in production.
 
 ## Code Style Guidelines
 
@@ -116,7 +90,7 @@ class PostDataModel:
 - Use try-except blocks for API calls and I/O operations
 - Handle specific exceptions when possible
 - Return meaningful error messages to users
-- Log errors appropriately (logging not currently implemented)
+- Use structured, redacted logging; never include request bodies or credentials
 
 ```python
 try:
@@ -214,7 +188,7 @@ Key dependencies and their purposes:
 3. Test the new language integration
 
 ### Adding New API Endpoints
-1. Define route in `main.py` using `@app.route()`
+1. Define routes in controllers and register namespaces in `app_factory.py`
 2. Validate request data
 3. Call appropriate service methods
 4. Return JSON response with proper status code
@@ -227,8 +201,8 @@ Key dependencies and their purposes:
 
 ## Future Considerations
 
-- Consider adding comprehensive test suite with pytest
-- Implement proper logging instead of return strings
-- Add API rate limiting
+- Extend existing pytest regressions for meaningful behavior and failure cases
+- Maintain structured logging and public error redaction
+- Preserve per-route user/IP limits and login account budgets
 - Implement caching for repeated requests
 - Consider using FastAPI instead of Flask for better async support

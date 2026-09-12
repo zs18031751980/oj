@@ -14,6 +14,8 @@ import mimetypes
 from flask import send_file, make_response, jsonify
 from flask_restx import Namespace, Resource
 
+from middleware.auth_middleware import AuthMiddleware, RoleBasedAuth, RateLimitMiddleware
+
 from services.learn_scanner_service import scan_learn_resources, read_markdown_file
 
 api = Namespace('learn-resources', description='学习资料目录与内容')
@@ -109,15 +111,15 @@ class LearnTree(Resource):
     def get(self):
         """获取学习资料目录树"""
         if not os.path.isdir(_LEARN_ROOT):
-            resp = jsonify({'error': f'学习资料目录不存在: {_LEARN_ROOT}'})
+            resp = jsonify({'error': '学习资料暂时不可用'})
             resp.status_code = 500
             return resp
         tree = _get_tree()
         if not tree:
-            resp = jsonify({'error': f'目录扫描失败: {_LEARN_ROOT}'})
+            resp = jsonify({'error': '学习资料暂时不可用'})
             resp.status_code = 500
             return resp
-        return {'data': tree, 'root': _LEARN_ROOT}
+        return {'data': tree}
 
 
 @api.route('/file/<path:file_path>')
@@ -148,7 +150,9 @@ class LearnAsset(Resource):
             resp.status_code = 400
             return resp
 
-        full_path = os.path.join(_LEARN_ROOT, normalized)
+        full_path = os.path.realpath(os.path.join(_LEARN_ROOT, normalized))
+        if os.path.commonpath([os.path.realpath(_LEARN_ROOT), full_path]) != os.path.realpath(_LEARN_ROOT):
+            return {'error': '非法路径'}, 400
         if not os.path.isfile(full_path):
             resp = jsonify({'error': '资源不存在'})
             resp.status_code = 404
@@ -168,6 +172,9 @@ class LearnAsset(Resource):
 @api.route('/rescan')
 class LearnRescan(Resource):
     @api.response(200, 'Success')
+    @AuthMiddleware.require_auth
+    @RoleBasedAuth.require_admin
+    @RateLimitMiddleware.rate_limit(max_requests=2, window_seconds=60)
     def post(self):
         """重新扫描目录树（管理员用）"""
         with _lock:

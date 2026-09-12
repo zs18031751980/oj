@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { waitForJudgement } from "../services/polling";
 import {
   computed, defineAsyncComponent, markRaw, onMounted, onUnmounted, ref, watch,
 } from "vue";
@@ -225,7 +226,11 @@ const runCode = async () => {
   }
 };
 
+let judgeAbort = new AbortController();
 const submitCode = async () => {
+  if (isSubmitting.value) return;
+  judgeAbort.abort(); judgeAbort = new AbortController();
+  const signal = judgeAbort.signal;
   activeBottomTab.value = "submit";
   const source = code.value;
   if (!source.trim()) {
@@ -244,22 +249,15 @@ const submitCode = async () => {
       const created = await apiRequest<{ submission_id: number; status: string }>(
         `/contests/${contestId.value}/problems/${problemId.value}/submit`,
         {
-          method: "POST",
+          method: "POST", signal,
           headers: { "Idempotency-Key": crypto.randomUUID() },
           body: JSON.stringify({ code: source, language: selectedLanguage.value }),
         },
       );
       incrementSubmissions(contestProblem.value!.id);
-      let detail: any = null;
-      for (let i = 0; i < 40; i++) {
-        await new Promise((r) => setTimeout(r, 800));
-        detail = await apiRequest<any>(
-          `/contests/${contestId.value}/problems/${problemId.value}/submission/${created.submission_id}`,
-        );
-        if (detail && detail.status && detail.status !== "Pending" && detail.status !== "Judging") {
-          break;
-        }
-      }
+      const detail = await waitForJudgement<any>(pollSignal => apiRequest<any>(
+        `/contests/${contestId.value}/problems/${problemId.value}/submission/${created.submission_id}`,
+        { signal: pollSignal }), signal);
       if (detail?.status === "AC") {
         incrementAccepted(contestProblem.value!.id);
       }
@@ -282,15 +280,12 @@ const submitCode = async () => {
     submitResult.value = { status: "Judging", message: "判题中..." };
     try {
       const created = await apiRequest<{ id: number }>("/submissions", {
-        method: "POST",
+        method: "POST", signal,
+        headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({ problem_id: problemId.value, code: source, language: selectedLanguage.value }),
       });
-      let detail: any = null;
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 800));
-        detail = await apiRequest<any>(`/submissions/${created.id}`);
-        if (detail && detail.status && detail.status !== "Pending") break;
-      }
+      const detail = await waitForJudgement<any>(pollSignal => apiRequest<any>(`/submissions/${created.id}`,
+        { signal: pollSignal }), signal);
       submitResult.value = {
         status: detail?.status || "Pending",
         passed: detail?.testcase_results
@@ -529,6 +524,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  judgeAbort.abort();
   window.removeEventListener("keydown", handleGlobalShortcut);
   window.removeEventListener("click", closeLanguageMenuOnOutsideClick);
   document.removeEventListener("fullscreenchange", onFullscreenChange);

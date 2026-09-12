@@ -40,7 +40,6 @@ class AuthMiddleware:
 
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            jwt_service = inject(IJWTService)
             auth_header = request.headers.get('Authorization', '')
 
             if not auth_header:
@@ -49,6 +48,7 @@ class AuthMiddleware:
             if not auth_header.startswith('Bearer '):
                 return {'error': 'Invalid Authorization format'}, 401
 
+            jwt_service = inject(IJWTService)
             token = auth_header[7:]
             user_info = jwt_service.verify_access_token(token)
 
@@ -74,10 +74,10 @@ class AuthMiddleware:
 
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            jwt_service = inject(IJWTService)
             auth_header = request.headers.get('Authorization', '')
 
             if auth_header and auth_header.startswith('Bearer '):
+                jwt_service = inject(IJWTService)
                 token = auth_header[7:]
                 user_info = jwt_service.verify_access_token(token)
                 if user_info:
@@ -92,17 +92,17 @@ class RateLimitMiddleware:
     """
     用户频率限制中间件
 
-    基于 Redis 实现滑动窗口频率限制算法。
+    基于 Redis 原子计数实现固定窗口限流。
     对已认证的用户按用户 ID 进行计数，在指定时间窗口内超过阈值则返回 429。
     """
 
     @staticmethod
-    def rate_limit(max_requests: int = 1000, window_seconds: int = 3600):
+    def rate_limit(max_requests: int = 1000, window_seconds: int = 3600, account_max_requests: int = 0):
         """
         频率限制装饰器
 
         限制认证用户在指定时间窗口内的请求次数。
-        仅对已认证用户进行计数（未登录用户不限制）。
+        登录用户按用户 ID、匿名用户按 IP 分路由计数。
 
         Args:
             max_requests: 时间窗口内允许的最大请求次数
@@ -116,21 +116,22 @@ class RateLimitMiddleware:
             @wraps(f)
             def decorated_function(*args, **kwargs):
                 user_info = getattr(g, 'current_user', None)
-
-                if user_info:
-                    try:
-                        redis_service = inject(IRedisService)
-                        user_id = user_info.get('id')
-                        key = f'rate_limit:{user_id}'
-
-                        if not redis_service.rate_limit_check(key, max_requests, window_seconds):
-                            return {
-                                'error': '请求过于频繁，请稍后再试',
-                                'limit': max_requests,
-                                'window': window_seconds,
-                            }, 429
-                    except Exception:
-                        pass
+                subject = f"user:{user_info['id']}" if user_info else f"ip:{request.remote_addr}"
+                scope = str(request.url_rule or request.endpoint or 'unknown')
+                key = f'rate_limit:{scope}:{request.method}:{subject}:{window_seconds}'
+                try:
+                    redis_service = inject(IRedisService)
+                    allowed = redis_service.rate_limit_check(key, max_requests, window_seconds)
+                    if allowed and account_max_requests:
+                        import hashlib
+                        data = request.get_json(silent=True) or {}
+                        identifier = str(data.get('identifier', '')).strip().casefold()
+                        account = hashlib.sha256(identifier.encode()).hexdigest()
+                        allowed = redis_service.rate_limit_check(f'login:account:{account}', account_max_requests, window_seconds)
+                except Exception:
+                    return {'error': '限流服务暂时不可用'}, 503
+                if not allowed:
+                    return {'error': '请求过于频繁，请稍后再试'}, 429, {'Retry-After': str(window_seconds)}
 
                 return f(*args, **kwargs)
 
@@ -172,7 +173,7 @@ class RoleBasedAuth:
                     return {'error': 'Authentication required'}, 401
 
                 user_role = user_info.get('role', 'user')
-                if user_role != required_role and user_role != 'admin':
+                if user_role != required_role and user_role != 'manager':
                     return {'error': 'Insufficient permissions'}, 403
 
                 return f(*args, **kwargs)
@@ -186,7 +187,7 @@ class RoleBasedAuth:
         """
         管理员权限装饰器
 
-        快捷方式，等价于 require_role('admin')。
+        快捷方式，等价于 require_role('manager')。
         只有角色为 'admin' 的用户才能访问。
         """
-        return RoleBasedAuth.require_role('admin')(f)
+        return RoleBasedAuth.require_role('manager')(f)

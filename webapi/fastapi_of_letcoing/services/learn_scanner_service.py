@@ -100,7 +100,9 @@ def read_markdown_file(root_dir: str, relative_path: str) -> Optional[Dict]:
     if normalized.startswith('..') or os.path.isabs(normalized):
         return None
 
-    full_path = os.path.join(root_dir, normalized)
+    full_path = os.path.realpath(os.path.join(root_dir, normalized))
+    if os.path.commonpath([os.path.realpath(root_dir), full_path]) != os.path.realpath(root_dir):
+        return None
     if not os.path.isfile(full_path) or not full_path.endswith('.md'):
         return None
 
@@ -135,7 +137,9 @@ def resolve_asset(root_dir: str, md_relative_path: str, asset_relative: str) -> 
     if asset_path.startswith('..') or os.path.isabs(asset_path):
         return None
 
-    full_path = os.path.join(root_dir, asset_path)
+    full_path = os.path.realpath(os.path.join(root_dir, asset_path))
+    if os.path.commonpath([os.path.realpath(root_dir), full_path]) != os.path.realpath(root_dir):
+        return None
     if os.path.isfile(full_path):
         return full_path
     return None

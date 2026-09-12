@@ -395,15 +395,15 @@ class OIDCService(Injectable, IOIDCService):
 
         provider_config = self._normalize_oidc_provider_configs().get(provider, {})
         if not isinstance(provider_config, dict):
-            return True
+            return False
 
         if 'skip_id_token_validation' in provider_config:
-            return bool(provider_config.get('skip_id_token_validation'))
+            return provider_config.get('skip_id_token_validation') is True
 
         if 'validate_id_token' in provider_config:
-            return not bool(provider_config.get('validate_id_token'))
+            return provider_config.get('validate_id_token') is False
 
-        return True
+        return False
 
     def _authorize_access_token_without_id_token_validation(self, client, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -574,7 +574,12 @@ class OIDCService(Injectable, IOIDCService):
             )
 
             # 获取用户信息
-            user_info = self._get_user_info(resolved_provider, client, token)
+            verified_claims = None
+            if resolved_provider != 'github' and not self._should_skip_id_token_validation(resolved_provider):
+                verified_claims = token.get('userinfo')
+                if not verified_claims or not verified_claims.get('sub'):
+                    raise ValueError('OIDC 缺少已验证的身份声明')
+            user_info = self._get_user_info(resolved_provider, client, token, verified_claims)
             if not user_info:
                 self._logger_service.error(f'OAuth callback failed because user info is empty: {resolved_provider}')
                 return None
@@ -670,7 +675,7 @@ class OIDCService(Injectable, IOIDCService):
             result['is_active'] = account_status
         return result
 
-    def _get_user_info(self, provider: str, client, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _get_user_info(self, provider: str, client, token: Dict[str, Any], verified_claims=None) -> Optional[Dict[str, Any]]:
         """
         从 OAuth 提供商获取用户信息
 
@@ -719,36 +724,6 @@ class OIDCService(Injectable, IOIDCService):
                 }
 
             # ----- 标准 OIDC 提供商处理 -----
-            # 优先从 token 中提取 id_token claims（跳过签名验证以兼容各种提供商）
-            id_token_claims = None
-            if isinstance(token, dict) and token.get('id_token'):
-                try:
-                    import jwt as _jwt
-                    id_token_claims = _jwt.decode(
-                        token['id_token'],
-                        options={'verify_signature': False, 'verify_exp': False},
-                    )
-                    if not isinstance(id_token_claims, dict):
-                        id_token_claims = None
-                    else:
-                        self._logger_service.info(
-                            f'ID Token claims extracted for {provider}: '
-                            f'keys={",".join(sorted(id_token_claims.keys()))}'
-                        )
-                except Exception as ex:
-                    self._logger_service.warning(f'Failed to decode id_token for {provider}: {str(ex)}')
-
-            # 尝试从 ID Token 的 userinfo 字段获取
-            token_user_data = self._normalize_user_data(token.get('userinfo')) if isinstance(token, dict) else None
-            if token_user_data:
-                if id_token_claims:
-                    token_user_data.update(id_token_claims)
-                self._logger_service.info(
-                    'Using OIDC user info from token payload: '
-                    f'provider={provider}, keys={",".join(sorted(token_user_data.keys()))}'
-                )
-                return self._build_oidc_user_info(provider, token_user_data)
-
             # 尝试调用 userinfo 端点
             user_data = None
             if hasattr(client, 'userinfo'):
@@ -768,8 +743,10 @@ class OIDCService(Injectable, IOIDCService):
                 return None
 
             # 用 id_token claims 覆盖 userinfo 数据（id_token 是签名的，更权威）
-            if id_token_claims:
-                merge_oidc_identity_claims(normalized_user_data, id_token_claims)
+            if verified_claims:
+                if normalized_user_data.get('sub') != verified_claims.get('sub'):
+                    return None
+                merge_oidc_identity_claims(normalized_user_data, verified_claims)
 
             self._logger_service.info(
                 'OIDC user info received: '

@@ -1,0 +1,41 @@
+name: Backend reliability and isolation
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: webapi/fastapi_of_letcoing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: sudo apt-get update && sudo apt-get install -y redis-server postgresql openjdk-17-jdk
+      - run: pip install -r requirements-dev.txt
+      - run: pip install pip-audit && pip-audit -r requirements.txt
+      - run: echo "PG_BINDIR=$(pg_config --bindir)" >> "$GITHUB_ENV"
+      - run: python -m pytest -q
+      - run: docker build -f Dockerfile.sandbox -t letcoding-sandbox:local .
+      - run: python -m pytest tests/sandbox_integration.py -q
+      - run: docker build -t letcoding-api:local .
+      - run: docker build -f Dockerfile.worker -t letcoding-worker:local .
+  frontend-contract:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: webapp/letapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webapp/letapp/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: node scripts/check-bundle.mjs
+      - run: node scripts/check-production.mjs
+      - run: npx playwright test

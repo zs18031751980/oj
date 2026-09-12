@@ -79,7 +79,7 @@ class LearnHistoryController(Resource):
             LearnBrowsingHistory.create(user=user_id, resource_id=resource_id)
             return {'success': True}, 201
         except Exception as e:
-            return {'error': f'记录浏览失败: {e}'}, 500
+            return {'error': '服务暂时不可用'}, 503
 
     @api.doc('clear_learn_history')
     @AuthMiddleware.require_auth
@@ -92,4 +92,4 @@ class LearnHistoryController(Resource):
             ).execute()
             return {'success': True}, 200
         except Exception as e:
-            return {'error': f'清空浏览记录失败: {e}'}, 500
+            return {'error': '服务暂时不可用'}, 503

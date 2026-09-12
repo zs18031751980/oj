@@ -29,31 +29,35 @@ const formatTime = (dateStr?: string | null) => {
 
 const isOI = () => data.value?.mode === 'OI';
 
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
+let stopped = false;
+const loadAbort = new AbortController();
 
 const loadData = async () => {
   error.value = '';
   try {
     const [c, r] = await Promise.all([
-      getContest(contestId).catch(() => null),
-      listContestRankings(contestId),
+      getContest(contestId, loadAbort.signal).catch(() => null),
+      listContestRankings(contestId, loadAbort.signal),
     ]);
+    if (stopped) return;
     contest.value = c;
     data.value = r;
     rankings.value = r.rankings || [];
   } catch (e) {
     error.value = e instanceof Error ? e.message : '加载失败';
   } finally {
-    isLoading.value = false;
+    if (!stopped) { isLoading.value = false; timer = setTimeout(loadData, error.value ? 20000 : 10000); }
   }
 };
 
 onMounted(() => {
   loadData();
-  timer = setInterval(loadData, 10000);
+
 });
 onUnmounted(() => {
-  if (timer) clearInterval(timer);
+  stopped = true; loadAbort.abort();
+  if (timer) clearTimeout(timer);
 });
 </script>
 

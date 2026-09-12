@@ -1,106 +1,37 @@
-# 比赛判题链路设计
+# 判题与任务链路
 
-本文对应 `ACM-OJ 判题系统后端设计 Prompt.md`，描述当前代码已经落实的比赛判题链路和生产部署边界。
+## 事实与队列
 
-## 1. 链路
+普通提交和比赛提交均在 PostgreSQL 事务中创建 submission + outbox；201 表示提交事实持久化成功。数据库故障返回 503。Redis 不可用时，outbox 留存，Worker 恢复后补投。
 
-```text
-提交 API
-  -> PostgreSQL ContestSubmission
-  -> Redis judge queue
-  -> JudgeWorker claim + lease
-  -> 编译进程组
-  -> 测试点独立执行
-  -> 输出检查
-  -> 条件更新数据库
-  -> Redis 状态缓存
-  -> 轮询 API /healthz/judge
-```
+Redis Lua 将 ready → processing、唯一 delivery receipt 与 300 秒租约创建合为一次操作。Worker 每 20 秒续租，结果数据库提交成功后才 ACK。失败投递按 2、4、8、16 秒退避，累计 5 次进入死信；租约失效的投递也受重试次数限制。死信先幂等持久化 SystemError，再转入容量 1000 的诊断归档。
 
-提交先写 PostgreSQL，数据库不可用时拒绝提交；Redis 只作为调度和短期缓存，不作为提交事实源。
+数据库 job_id 去重，attempt_id 条件更新隔离旧执行者。maintenance、执行、榜单投影和心跳分别运行；maintenance 每 2 秒补投、回收和分页核对未完成事实，心跳独立于数据库，榜单聚合不持有提交事务锁。Redis 全量丢失后，没有去重键的未完成事实会补投。Redis 必须使用 noeviction，禁止选择性手动删除队列而保留去重键。
 
-## 2. 状态机
+## 进程与安全边界
 
-状态定义集中在 `services/judge_state.py`，所有比赛结果更新都带 `submission_id + attempt_id + expected_status` 条件。
+API：非 root Gunicorn，只有数据库/Redis/远程执行器访问能力，不挂 Docker socket。
 
-```text
-Pending -> Claimed -> Compiling -> Compiled -> Running -> Checking -> AC/WA/Partial
-                                      |             |
-                                      +-> CE        +-> TLE/MLE/OLE/RE/SIGSEGV/SIGSYS
-```
+Worker：独立判题主机上的非 root 进程，获取每份任务的独立目录。编译一次，测试点顺序运行；管理员参考代码也通过持久化任务执行，校验通过才允许发布比赛。版本号防止过期参考校验覆盖新题目。
 
-终态不可被覆盖。租约过期重投时，Worker 将 attempt 加一并把旧 attempt 隔离，旧 Worker 的迟到结果条件更新必然失败。
+沙箱：每次编译、每个测试点分别创建 Docker 容器。禁网、只读根目录、运行阶段工作目录只读、Docker 默认 seccomp、no-new-privileges、cgroup v2 CPU/内存/交换/PID 限额及文件/输出上限。总 stdout+stderr 上限 1 MiB。编译内存 512 MiB，运行按题目限制。
 
-## 3. 持久化字段
+监督器在容器内使用 root 身份，仅保留 SETUID、SETGID、KILL 能力，以便降权和回收进程树。用户程序降权至 Worker 的非 root UID/GID、清空附加组，effective capabilities 为零，不能向监督器发信号或写其结果管道；程序环境不继承服务端密钥。这里的 root 是可信监督器，不是提交程序。
 
-`contest_submissions` 保存：
+selectors 非阻塞读写让 stdin、stdout、stderr 共享同一个截止时间。wait4 收集单进程数据；生产由独立 cgroup 的 memory.peak/memory.events/cpu.stat 给出整个进程树的指标。wall_ms 仅计入被监督程序执行，不包含 Docker 启动与清理。程序结束也回收派生进程，随后删除容器和临时目录。
 
-- `job_id`、`attempt_id`、`worker_id`
-- 排队、判题、编译、执行、检查和完成时间
-- CPU 时间、墙钟时间、峰值内存、输出大小
-- 退出码、信号、错误信息
-- 测试点结果和最终状态
+Docker socket 的访问权限等价于控制判题主机，因此 Worker 主机必须隔离；容器共享内核，不承诺抵御未知内核漏洞。生产不得启用 local 后端。普通题库/Judge0 的隔离属于所配置 Judge0 服务的运维边界，本仓库 Docker 沙箱不替代它。
 
-数据库迁移 `0013_contest_judge_lifecycle` 为幂等迁移，兼容已经执行过旧版本迁移记录但缺少实际字段的数据库。
+## 榜单与可观测性
 
-## 4. 队列可靠性
+比赛终态和 scoreboard_requested_version 在同一个事务推进，独立消费者重建 LIVE 快照。消费者锁定比赛行，不覆盖较新版本；FINAL/PUBLIC_FREEZE 延续既有快照规则。参赛者资料 JOIN/批量读取，消除每人单独查询；普通榜单缓存 15 秒并在普通判题终态失效。
 
-队列采用 Redis List 的 `RPOPLPUSH` claim 模式：
+内部指标包含请求量/延迟、队列 pending/processing/retry/dead、Worker 存活、outbox 数量/最老等待时间及依赖可用性。公共健康接口只返回状态，不泄露任务或用户信息。日志 JSON 化，携带 request_id，避免记录请求体、令牌和 URL 查询串。
 
-- ready 任务原子转入 processing
-- 每次 delivery 创建 5 分钟租约
-- ACK 同时删除 processing 条目和租约
-- Worker 启动以及运行期间定时只回收已过期租约
-- 结果未成功持久化时不 ACK，任务保留待重试
+## 验收
 
-任务 payload 带 `job_id` 和 `attempt_id`。数据库中的 `job_id` 唯一，避免重复创建提交记录。
+`python -m pytest -q` 覆盖真实 Redis、临时 PostgreSQL、HTTP 客户端和显式本地执行器回归。
 
-## 5. 执行限制
+`python -m pytest tests/sandbox_integration.py -q` 必须在非 root、有 Docker daemon、镜像及 cgroup v2 的主机单独运行，验证宿主文件/凭证/网络隔离、监督器身份隔离、超时、输出/内存限制和 C++/Java/Go 编译。前置条件不满足会失败，绝不静默跳过。
 
-当前本地执行器已经实现：
-
-- 独立临时工作目录
-- 独立 process group，超时/输出超限时杀死整个进程组
-- `RLIMIT_AS` 内存限制
-- `RLIMIT_CPU` CPU 硬限制
-- `RLIMIT_NPROC` 进程数量限制（Java JVM 使用专门兼容策略）
-- `RLIMIT_FSIZE` 文件大小限制
-- stdout/stderr 64 MiB 硬上限
-- 编译阶段独立超时、进程组和输出限制
-- `wait` 后收集 CPU 时间、峰值 RSS、输出大小、退出码和信号
-
-编译只执行一次，所有测试点使用同一个编译产物；每个测试点独立运行并记录结果。
-
-## 6. 生产安全边界
-
-本地执行器不是完整的生产沙箱。生产环境必须把 JudgeWorker 部署到独立执行节点或容器，并进一步启用：
-
-- 非 root 用户
-- network namespace / 默认禁网
-- mount namespace 或只读根文件系统
-- cgroup v2 的 CPU、memory、pids、io 限制
-- seccomp syscall 白名单
-- capability drop
-- 沙箱节点与 API、PostgreSQL、Redis 网络隔离
-
-当前应用层限制用于开发机回归和基础防护，不能替代上述内核隔离。
-
-## 7. 可观测性
-
-`GET /healthz/judge` 返回 Worker 是否存活、Worker ID、活动任务、失败次数、比赛队列长度和 processing 数量；`GET /healthz/db` 返回数据库连接状态。
-
-提交结果查询优先数据库，因此 Redis TTL 到期不会导致已完成比赛提交消失。
-
-## 8. 测试覆盖
-
-`tests/test_contest_judge.py` 覆盖：
-
-- 合法/非法状态迁移
-- 隐藏测试数据脱敏
-- 队列 claim、ACK、恢复
-- Java 一次编译多次执行
-- 测试点超时
-- 输出超限终止
-- 空白规则输出比较
-
-生产上线前仍应补充真实容器沙箱、网络隔离、fork bomb、数据库故障和多 Worker 并发集成测试。
+ACM 专项的队伍、题包、复判、队列、镜像固定与迁移说明见 [ACM_IMPLEMENTATION.md](ACM_IMPLEMENTATION.md)。

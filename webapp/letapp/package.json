@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@iconify/vue": "^5.0.0",
-    "@jsonlee_12138/markdown-it-mermaid": "^0.0.6",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.11",
+    "dompurify": "^3.4.15",
     "echarts": "^6.0.0",
     "katex": "^0.16.25",
     "markdown-it": "^14.1.0",
@@ -29,7 +29,8 @@
     "markdown-it-mark": "^4.0.0",
     "markdown-it-sup": "^2.0.0",
     "markdown-it-task-lists": "^2.1.1",
-    "monaco-editor": "^0.55.1",
+    "mermaid": "^11.17.2",
+    "monaco-editor": "^0.56.0",
     "pinia": "^3.0.4",
     "prismjs": "^1.30.0",
     "tailwindcss": "^4.1.17",
@@ -50,5 +51,8 @@
     "vite": "^7.1.11",
     "vue-router": "^4.6.3",
     "vue-tsc": "^3.1.3"
+  },
+  "overrides": {
+    "dompurify": "$dompurify"
   }
 }

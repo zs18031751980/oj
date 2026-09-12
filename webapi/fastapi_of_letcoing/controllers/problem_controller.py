@@ -4,14 +4,20 @@
 """
 
 import json
+import hashlib
+from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from flask import g, request
 from flask_restx import Namespace, Resource
 
 from core.di_container import inject
 from interfaces.service_interfaces import IRedisService
-from middleware.auth_middleware import AuthMiddleware
-from models.db_models import Contest, ContestProblem, ContestTestcase
+from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
+from models.db_models import Contest, ContestProblem, ContestTestcase, ContestSubmission, ContestJudgeOutbox, User, get_database
+from services.contest_lifecycle import lock_contest
+from services.contest_outbox import dispatch_outbox_entry
+from services.judge_state import TERMINAL_STATES, QUEUED
+from utils.request_validation import execution_fields, json_object
 from pages.problem_data import PROBLEMS
 
 
@@ -21,13 +27,15 @@ api = Namespace("problems", description="题库相关接口")
 LIBRARY_ID_BASE = 1_000_000
 
 def _is_contest_ended(contest: Contest) -> bool:
-    """比赛是否已结束（已到结束时间或状态标记为 past）
+    """比赛是否已结束（以结束时间或最终结算事实为准）
 
     数据库 end_time 按项目约定以 Asia/Shanghai（UTC+8）墙钟存储为 naive 值，
     故统一当作 UTC+8 解释后再与 UTC 当前时间比较，避免服务器本地时区
     （如 Zeabur 默认为 UTC）造成 8 小时偏差。
     """
-    if contest.status == "past":
+    if not contest.is_public or contest.lifecycle_state in {"DRAFT", "READY", "CANCELLED"}:
+        return False
+    if contest.lifecycle_state == "FINALIZED":
         return True
     if contest.end_time is not None:
         end = contest.end_time
@@ -42,14 +50,11 @@ def _is_contest_ended(contest: Contest) -> bool:
 
 def _iter_ended_contest_problems():
     """遍历所有公开且已结束比赛的比赛题目，返回 (contest, contest_problem)"""
-    contests = Contest.select().where(Contest.is_public == True)  # noqa: E712
-    for contest in contests:
-        if not _is_contest_ended(contest):
-            continue
-        for cp in ContestProblem.select().where(
-            ContestProblem.contest == contest
-        ).order_by(ContestProblem.sort_order):
-            yield contest, cp
+    query = (ContestProblem.select(ContestProblem, Contest).join(Contest)
+             .where(Contest.is_public == True).order_by(Contest.id, ContestProblem.sort_order))
+    for cp in query:
+        if _is_contest_ended(cp.contest):
+            yield cp.contest, cp
 
 
 def _library_summary(contest: Contest, cp: ContestProblem) -> dict:
@@ -182,104 +187,74 @@ class ProblemDetailController(Resource):
 
 @api.route("/library/submit")
 class LibraryProblemSubmitController(Resource):
-    @api.doc("submit_library_problem")
     @AuthMiddleware.require_auth
+    @RateLimitMiddleware.rate_limit(max_requests=12, window_seconds=60)
     def post(self):
-        """提交已结束比赛的题目进行判题（复用比赛判题 Worker）"""
-        user = getattr(g, "current_user", None)
-        if not user:
-            return {"error": "请先登录"}, 401
-
-        data = request.get_json(silent=True) or {}
-        contest_problem_id = data.get("contest_problem_id")
-        code = str(data.get("code", ""))
-        language = str(data.get("language", "cpp") or "cpp")
-        if not contest_problem_id:
-            return {"error": "缺少 contest_problem_id"}, 400
-        if not code.strip():
-            return {"error": "代码不能为空"}, 400
-
+        user = g.current_user
+        data = json_object()
         try:
-            cp = ContestProblem.get_by_id(int(contest_problem_id))
-        except (ContestProblem.DoesNotExist, ValueError):
-            return {"error": "题目不存在"}, 404
-
-        contest = cp.contest
-        if not _is_contest_ended(contest):
-            return {"error": "比赛尚未结束，无法在题库中提交"}, 400
-
-        redis_service = inject(IRedisService)
-        submission_id = redis_service.increment("contest_submission:id_counter")
-        if submission_id is None:
-            import time as _time
-            submission_id = int(_time.time() * 1000)
-
-        redis_service.set(
-            f"contest_submission:{submission_id}",
-            {
-                "problem_id": cp.id,
-                "contest_id": contest.id,
-                "user_id": user.get("id"),
-                "status": "Pending",
-                "passed": 0,
-                "total": 0,
-                "details": [],
-            },
-            3600,
-        )
-        redis_service.list_push(
-            "contest_judge_queue",
-            {
-                "submission_id": submission_id,
-                "contest_id": contest.id,
-                "problem_id": cp.id,
-                "user_id": user.get("id"),
-                "code": code,
-                "language": language,
-                "library": True,
-            },
-        )
-        return {"submission_id": submission_id, "status": "Pending"}, 202
+            code, language, _ = execution_fields(data, 'cpp', {'cpp', 'python', 'java', 'go', 'javascript'})
+            cp = ContestProblem.get_by_id(int(data.get('contest_problem_id')))
+        except (ValueError, TypeError):
+            return {'error': '题目、代码或语言参数无效'}, 400
+        except ContestProblem.DoesNotExist:
+            return {'error': '题目不存在'}, 404
+        raw_key = request.headers.get('Idempotency-Key', '').strip()
+        if len(raw_key) > 128:
+            return {'error': '幂等键过长'}, 400
+        # 与正式比赛的客户端幂等键分域；数据库自增 ID 是唯一事实源。
+        key = 'library:' + hashlib.sha256(raw_key.encode()).hexdigest() if raw_key else None
+        with get_database().atomic():
+            contest = lock_contest(cp.contest_id)
+            if not _is_contest_ended(contest):
+                return {'error': '题目不存在'}, 404
+            query = User.select().where(User.id == user['id'])
+            if get_database().__class__.__name__ != 'SqliteDatabase':
+                query = query.for_update()
+            query.get()
+            if key:
+                old = ContestSubmission.select().where(
+                    (ContestSubmission.contest == contest) & (ContestSubmission.user == user['id'])
+                    & (ContestSubmission.idempotency_key == key)).first()
+                if old:
+                    if old.code != code or old.language != language or old.contest_problem_id != cp.id:
+                        return {'error': '幂等键已用于不同提交'}, 409
+                    return {'submission_id': old.id, 'status': old.status, 'idempotent_replay': True}, 202
+            active = ContestSubmission.select().where(ContestSubmission.user == user['id'],
+                ContestSubmission.contest_eligible == False, ContestSubmission.rejudge_of.is_null(),
+                ~ContestSubmission.status.in_(list(TERMINAL_STATES))).count()
+            if active >= 3:
+                return {'error': '最多同时处理 3 个比赛题目提交'}, 429
+            now = datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
+            job_id = uuid4().hex
+            sub = ContestSubmission.create(contest=contest, contest_problem=cp, user=user['id'],
+                problem_index=cp.problem_index, code=code, language=language, status=QUEUED,
+                job_id=job_id, judge_submission_id=job_id, contest_eligible=False,
+                received_at=now, submitted_at=now, queued_at=now, idempotency_key=key)
+            outbox = ContestJudgeOutbox.create(submission=sub)
+        dispatched = dispatch_outbox_entry(inject(IRedisService), outbox)
+        return {'submission_id': sub.id, 'status': sub.status, 'queue_pending_retry': not dispatched}, 202
 
 
 @api.route("/library/submission/<int:submission_id>")
 class LibraryProblemSubmissionResultController(Resource):
-    @api.doc("get_library_submission_result")
+    @AuthMiddleware.require_auth
     def get(self, submission_id):
-        """轮询比赛题库题目的判题结果（归一化为通用提交结果结构）"""
-        redis_service = inject(IRedisService)
-        result = redis_service.get(f"contest_submission:{submission_id}")
-        if not result:
-            return {"error": "提交记录不存在或已过期"}, 404
-
-        details = result.get("details") or []
-        testcase_results = []
-        first_failed = None
-        compile_error = None
-        for idx, d in enumerate(details):
-            passed = bool(d.get("passed"))
-            if not passed and first_failed is None:
-                first_failed = idx
-                if d.get("status") == "CE":
-                    compile_error = d.get("actual") or "编译错误"
-            testcase_results.append(
-                {
-                    "testCaseIndex": idx,
-                    "passed": passed,
-                    "stdout": d.get("actual") or "",
-                    "stderr": "",
-                    "expected": d.get("expected") or "",
-                    "input": "",
-                }
-            )
-
-        status = result.get("status", "WA")
-        return {
-            "id": submission_id,
-            "status": status,
-            "time_used": None,
-            "memory_used": None,
-            "testcase_results": testcase_results,
-            "fail_testcase_index": first_failed,
-            "compile_error": compile_error,
-        }, 200
+        sub = ContestSubmission.get_or_none(ContestSubmission.id == submission_id,
+                                            ContestSubmission.contest_eligible == False, ContestSubmission.rejudge_of.is_null())
+        user = g.current_user
+        if sub is None or (sub.user_id != int(user['id']) and user.get('role') != 'manager'):
+            return {'error': '提交记录不存在'}, 404
+        try:
+            from services.contest_operations import testcase_details
+            details = testcase_details(sub)
+        except (TypeError, ValueError):
+            details = []
+        # 隐藏用例的输入、期望输出与实际输出均不能回传，后者同样可以泄露输入。
+        cases = [{'testCaseIndex': i, 'passed': bool(d.get('passed')),
+                  'stdout': '', 'stderr': '', 'expected': '', 'input': ''}
+                 for i, d in enumerate(details) if isinstance(d, dict)]
+        return {'id': sub.id, 'status': sub.status, 'time_used': sub.cpu_time,
+                'memory_used': sub.memory, 'testcase_results': cases,
+                'fail_testcase_index': next((c['testCaseIndex'] for c in cases if not c['passed']), None),
+                'compile_error': '编译失败，请检查代码' if sub.status == 'CE' else None}, 200

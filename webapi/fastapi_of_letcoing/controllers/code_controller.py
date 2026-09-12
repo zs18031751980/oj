@@ -64,19 +64,15 @@ def _parse_execution_request():
     Returns:
         (CodeExecutionRequest, None) 或 (None, (error_response, status_code))
     """
-    model = request.get_json(silent=True) or {}
-    code = str(model.get('code', ''))
-    language = str(model.get('language', 'javascript') or 'javascript')
-    stdin = model.get('stdin', '')
+    from utils.request_validation import json_object, execution_fields
+    from services.glot_service import JUDGE0_LANGUAGES
+    from werkzeug.exceptions import BadRequest
+    try:
+        code, language, stdin = execution_fields(json_object(), 'javascript', JUDGE0_LANGUAGES)
+    except (ValueError, BadRequest) as exc:
+        return None, ({'error': str(exc)}, 400)
+    return CodeExecutionRequest(code=code, language=language, stdin=stdin or None), None
 
-    if not code.strip():
-        return None, ({'error': '代码不能为空'}, 400)
-
-    return CodeExecutionRequest(
-        code=code,
-        language=language,
-        stdin=stdin if stdin else None,
-    ), None
 
 
 def _execute_code(execution_request: CodeExecutionRequest):
@@ -93,10 +89,26 @@ def _execute_code(execution_request: CodeExecutionRequest):
         (response_data, None) 或 (None, (error_response, status_code))
     """
     code_service = inject(ICodeExecutionService)
-    result = asyncio.run(code_service.execute_code(execution_request))
+    from interfaces.service_interfaces import IRedisService
+    cache = inject(IRedisService)
+    user = getattr(g, 'current_user', None)
+    subject = f"user:{user['id']}" if user else f'ip:{request.remote_addr}'
+    try:
+        slot = cache.acquire_execution_slot(subject)
+    except Exception:
+        return None, ({'error': '执行服务暂时不可用'}, 503)
+    if not slot:
+        return None, ({'error': '同时执行任务过多'}, 429, {'Retry-After': '5'})
+    try:
+        result = asyncio.run(code_service.execute_code(execution_request))
+    finally:
+        try:
+            cache.release_execution_slot(subject, slot)
+        except Exception:
+            pass
 
     if not result.success:
-        return None, ({'error': result.stderr}, 400)
+        return None, ({'error': result.stderr, 'verdict': result.verdict}, result.http_status)
 
     return {
         'message': '执行成功',

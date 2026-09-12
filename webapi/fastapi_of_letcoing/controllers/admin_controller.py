@@ -13,6 +13,7 @@
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from peewee import fn
+from services.contest_lifecycle import transactional
 
 from core.di_container import inject
 from controllers.announcement_controller import _require_editor
@@ -209,11 +210,15 @@ class AdminUserStatusController(Resource):
         if not isinstance(is_active, bool):
             return {'error': 'is_active 必须为布尔值'}, 400
 
-        updated = (
-            User.update(is_active=is_active, updated_at=fn.NOW())
-            .where(User.id == user_id)
-            .execute()
-        )
+        from models.db_models import AuthSession, get_database
+        with get_database().atomic():
+            updated = (
+                User.update(is_active=is_active, updated_at=fn.NOW())
+                .where(User.id == user_id)
+                .execute()
+            )
+            if not is_active:
+                AuthSession.update(revoked=True).where(AuthSession.user == user_id).execute()
         if not updated:
             return {'error': '用户不存在'}, 404
 
@@ -228,6 +233,7 @@ class AdminUserDetailController(Resource):
     @api.response(400, 'Bad Request')
     @api.response(403, 'Forbidden')
     @api.response(404, 'Not Found')
+    @transactional
     def delete(self, user_id: int):
         """删除指定用户及其关联数据（仅 manager）"""
         result = _require_manager()
@@ -300,4 +306,4 @@ class AdminUserDetailController(Resource):
             user.delete_instance()
             return {'success': True, 'id': user_id}, 200
         except Exception as exc:
-            return {'error': f'删除用户失败: {exc}'}, 500
+            return {'error': '服务暂时不可用'}, 503

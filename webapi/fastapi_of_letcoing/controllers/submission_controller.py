@@ -2,8 +2,7 @@
 提交判题 API 控制器模块
 
 提供题目提交、判题状态查询等接口。
-判题流程：提交 -> Redis 队列 -> Worker 处理 -> 结果可查询。
-支持无 PostgreSQL 模式（仅依赖 Redis）。
+判题流程：提交与 outbox 同事务落库，Redis 投递，Worker 持久化结果。
 """
 
 import json
@@ -15,7 +14,8 @@ from flask_restx import Namespace, Resource, fields
 from core.di_container import inject
 from interfaces.service_interfaces import IRedisService
 from middleware.auth_middleware import AuthMiddleware, RateLimitMiddleware
-from models.db_models import Submission
+from models.db_models import Submission, SubmissionOutbox, User, get_database
+from uuid import uuid4
 
 api = Namespace('submissions', description='提交判题相关接口')
 
@@ -38,35 +38,6 @@ submission_status_model = api.model('SubmissionStatus', {
 error_model = api.model('ErrorResponse', {
     'error': fields.String(description='错误信息'),
 })
-
-
-def _next_id(redis_service):
-    """生成自增提交 ID（通过 Redis 原子计数器）"""
-    try:
-        return redis_service.increment('submission:id_counter')
-    except Exception:
-        import uuid
-        return abs(hash(str(uuid.uuid4()))) % (10 ** 8) + 1
-
-
-def _redis_sub_key(sid):
-    return f'submission:{sid}'
-
-
-def _save_submission_to_redis(redis_service, sid, data):
-    """将提交数据存入 Redis（TTL 1 小时）"""
-    try:
-        redis_service.set(_redis_sub_key(sid), data, 3600)
-    except Exception:
-        pass
-
-
-def _get_submission_from_redis(redis_service, sid):
-    """从 Redis 读取提交数据"""
-    try:
-        return redis_service.get(_redis_sub_key(sid))
-    except Exception:
-        return None
 
 
 def _get_problem_data(problem_id):
@@ -96,66 +67,45 @@ class SubmissionListCreateController(Resource):
     @RateLimitMiddleware.rate_limit(max_requests=30, window_seconds=60)
     def post(self):
         """提交代码进行判题"""
-        model = request.get_json(silent=True) or {}
-        problem_id = model.get('problem_id')
-        code = str(model.get('code', ''))
-        language = str(model.get('language', 'cpp'))
-
-        if not problem_id:
-            return {'error': '题目ID不能为空'}, 400
-        if not code.strip():
-            return {'error': '代码不能为空'}, 400
-
-        pdata = _get_problem_data(problem_id)
-        if not pdata:
+        from utils.request_validation import json_object, execution_fields
+        from services.glot_service import JUDGE0_LANGUAGES
+        from services.submission_outbox import dispatch_regular_entry
+        data = json_object()
+        try:
+            code, language, _ = execution_fields(data, 'cpp', JUDGE0_LANGUAGES)
+            problem_id = data.get('problem_id')
+            if type(problem_id) is not int or problem_id < 1:
+                raise ValueError('题目ID必须为正整数')
+        except ValueError as exc:
+            return {'error': str(exc)}, 400
+        if not _get_problem_data(problem_id):
             return {'error': '题目不存在'}, 404
-
-        redis_service = inject(IRedisService)
-
-        # 优先写入 PostgreSQL 持久化（提交历史可查）；
-        # 数据库不可用时降级为 Redis 计数器 ID（仅支持判题，不留历史）
-        db_submission = None
         user_id = _current_user_id()
-        if user_id:
-            try:
-                db_submission = Submission.create(
-                    user=user_id,
-                    problem=problem_id,
-                    code=code,
-                    language=language,
-                    status=Submission.PENDING,
-                )
-            except Exception:
-                db_submission = None
-
-        sid = db_submission.id if db_submission else _next_id(redis_service)
-        now = datetime.now().isoformat()
-
-        submission_data = {
-            'id': sid,
-            'problem_id': problem_id,
-            'code': code,
-            'language': language,
-            'status': 'Pending',
-            'time_used': None,
-            'memory_used': None,
-            'testcase_results': None,
-            'fail_testcase_index': None,
-            'created_at': now,
-        }
-
-        _save_submission_to_redis(redis_service, sid, submission_data)
-
-        testcase_list = pdata.get("testCases", [])
-        redis_service.list_push('judge_queue', {
-            'submission_id': sid,
-            'problem_id': problem_id,
-            'code': code,
-            'language': language,
-            'testcases': testcase_list,
-        })
-
-        return submission_data, 201
+        key = request.headers.get('Idempotency-Key', '').strip() or None
+        if key and len(key) > 128:
+            return {'error': '幂等键过长'}, 400
+        try:
+            with get_database().atomic():
+                # 同一用户的受理串行化，避免并发请求绕过待处理上限。
+                if get_database().__class__.__name__ != 'SqliteDatabase':
+                    User.select().where(User.id == user_id).for_update().get()
+                existing = (Submission.select().where(
+                    (Submission.user == user_id) & (Submission.idempotency_key == key)).first()) if key else None
+                if existing:
+                    return {'id': existing.id, 'status': existing.status, 'idempotent_replay': True}, 201
+                pending = Submission.select().where(
+                    (Submission.user == user_id) & (Submission.status.in_(['Pending', 'Running']))).count()
+                if pending >= 3:
+                    return {'error': '最多同时处理 3 个提交'}, 429, {'Retry-After': '5'}
+                submission = Submission.create(user=user_id, problem=problem_id, code=code,
+                    language=language, status=Submission.PENDING, job_id=uuid4().hex,
+                    idempotency_key=key)
+                outbox = SubmissionOutbox.create(submission=submission)
+        except Exception:
+            return {'error': '提交记录暂时无法保存，请稍后重试'}, 503
+        dispatch_regular_entry(inject(IRedisService), outbox)
+        return {'id': submission.id, 'status': submission.status, 'problem_id': problem_id,
+                'created_at': submission.created_at.isoformat()}, 201
 
     @api.doc('list_submissions')
     @api.param('page', '页码（默认 1）')
@@ -200,16 +150,24 @@ class SubmissionStatusController(Resource):
     @api.doc('get_submission_status')
     @api.response(200, 'Success', submission_status_model)
     @api.response(404, 'Not Found', error_model)
+    @AuthMiddleware.require_auth
     def get(self, submission_id):
         """查询提交记录的状态和结果"""
-        redis_service = inject(IRedisService)
-        data = _get_submission_from_redis(redis_service, submission_id)
-        if data:
-            tr = data.get('testcase_results')
-            if isinstance(tr, str):
-                try:
-                    data['testcase_results'] = json.loads(tr)
-                except Exception:
-                    pass
-            return data, 200
-        return {'error': '提交记录不存在或已过期'}, 404
+        try:
+            submission = Submission.get_by_id(submission_id)
+        except Submission.DoesNotExist:
+            return {'error': '提交记录不存在'}, 404
+        user = g.current_user
+        if str(submission.user_id) != str(user['id']) and user.get('role') != 'manager':
+            return {'error': '提交记录不存在'}, 404
+        raw = submission.to_dict()
+        fields = ('id', 'status', 'time_used', 'memory_used', 'testcase_results',
+                  'fail_testcase_index', 'created_at', 'code', 'language')
+        data = {name: raw.get(name) for name in fields}
+        data['problem_id'] = submission.problem_id
+        if isinstance(data['testcase_results'], list):
+            data['testcase_results'] = [
+                {key: item[key] for key in ('passed', 'status', 'time_used', 'skipped', 'testCaseIndex') if key in item}
+                for item in data['testcase_results']
+            ]
+        return data, 200

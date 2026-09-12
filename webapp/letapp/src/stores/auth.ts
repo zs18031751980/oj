@@ -4,6 +4,7 @@ import {
   API_BASE_URL,
   ApiError,
   apiRequest,
+  refreshSessionTokens,
   clearAuthStorageMode,
   getAuthStorage,
   getAuthStorageMode,
@@ -24,7 +25,7 @@ const AUTH_ROUTE_PREFIXES = ['/login', '/auth/callback'];
 
 type SessionPayload = TokenResponse | {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in?: number;
   token_type?: string;
   user_info?: UserInfo;
@@ -115,7 +116,8 @@ const buildProviderLoginUrl = (provider: string, next: string) => {
 export const useAuthStore = defineStore('auth', () => {
   const storageMode = ref<AuthStorageMode>(getAuthStorageMode());
   const accessToken = ref(getAuthStorage(storageMode.value).getItem(ACCESS_TOKEN_KEY) || '');
-  const refreshToken = ref(getAuthStorage(storageMode.value).getItem(REFRESH_TOKEN_KEY) || '');
+  const refreshToken = ref('');
+  localStorage.removeItem(REFRESH_TOKEN_KEY); sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   const userInfo = ref<UserInfo | null>(readJson<UserInfo>(USER_INFO_KEY, getAuthStorage(storageMode.value)));
   const supportedProviders = ref<string[]>([]);
   const isVerifying = ref(false);
@@ -151,11 +153,11 @@ export const useAuthStore = defineStore('auth', () => {
 
     const storage = getAuthStorage(resolvedMode);
     accessToken.value = tokens.access_token;
-    refreshToken.value = tokens.refresh_token;
+    refreshToken.value = '';
     userInfo.value = tokens.user_info ?? null;
 
     storage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-    storage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+
 
     if (tokens.user_info) {
       storage.setItem(USER_INFO_KEY, JSON.stringify(tokens.user_info));
@@ -185,7 +187,7 @@ export const useAuthStore = defineStore('auth', () => {
     startOAuthLogin('github', next, remember);
   };
 
-  const completeOAuthCallback = (query: Record<string, unknown>) => {
+  const completeOAuthCallback = async (query: Record<string, unknown>) => {
     const error = readQueryValue(query.error);
     if (error) {
       const errorDescription = readQueryValue(query.error_description);
@@ -193,49 +195,25 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error(normalizeOAuthErrorMessage(error, errorDescription));
     }
 
-    const token = readQueryValue(query.access_token);
-    const refresh = readQueryValue(query.refresh_token);
-
-    if (!token || !refresh) {
-      sessionStorage.removeItem(OAUTH_REMEMBER_KEY);
-      throw new Error('登录回调缺少必要令牌，请重新发起登录。');
-    }
-
-    let parsedUser: UserInfo | undefined;
-    const rawUser = readQueryValue(query.user_info);
-    if (rawUser) {
-      try {
-        parsedUser = JSON.parse(rawUser) as UserInfo;
-      } catch {
-        try {
-          parsedUser = JSON.parse(decodeURIComponent(rawUser)) as UserInfo;
-        } catch {
-          parsedUser = undefined;
-        }
-      }
-    }
+    const code = readQueryValue(query.code);
+    if (!code) throw new Error('登录回调缺少兑换码，请重新发起登录。');
+    const tokens = await apiRequest<TokenResponse>('/auth/exchange', {
+      method: 'POST', skipAuth: true, credentials: 'include',
+      body: JSON.stringify({ code, remember: sessionStorage.getItem(OAUTH_REMEMBER_KEY) !== '0' }),
+    });
 
     const rememberHint = readQueryValue(sessionStorage.getItem(OAUTH_REMEMBER_KEY));
     sessionStorage.removeItem(OAUTH_REMEMBER_KEY);
 
     const remember = rememberHint === '1' ? true : rememberHint === '0' ? false : undefined;
-    setSession(
-      {
-        access_token: token,
-        refresh_token: refresh,
-        expires_in: Number(readQueryValue(query.expires_in) || 0),
-        token_type: readQueryValue(query.token_type) || 'Bearer',
-        user_info: parsedUser,
-      },
-      remember === undefined ? {} : { remember },
-    );
+    setSession(tokens, remember === undefined ? {} : { remember });
   };
 
   const loginWithPassword = async (identifier: string, password: string, remember = true) => {
     const result = await apiRequest<PasswordLoginResponse>('/auth/login/password', {
       method: 'POST',
       skipAuth: true,
-      body: JSON.stringify({ identifier, password }),
+      body: JSON.stringify({ identifier, password, remember }),
     });
 
     const tokens = {
@@ -309,17 +287,8 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   const refresh = async () => {
-    if (!refreshToken.value) {
-      clearSession();
-      return false;
-    }
-
     try {
-      const tokens = await apiRequest<TokenResponse>('/auth/refresh', {
-        method: 'POST',
-        skipAuth: true,
-        body: JSON.stringify({ refresh_token: refreshToken.value }),
-      });
+      const tokens = await refreshSessionTokens();
       setSession(tokens, { storageMode: storageMode.value });
       return true;
     } catch (error) {
@@ -330,35 +299,26 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  const restoreSession = async () => {
-    if (!accessToken.value && !refreshToken.value) {
-      return false;
-    }
-
-    const verified = accessToken.value ? await verify({ clearOnFailure: false }) : false;
-    if (verified) {
-      return true;
-    }
-
-    if (refreshToken.value) {
+  let restorePromise: Promise<boolean> | null = null;
+  const restoreSession = (): Promise<boolean> => {
+    if (window.location.pathname === '/auth/callback') return Promise.resolve(false);
+    if (restorePromise) return restorePromise;
+    restorePromise = (async () => {
+      if (accessToken.value && await verify({ clearOnFailure: false })) return true;
       return refresh();
-    }
-
-    clearSession();
-    return false;
+    })().finally(() => { restorePromise = null; });
+    return restorePromise;
   };
 
   const logout = async () => {
-    if (accessToken.value) {
-      try {
-        await apiRequest('/auth/logout', { method: 'POST' });
-      } catch {
-        // Prefer local logout even if the backend revoke request fails.
-      }
-    }
-
+    // 服务端撤销成功后才清除本地状态，避免离线“登出”后 Cookie 自动恢复登录。
+    await apiRequest('/auth/logout', { method: 'POST', skipAuth: true });
     clearSession();
+    localStorage.setItem('auth_logout_at', String(Date.now()));
   };
+  window.addEventListener('storage', event => {
+    if (event.key === 'auth_logout_at') clearSession();
+  });
 
   const updateUserInfo = (info: UserInfo) => {
     userInfo.value = info;

@@ -1,0 +1,19 @@
+services:
+  api:
+    image: letcoding-api:local
+    restart: unless-stopped
+    env_file: ../.env.production
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
+    command: [sh, -c, 'mkdir -p /tmp/prometheus && exec gunicorn --config gunicorn.conf.py "app_factory:create_app()"']
+    ports: ["127.0.0.1:8080:8080"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=256m,mode=1777]
+    volumes:
+      - /var/lib/letcoding/uploads:/var/lib/letcoding/uploads
+    mem_limit: 1g
+    cpus: 2
+    pids_limit: 128
+    stop_grace_period: 45s

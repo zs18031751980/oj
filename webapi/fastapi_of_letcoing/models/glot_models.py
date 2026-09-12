@@ -102,6 +102,11 @@ class CodeExecutionResponse:
     stderr: str = ""                           # 程序的错误输出
     success: bool = True                       # 执行是否成功（根据 stderr 是否为空判断）
 
+    http_status: int = 200
+    verdict: Optional[str] = None
+    time_used: int = 0
+    memory_used: int = 0
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "stdout": self.stdout,

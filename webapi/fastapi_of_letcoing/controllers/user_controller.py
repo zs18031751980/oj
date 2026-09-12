@@ -11,7 +11,7 @@ import os
 import uuid
 from datetime import datetime
 
-from flask import request
+from flask import request, current_app
 from flask_restx import Namespace, Resource, fields
 
 from core.di_container import inject
@@ -161,7 +161,7 @@ class UserProfileController(Resource):
 
 
 # 头像文件保存目录（相对于项目根目录）
-_AVATAR_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads', 'avatars')
+_AVATAR_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'avatars')
 
 
 @api.route('/me/avatar')
@@ -185,34 +185,51 @@ class UserAvatarController(Resource):
         if not file.filename:
             return {'error': '文件名为空'}, 400
 
-        # 验证文件类型
-        allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
-        if file.content_type not in allowed_types:
-            return {'error': '仅支持 JPG/PNG/GIF/WebP 格式'}, 400
-
-        # 验证文件大小（2MB）
-        file_data = file.read()
+        from io import BytesIO
+        from PIL import Image, UnidentifiedImageError
+        import warnings
+        file_data = file.stream.read(2 * 1024 * 1024 + 1)
         if len(file_data) > 2 * 1024 * 1024:
             return {'error': '图片大小不能超过 2MB'}, 400
-
-        # 生成唯一文件名
-        ext = os.path.splitext(file.filename)[1].lower() or '.png'
-        filename = f"{uuid.uuid4().hex}{ext}"
-
-        # 确保目录存在
-        os.makedirs(_AVATAR_DIR, exist_ok=True)
-
-        # 保存文件
-        filepath = os.path.join(_AVATAR_DIR, filename)
-        with open(filepath, 'wb') as f:
-            f.write(file_data)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error', Image.DecompressionBombWarning)
+                with Image.open(BytesIO(file_data)) as picture:
+                    if picture.format not in {'JPEG', 'PNG', 'GIF', 'WEBP'} or picture.width * picture.height > 16000000:
+                        raise ValueError('图片格式或尺寸不支持')
+                    picture.seek(0)
+                    picture.load()
+                    normalized = picture.convert('RGB')
+                    normalized.thumbnail((1024, 1024))
+                    output = BytesIO()
+                    normalized.save(output, format='JPEG', quality=85)
+        except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombWarning, Image.DecompressionBombError):
+            return {'error': '无效图片或图片尺寸过大'}, 400
+        filename = f'{uuid.uuid4().hex}.jpg'
+        directory = os.path.join(current_app.config['UPLOAD_DIR'], 'avatars') if 'UPLOAD_DIR' in current_app.config else _AVATAR_DIR
+        os.makedirs(directory, exist_ok=True)
+        filepath = os.path.join(directory, filename)
+        with open(filepath, 'xb') as stream:
+            stream.write(output.getvalue())
 
         # 构建访问 URL
         avatar_url = f"/uploads/avatars/{filename}"
 
         # 更新用户头像
-        user.avatar_url = avatar_url
-        user.save()
+        old_avatar = user.avatar_url
+        try:
+            user.avatar_url = avatar_url
+            user.save()
+        except Exception:
+            os.unlink(filepath)
+            raise
+        if old_avatar and old_avatar.startswith('/uploads/avatars/'):
+            old_name = old_avatar.rsplit('/', 1)[-1]
+            if old_name != filename and old_name and old_name not in ('.', '..'):
+                try:
+                    os.unlink(os.path.join(directory, old_name))
+                except FileNotFoundError:
+                    pass
 
         # 刷新 JWT 中的用户信息
         try:

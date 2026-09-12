@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, defineAsyncComponent, onMounted, computed } from 'vue';
+import { ref, defineAsyncComponent, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuthStore } from '../stores/auth';
 import { useRouter } from 'vue-router';
 import {
-  listDiscussions, getDiscussion, createDiscussion,
+  listDiscussions, listDiscussionReplies, getDiscussion, createDiscussion,
   likeDiscussion, replyToDiscussion, likeDiscussionReply,
   deleteDiscussion, deleteDiscussionReply,
   type DiscussionData, type DiscussionReplyData,
@@ -96,24 +96,68 @@ const formatFullTime = (dateStr?: string) => {
 };
 
 // ===== 数据加载 =====
+let pageAbort = new AbortController();
+let hasMore = true;
+let listOffset = 0;
+let repliesOffset = 0;
+let loadingMore = false;
 const loadData = async () => {
-  isLoading.value = true;
-  error.value = '';
+  pageAbort.abort(); pageAbort = new AbortController();
+  const signal = pageAbort.signal;
+  isLoading.value = true; error.value = ''; hasMore = true;
   try {
-    discussions.value = await listDiscussions();
+    const rows = await listDiscussions(activeCategory.value, 0, signal);
+    if (signal.aborted) return;
+    discussions.value = rows; listOffset = rows.length; hasMore = rows.length === 30;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : '加载失败';
+    if (!signal.aborted) error.value = e instanceof Error ? e.message : '加载失败';
   } finally {
-    isLoading.value = false;
+    if (!signal.aborted) { isLoading.value = false; await nextTick(); checkMore(); }
   }
 };
+const checkMore = async () => {
+  if (loadingMore || isLoading.value || !hasMore || error.value || showDetail.value) return;
+  if (document.documentElement.scrollHeight - window.scrollY - window.innerHeight > 500) return;
+  loadingMore = true;
+  const signal = pageAbort.signal;
+  try {
+    const rows = await listDiscussions(activeCategory.value, listOffset, signal);
+    if (signal.aborted) return;
+    listOffset += rows.length;
+    hasMore = rows.length === 30;
+    const known = new Set(discussions.value.map(row => row.id));
+    discussions.value.push(...rows.filter(row => !known.has(row.id)));
+  } catch { /* 下一次滚动可重试，已有列表保持可用。 */ }
+  finally { loadingMore = false; }
+};
+let repliesLoading = false;
+const onScroll = async (event: Event) => {
+  if (!showDetail.value) { void checkMore(); return; }
+  const node = event.target;
+  const current = currentDiscussion.value;
+  if (!(node instanceof HTMLElement) || repliesLoading || !current || detailLoading.value) return;
+  if (node.scrollHeight - node.scrollTop - node.clientHeight > 400) return;
+  if ((current.replies?.length || 0) >= current.reply_count) return;
+  repliesLoading = true;
+  try {
+    const rows = await listDiscussionReplies(current.id, repliesOffset, pageAbort.signal);
+    if (currentDiscussion.value?.id !== current.id) return;
+    repliesOffset += rows.length;
+    const known = new Set(current.replies?.map(row => row.id));
+    (current.replies ||= []).push(...rows.filter(row => !known.has(row.id)));
+  } catch { /* 后续滚动重试。 */ }
+  finally { repliesLoading = false; }
+};
+watch(activeCategory, loadData);
 
 // ===== 查看详情 =====
 const openDetail = async (d: DiscussionData) => {
   showDetail.value = true;
   detailLoading.value = true;
   try {
-    currentDiscussion.value = await getDiscussion(d.id);
+    const detail = await getDiscussion(d.id);
+    if (!showDetail.value) return;
+    currentDiscussion.value = detail; repliesOffset = detail.replies?.length || 0;
   } catch {
     currentDiscussion.value = d;
   } finally {
@@ -135,7 +179,7 @@ const goLogin = () => {
 const toggleLike = async (d: DiscussionData) => {
   if (!authStore.isAuthenticated) { goLogin(); return; }
   try {
-    const res = await likeDiscussion(d.id);
+    const res = await likeDiscussion(d.id, !d.is_liked);
     d.like_count = res.like_count;
     d.is_liked = res.liked;
   } catch {}
@@ -144,7 +188,7 @@ const toggleLike = async (d: DiscussionData) => {
 const toggleReplyLike = async (r: DiscussionReplyData) => {
   if (!authStore.isAuthenticated) { goLogin(); return; }
   try {
-    const res = await likeDiscussionReply(r.id);
+    const res = await likeDiscussionReply(r.id, !r.is_liked);
     r.like_count = res.like_count;
     r.is_liked = res.liked;
   } catch {};
@@ -221,7 +265,8 @@ const submitCreate = async () => {
   }
 };
 
-onMounted(loadData);
+onMounted(() => { void loadData(); document.addEventListener('scroll', onScroll, { capture: true, passive: true }); });
+onUnmounted(() => { pageAbort.abort(); document.removeEventListener('scroll', onScroll, true); });
 </script>
 
 <template>

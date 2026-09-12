@@ -14,6 +14,8 @@ Redis 缓存服务模块
 import redis           # Redis Python 客户端
 import json            # JSON 序列化/反序列化
 import hashlib
+import threading
+from uuid import uuid4
 import time            # 时间戳操作
 from typing import Optional, Any, Dict, List, Union
 from datetime import timedelta
@@ -44,6 +46,8 @@ class RedisService(IRedisService, Injectable):
         self._logger_service = logger_service
         self._client = None
         self._connected = False
+        self._reconnect_lock = threading.Lock()
+        self._next_reconnect = 0.0
         self._connect()
 
     def _connect(self) -> bool:
@@ -89,6 +93,7 @@ class RedisService(IRedisService, Injectable):
             return True
 
         except Exception as ex:
+            self._next_reconnect = time.monotonic() + 5
             self._connected = False
             self._logger_service.error("Redis 连接失败", ex)
             self._client = None
@@ -100,6 +105,12 @@ class RedisService(IRedisService, Injectable):
 
     def is_connected(self) -> bool:
         """检查当前是否与 Redis 服务器保持连接"""
+        if self._client is None and time.monotonic() >= self._next_reconnect:
+            if self._reconnect_lock.acquire(blocking=False):
+                try:
+                    self._connect()
+                finally:
+                    self._reconnect_lock.release()
         return self._connected and self._client is not None
 
     def reconnect(self) -> bool:
@@ -287,23 +298,15 @@ class RedisService(IRedisService, Injectable):
             True 表示允许请求，False 表示超出限制
         """
         if not self.is_connected():
-            return True
-
-        try:
-            pipe = self._client.pipeline()
-            pipe.incr(key)
-            pipe.ttl(key)
-            results = pipe.execute()
-            count = int(results[0])
-            ttl_val = int(results[1])
-
-            if ttl_val < 0:
-                self._client.expire(key, window_seconds)
-
-            return count <= max_requests
-        except Exception as ex:
-            self._logger_service.error(f"Redis 频率限制检查失败: {key}", ex)
-            return True
+            raise ConnectionError('Redis unavailable')
+        count = self._client.eval("""
+            local count = redis.call('INCR', KEYS[1])
+            if redis.call('TTL', KEYS[1]) < 0 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return count
+        """, 1, key, window_seconds)
+        return int(count) <= max_requests
 
     # ============================================================
     # 计数器操作（原子操作）
@@ -429,72 +432,187 @@ class RedisService(IRedisService, Injectable):
             return None
 
     def list_claim(self, key: str, processing_key: str) -> Any:
-        """使用 RPOPLPUSH 原子认领任务，并为 delivery 建立租约。"""
+        """原子认领，投递身份与业务 payload 分离，兼容旧队列消息。"""
         if not self.is_connected():
             return None
-        try:
-            receipt = self._client.rpoplpush(key, processing_key)
-            if receipt is None:
-                return None
-            if hasattr(self._client, 'setex'):
-                self._client.setex(self._lease_key(processing_key, receipt), _JOB_LEASE_SECONDS, '1')
-            return {'payload': json.loads(receipt), 'receipt': receipt}
-        except Exception as ex:
-            self._logger_service.error(f"Redis 认领队列任务失败: {key}", ex)
+        delivery = uuid4().hex
+        receipt = self._client.eval("""
+            local raw
+            if KEYS[1] == 'contest_judge_queue' then
+                local candidates = redis.call('LRANGE', KEYS[1], -1000, -1)
+                local lowest = math.huge
+                for i = #candidates, 1, -1 do
+                    local ok, item = pcall(cjson.decode, candidates[i])
+                    if ok and type(item) == 'table' then
+                        local payload = item._delivery and item.payload or item
+                        if type(payload) == 'table' then
+                            local group = tostring(payload.contest_id) .. ':' .. tostring(payload.entry_id or payload.user_id)
+                            local score = tonumber(redis.call('HGET', KEYS[1] .. ':fair', group)) or 0
+                            if score < lowest then lowest = score; raw = candidates[i] end
+                        end
+                    end
+                end
+                if raw then
+                    redis.call('LREM', KEYS[1], -1, raw)
+                    local item = cjson.decode(raw)
+                    local payload = item._delivery and item.payload or item
+                    local group = tostring(payload.contest_id) .. ':' .. tostring(payload.entry_id or payload.user_id)
+                    local tick = redis.call('HINCRBY', KEYS[1] .. ':fair', '_tick', 1)
+                    redis.call('HSET', KEYS[1] .. ':fair', group, tick)
+                    redis.call('EXPIRE', KEYS[1] .. ':fair', 86400)
+                else raw = redis.call('RPOP', KEYS[1]) end
+            else raw = redis.call('RPOP', KEYS[1]) end
+            if not raw then return nil end
+            local ok, item = pcall(cjson.decode, raw)
+            if not ok or type(item) ~= 'table' then
+                redis.call('LPUSH', KEYS[1] .. ':dead', raw)
+                return nil
+            end
+            local payload = item
+            local attempts = 0
+            if item._delivery then payload = item.payload; attempts = tonumber(item.attempts) or 0 end
+            if type(payload) ~= 'table' then
+                redis.call('LPUSH', KEYS[1] .. ':dead', raw); return nil
+            end
+            local receipt = cjson.encode({_delivery=true, payload=payload,
+                attempts=attempts+1, delivery_id=ARGV[1]})
+            redis.call('LPUSH', KEYS[2], receipt)
+            redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[2])
+            return receipt
+        """, 3, key, processing_key, f'judge:lease:{processing_key}:{delivery}',
+            delivery, _JOB_LEASE_SECONDS)
+        if receipt is None:
             return None
+        item = json.loads(receipt)
+        return {'payload': item['payload'], 'receipt': receipt, 'attempts': item['attempts']}
 
     def list_ack(self, processing_key: str, receipt: str) -> bool:
-        """仅删除当前 receipt，避免并发 Worker 误确认其他任务。"""
         if not self.is_connected():
             return False
-        try:
-            removed = self._client.lrem(processing_key, 1, receipt) == 1
-            if removed and hasattr(self._client, 'delete'):
-                self._client.delete(self._lease_key(processing_key, receipt))
-            return removed
-        except Exception as ex:
-            self._logger_service.error(f"Redis 确认队列任务失败: {processing_key}", ex)
-            return False
+        return bool(self._client.eval("""
+            if not redis.call('GET', KEYS[2]) then return 0 end
+            local n = redis.call('LREM', KEYS[1], 1, ARGV[1])
+            redis.call('DEL', KEYS[2])
+            return n
+        """, 2, processing_key, self._lease_key(processing_key, receipt), receipt))
 
-    def list_recover(self, processing_key: str, key: str) -> int:
-        """只恢复租约已过期的任务，避免重启一个 Worker 时复制其他任务。"""
+    def list_renew(self, processing_key: str, receipt: str) -> bool:
+        if not self.is_connected():
+            return False
+        return bool(self._client.eval("""
+            if not redis.call('GET', KEYS[1]) then return 0 end
+            return redis.call('EXPIRE', KEYS[1], ARGV[1])
+        """, 1, self._lease_key(processing_key, receipt), _JOB_LEASE_SECONDS))
+
+    def list_nack(self, key, processing_key, receipt):
+        if not self.is_connected():
+            return False
+        return bool(self._client.eval("""
+            if not redis.call('GET', KEYS[2]) then return 0 end
+            if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 0 then return 0 end
+            redis.call('DEL', KEYS[2])
+            local item = cjson.decode(ARGV[1])
+            if item.attempts >= 5 then
+                redis.call('LPUSH', KEYS[3] .. ':dead', ARGV[1])
+            else
+                local clock = redis.call('TIME')
+                redis.call('ZADD', KEYS[3] .. ':retry', tonumber(clock[1]) + math.min(60, 2 ^ item.attempts), ARGV[1])
+            end
+            return 1
+        """, 3, processing_key, self._lease_key(processing_key, receipt), key, receipt))
+
+    def archive_dead(self, key, receipt):
+        return bool(self._client.eval("""
+            if redis.call('LREM', KEYS[1], 1, ARGV[1]) == 0 then return 0 end
+            redis.call('LPUSH', KEYS[2], ARGV[1])
+            redis.call('LTRIM', KEYS[2], 0, 999)
+            return 1
+        """, 2, key + ':dead', key + ':dead:archive', receipt))
+
+    def list_retry_due(self, key):
         if not self.is_connected():
             return 0
-        recovered = 0
-        try:
-            if not hasattr(self._client, 'lrange') or not hasattr(self._client, 'exists'):
-                while self._client.rpoplpush(processing_key, key) is not None:
-                    recovered += 1
-                return recovered
-            for receipt in self._client.lrange(processing_key, 0, -1):
-                if self._client.exists(self._lease_key(processing_key, receipt)):
-                    continue
-                if self._client.lrem(processing_key, 1, receipt) == 1:
-                    self._client.lpush(key, receipt)
-                    recovered += 1
-            return recovered
-        except Exception as ex:
-            self._logger_service.error(f"Redis 恢复队列任务失败: {processing_key}", ex)
-            return recovered
+        return int(self._client.eval("""
+            local clock = redis.call('TIME')
+            local count = 0
+            for _, item in ipairs(redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', clock[1], 'LIMIT', 0, 100)) do
+                if redis.call('LLEN', KEYS[2]) >= 1000 then break end
+                if redis.call('ZREM', KEYS[1], item) == 1 then
+                    redis.call('LPUSH', KEYS[2], item); count = count + 1
+                end
+            end
+            return count
+        """, 2, key + ':retry', key))
+
+    def list_recover(self, processing_key: str, key: str) -> int:
+        if not self.is_connected():
+            return 0
+        return int(self._client.eval("""
+            local count = 0
+            for _, receipt in ipairs(redis.call('LRANGE', KEYS[1], 0, -1)) do
+                local ok, item = pcall(cjson.decode, receipt)
+                ok = ok and type(item) == 'table'
+                local lease = ok and item.delivery_id and
+                    ('judge:lease:' .. KEYS[1] .. ':' .. item.delivery_id) or ''
+                if not redis.call('GET', lease) then
+                    if redis.call('LREM', KEYS[1], 1, receipt) == 1 then
+                        local target = KEYS[2]
+                        if not ok or (tonumber(item.attempts) or 0) >= tonumber(ARGV[1]) then
+                            target = target .. ':dead'
+                        end
+                        redis.call('LPUSH', target, receipt)
+                        count = count + 1
+                    end
+                end
+            end
+            return count
+        """, 2, processing_key, key, 5))
 
     @staticmethod
     def _lease_key(processing_key: str, receipt: str) -> str:
-        digest = hashlib.sha256(receipt.encode('utf-8')).hexdigest()
-        return f'judge:lease:{processing_key}:{digest}'
+        delivery = json.loads(receipt).get('delivery_id')
+        return f'judge:lease:{processing_key}:{delivery}'
 
     def enqueue_with_state(self, state_key: str, state: Any, ttl: int, queue_key: str, task: Any) -> bool:
         """通过 Redis 事务原子完成“提交已接收 + 任务入队”。"""
         if not self.is_connected():
             return False
+        job_id = task.get('job_id') or uuid4().hex
         try:
-            with self._client.pipeline(transaction=True) as pipe:
-                pipe.setex(state_key, ttl, json.dumps(state, ensure_ascii=False))
-                pipe.lpush(queue_key, json.dumps(task, ensure_ascii=False))
-                pipe.execute()
-            return True
-        except Exception as ex:
-            self._logger_service.error(f"Redis 原子入队失败: {queue_key}", ex)
+            return bool(self._client.eval("""
+                if redis.call('EXISTS', KEYS[3]) == 1 then return 1 end
+                if redis.call('LLEN', KEYS[2]) >= 1000 then return 0 end
+                redis.call('SET', KEYS[3], '1', 'EX', 604800)
+                redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+                redis.call('LPUSH', KEYS[2], ARGV[3])
+                return 1
+            """, 3, state_key, queue_key, f'judge:enqueued:{queue_key}:{job_id}',
+                json.dumps(state), ttl, json.dumps(task)))
+        except Exception:
             return False
+
+    def acquire_execution_slot(self, subject):
+        if not self.is_connected():
+            raise ConnectionError('Redis unavailable')
+        token = uuid4().hex
+        allowed = self._client.eval("""
+            local clock = redis.call('TIME')
+            local now = tonumber(clock[1])
+            for _, key in ipairs(KEYS) do redis.call('ZREMRANGEBYSCORE', key, '-inf', now) end
+            if redis.call('ZCARD', KEYS[1]) >= 16 or redis.call('ZCARD', KEYS[2]) >= 2 then return 0 end
+            for _, key in ipairs(KEYS) do
+                redis.call('ZADD', key, now + 60, ARGV[1]); redis.call('EXPIRE', key, 65)
+            end
+            return 1
+        """, 2, 'execution:global', f'execution:{subject}', token)
+        return token if allowed else None
+
+    def release_execution_slot(self, subject, token):
+        if self.is_connected():
+            with self._client.pipeline() as pipe:
+                pipe.zrem('execution:global', token)
+                pipe.zrem(f'execution:{subject}', token)
+                pipe.execute()
 
     def list_length(self, key: str) -> int:
         """获取列表长度"""

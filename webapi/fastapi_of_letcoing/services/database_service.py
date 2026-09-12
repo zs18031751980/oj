@@ -74,7 +74,8 @@ class DatabaseService(Injectable):
             if db.is_closed() or not db.is_connection_usable():
                 db.connect()
         except Exception as e:
-            print(f"[DB] 初始化连接不可用(将在首次查询时重试): {sanitize_db_error(str(e))}")
+            import logging
+            logging.getLogger('letcoding.database').warning('初始化连接不可用，将在首次查询时重试', exc_info=True)
 
     # ============================================================
     # 通用 CRUD（增删改查）操作
@@ -154,7 +155,11 @@ class DatabaseService(Injectable):
         def _op():
             with db.atomic():
                 query = model_class.update(**kwargs).where(model_class.id == record_id)
-                return query.execute() > 0
+                changed = query.execute() > 0
+                from models.db_models import User, AuthSession
+                if changed and model_class is User and ('password_hash' in kwargs or kwargs.get('is_active') is False):
+                    AuthSession.update(revoked=True).where(AuthSession.user == record_id).execute()
+                return changed
 
         try:
             return run_db_operation(db, _op)
