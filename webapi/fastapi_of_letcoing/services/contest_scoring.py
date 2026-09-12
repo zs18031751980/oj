@@ -53,6 +53,7 @@ def compute_acm_scoreboard(
     start_at: datetime,
     penalty_minutes: int = 20,
     cutoff_at: datetime | None = None,
+    presorted: bool = False,
 ) -> list[dict[str, Any]]:
     """按 ICPC/ACM 规则计算榜单。
 
@@ -80,7 +81,7 @@ def compute_acm_scoreboard(
             },
         }
 
-    ordered_submissions = sorted(
+    ordered_submissions = submissions if presorted else sorted(
         submissions,
         key=lambda row: (_as_datetime(row.get("received_at")) or datetime.max, int(row.get("id", 0))),
     )

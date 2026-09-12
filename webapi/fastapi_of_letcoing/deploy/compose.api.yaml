@@ -1,9 +1,25 @@
 services:
+  migrate:
+    image: "${API_IMAGE:?Set immutable API image digest}"
+    env_file: ../.env.production
+    environment:
+      API_IMAGE: "${API_IMAGE:?Set immutable API image digest}"
+      JUDGE_SANDBOX_IMAGE: "${JUDGE_SANDBOX_IMAGE:?Set immutable sandbox image digest}"
+    command: [sh, -c, 'python deploy/check_release.py --role api && python manage.py migrate']
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:size=128m,mode=1777]
   api:
-    image: letcoding-api:local
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    image: "${API_IMAGE:?Set immutable API image digest}"
     restart: unless-stopped
     env_file: ../.env.production
     environment:
+      JUDGE_SANDBOX_IMAGE: "${JUDGE_SANDBOX_IMAGE:?Set immutable sandbox image digest}"
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus
     command: [sh, -c, 'mkdir -p /tmp/prometheus && exec gunicorn --config gunicorn.conf.py "app_factory:create_app()"']
     ports: ["127.0.0.1:8080:8080"]

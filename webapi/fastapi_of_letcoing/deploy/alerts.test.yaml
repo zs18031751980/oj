@@ -1,0 +1,82 @@
+rule_files: [alerts.yaml]
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'letcoding_dependency_up{dependency="redis"}'
+        values: '0 0 0 1 1'
+      - series: 'letcoding_contest_waiting'
+        values: '5 5 5 0 0'
+      - series: 'letcoding_worker_slots{pool="contest",state="accepting"}'
+        values: '0 0 0 1 1'
+      - series: 'letcoding_contest_projection_version_lag'
+        values: '200 200 200 0 0'
+      - series: 'letcoding_contest_unresolved_system_errors'
+        values: '1 1 1 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ContestDependencyUnavailable
+        exp_alerts:
+          - exp_labels: {dependency: redis, severity: critical}
+            exp_annotations: {summary: '比赛依赖不可用：redis'}
+      - eval_time: 2m
+        alertname: ContestPoolUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: '有正式提交等待，但比赛池没有接收任务的槽位'}
+      - eval_time: 2m
+        alertname: ContestProjectionBehind
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: '榜单持续落后提交版本'}
+      - eval_time: 2m
+        alertname: ContestSystemErrors
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: '存在未解决的判题系统错误'}
+      - eval_time: 4m
+        alertname: ContestDependencyUnavailable
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ContestPoolUnavailable
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'letcoding_contest_projection_stale_seconds'
+        values: '60 60 60 0 0 0 0'
+      - series: 'letcoding_projection_consecutive_failures{pool="contest"}'
+        values: '3 3 3 0 0 0 0'
+      - series: 'letcoding_audit_exporters'
+        values: '0 0 0 1 1 1 1'
+      - series: 'letcoding_backup_status_up'
+        values: '0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ContestProjectionStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: '存在超过 30 秒未更新的欠账榜单'}
+      - eval_time: 2m
+        alertname: ContestProjectionRefreshFailing
+        exp_alerts:
+          - exp_labels: {severity: critical, pool: contest}
+            exp_annotations: {summary: '榜单刷新连续失败：contest'}
+      - eval_time: 2m
+        alertname: ContestAuditExportStalled
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: '审计导出未运行或持续失败'}
+      - eval_time: 6m
+        alertname: ContestBackupUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: '备份监控缺失、状态无效或备份超过 24 小时'}
+      - eval_time: 4m
+        alertname: ContestProjectionStale
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ContestProjectionRefreshFailing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: ContestAuditExportStalled
+        exp_alerts: []

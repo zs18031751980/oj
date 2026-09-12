@@ -9,6 +9,7 @@
 """
 
 import asyncio
+from contextlib import ExitStack
 import json
 import os
 import threading
@@ -56,10 +57,17 @@ class JudgeWorker:
         self.active_job = None
         self.failure_count = 0
         self.compile_cache_hits = 0
+        self.audit_consecutive_failures = 0
+        self.audit_last_success_unix = 0
+        self.projection_consecutive_failures = 0
+        self.projection_last_success_unix = 0
         self._last_recovery = 0.0
         self._stop_event = threading.Event()
+        self._draining = threading.Event()
+        self._claim_lock = threading.Lock()
         self._maintenance_thread = None
         self._projection_thread = None
+        self._audit_thread = None
         self._heartbeat_thread = None
         self.pool = os.environ.get('JUDGE_WORKER_POOL', 'all')
         if self.pool not in {'all', 'contest', 'practice', 'rejudge', 'validation'}:
@@ -88,23 +96,53 @@ class JudgeWorker:
     def _refresh_projections(self):
         from controllers.contest_rankings_controller import refresh_dirty_projections
         from services.ranking_projection import refresh_rankings
-        if self.pool in {'contest', 'all'}:
-            refresh_dirty_projections()
-        if self.pool in {'practice', 'all'}:
-            refresh_rankings()
+        try:
+            if self.pool in {'contest', 'all'}:
+                refresh_dirty_projections()
+            if self.pool in {'practice', 'all'}:
+                refresh_rankings()
+        except Exception:
+            self.projection_consecutive_failures += 1
+            raise
+        else:
+            self.projection_consecutive_failures = 0
+            self.projection_last_success_unix = time.time()
+
+    def _export_audit(self):
+        from services.retention import export_audit
+        directory = os.environ.get('AUDIT_EXPORT_DIR')
+        if not directory:
+            return
+        try:
+            result = export_audit(directory, getattr(self, '_audit_cursor', 0), 500)
+        except Exception:
+            self.audit_consecutive_failures = getattr(self, 'audit_consecutive_failures', 0)+1
+            raise
+        else:
+            self.audit_consecutive_failures = 0
+            self.audit_last_success_unix = time.time()
+        # 全量循环校验副本，也覆盖序列号先分配、事务后提交造成的迟到记录。
+        self._audit_cursor = result['next_cursor'] if result['exported'] == 500 else 0
 
     def start(self):
         """启动后台判题线程"""
         if self._running:
             return
+        if any(thread and thread.is_alive() for thread in (self._thread, self._maintenance_thread,
+                self._heartbeat_thread, self._projection_thread, self._audit_thread)):
+            raise RuntimeError('previous Worker threads are still stopping')
         self._running = True
         self._stop_event.clear()
+        self._draining.clear()
         # 启动时仅回收租约已过期的任务，不搬走其他活跃 Worker 的任务。
         self._maintenance_thread = threading.Thread(target=self._maintenance, daemon=True)
         self._maintenance_thread.start()
         self._heartbeat_thread = threading.Thread(target=self._background, args=(
             lambda: self.redis.set(f'judge:worker:{self.worker_id}', self.health(), 30), 5, False), daemon=True)
         self._heartbeat_thread.start()
+        if os.environ.get('AUDIT_EXPORT_DIR'):
+            self._audit_thread = threading.Thread(target=self._background, args=(self._export_audit, 10), daemon=True)
+            self._audit_thread.start()
         if self.pool in {'contest', 'practice', 'all'}:
             self._projection_thread = threading.Thread(target=self._background, args=(self._refresh_projections, 2), daemon=True)
             self._projection_thread.start()
@@ -112,25 +150,37 @@ class JudgeWorker:
         self._thread.start()
         self.logger.info("JudgeWorker started")
 
-    def stop(self):
-        """停止后台判题线程"""
+    def begin_drain(self) -> None:
+        """停止新领取；已领取任务仍保留租约和心跳，直到结果持久化。"""
+        with self._claim_lock:
+            self._draining.set()
+
+    def stop(self, timeout: float = 30) -> bool:
+        """在一个总时间预算内排空；超时返回 False，调用方决定进程退出。"""
+        deadline = time.monotonic() + max(0, timeout)
+        self.begin_drain()
+        if self._thread:
+            self._thread.join(timeout=max(0, deadline-time.monotonic()))
+            if self._thread.is_alive():
+                self.logger.warning('Worker drain deadline exceeded; active job retains its lease')
+                return False
         self._running = False
         self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=30)
-        if self._maintenance_thread:
-            self._maintenance_thread.join(timeout=5)
-        for thread in (self._heartbeat_thread, self._projection_thread):
+        threads = (self._maintenance_thread, self._heartbeat_thread, self._projection_thread, self._audit_thread)
+        for thread in threads:
             if thread:
-                thread.join(timeout=5)
-        self.logger.info("JudgeWorker stopped")
+                thread.join(timeout=max(0, deadline-time.monotonic()))
+        stopped = all(not thread or not thread.is_alive() for thread in threads)
+        if stopped:
+            self.logger.info('JudgeWorker stopped')
+        return stopped
 
     def _run_loop(self):
         """主循环：不断从 Redis 队列拉取判题任务"""
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
         try:
-            while self._running:
+            while self._running and not self._draining.is_set():
                 try:
                     # 轮转读取，避免普通题库提交持续涌入时比赛判题被永久饿死。
                     queues = self.queues()
@@ -138,12 +188,16 @@ class JudgeWorker:
                     for offset in range(len(queues)):
                         index = (self._queue_cursor + offset) % len(queues)
                         queue_name, handler = queues[index]
-                        claim = self.redis.list_claim(queue_name, f'{queue_name}:processing')
+                        with self._claim_lock:
+                            if self._draining.is_set():
+                                break
+                            claim = self.redis.list_claim(queue_name, f'{queue_name}:processing')
                         if claim:
                             self._queue_cursor = (index + 1) % len(queues)
                             task = claim['payload']
                             self.last_claim_at = datetime.now(timezone.utc)
                             self.active_job = task.get('job_id') or task.get('submission_id')
+                            self.logger.info(f'judge_claim queue={queue_name} job_id={task.get("job_id")} submission_id={task.get("submission_id")} attempt_id={task.get("attempt_id")}')
                             renew_stop = threading.Event()
                             def renew():
                                 while not renew_stop.wait(20):
@@ -290,12 +344,19 @@ class JudgeWorker:
         return {
             'worker_id': self.worker_id,
             'alive': bool(self._running and self._thread and self._thread.is_alive()),
+            'draining': self._draining.is_set(),
+            'accepting_jobs': bool(self._running and not self._draining.is_set()),
             'started_at': self.started_at.isoformat(),
             'last_claim_at': self.last_claim_at.isoformat() if self.last_claim_at else None,
             'last_completed_at': self.last_completed_at.isoformat() if self.last_completed_at else None,
             'active_job': self.active_job,
             'failure_count': self.failure_count,
             'compile_cache_hits': self.compile_cache_hits,
+            'audit_enabled': bool(os.environ.get('AUDIT_EXPORT_DIR')),
+            'audit_consecutive_failures': self.audit_consecutive_failures,
+            'audit_last_success_unix': self.audit_last_success_unix,
+            'projection_consecutive_failures': self.projection_consecutive_failures,
+            'projection_last_success_unix': self.projection_last_success_unix,
             'pool': self.pool,
             'queue_length': self.redis.list_length('contest_judge_queue'),
             'processing_count': self.redis.list_length('contest_judge_queue:processing'),
@@ -360,6 +421,7 @@ class JudgeWorker:
         """
         if not can_transition(expected, target):
             return False
+        started = time.monotonic()
         try:
             archived_details = fields.pop('testcase_results', None) if is_terminal(target) else None
             fields.update(status=target, worker_id=self.worker_id)
@@ -383,6 +445,12 @@ class JudgeWorker:
                     contest_id = ContestSubmission.get_by_id(submission_id).contest_id
                     Contest.update(scoreboard_requested_version=Contest.scoreboard_requested_version + 1).where(
                         Contest.id == contest_id).execute()
+            if updated == 1 and is_terminal(target):
+                try:
+                    from services.contest_metrics import observe_judgement
+                    observe_judgement(self.redis, terminal, getattr(self, 'pool', 'all'), time.monotonic()-started)
+                except Exception:
+                    self.logger.warning('Judge metric recording failed')
             return updated == 1
         except Exception:
             # 不把数据库失败伪装为状态冲突；外层保留 receipt 等待重试。
@@ -546,82 +614,76 @@ class JudgeWorker:
                 error_message=compile_stderr or compile_error or '编译失败',
             )
             return True
-        if not self._transition_contest(
-            submission_id, attempt_id, COMPILING, COMPILED,
-            compile_finished_at=contest_now(),
-        ):
-            program.close()
-            return True
+        with ExitStack() as resources:
+            resources.callback(program.close)
+            if not self._transition_contest(
+                submission_id, attempt_id, COMPILING, COMPILED,
+                compile_finished_at=contest_now(),
+            ):
+                return True
 
-        def _judge_one(tc):
-            expected = tc.expected_output or ""
-            if program is None:
+            def _judge_one(tc):
+                expected = tc.expected_output or ""
+                if program is None:
+                    return {
+                        "passed": False,
+                        "status": compile_error or "CE",
+                        "expected": expected,
+                        "actual": None,
+                        "time_used": 0,
+                        "stderr": compile_stderr or "",
+                    }
+                output, err_type, time_used_ms, stderr = program.run(
+                    tc.input_data, timeout=time_limit_sec, memory_limit=memory_limit,
+                )
+                metrics = dict(getattr(program, 'last_metrics', {}))
+                if err_type is not None:
+                    return {
+                        "passed": False,
+                        "status": err_type,
+                        "expected": expected,
+                        "actual": None,
+                        "time_used": time_used_ms,
+                        "stderr": stderr or "",
+                        "cpu_time": metrics.get('cpu_time', time_used_ms),
+                        "memory": metrics.get('memory', 0),
+                        "output_size": metrics.get('output_size', 0),
+                        "exit_code": metrics.get('exit_code'),
+                        "signal": metrics.get('signal'),
+                    }
+                actual = output or ""
+                passed = checker.check(actual, expected, tc.input_data)
                 return {
-                    "passed": False,
-                    "status": compile_error or "CE",
+                    "passed": passed,
+                    "status": "AC" if passed else "WA",
                     "expected": expected,
-                    "actual": None,
-                    "time_used": 0,
-                    "stderr": compile_stderr or "",
-                }
-            output, err_type, time_used_ms, stderr = program.run(
-                tc.input_data, timeout=time_limit_sec, memory_limit=memory_limit,
-            )
-            metrics = dict(getattr(program, 'last_metrics', {}))
-            if err_type is not None:
-                return {
-                    "passed": False,
-                    "status": err_type,
-                    "expected": expected,
-                    "actual": None,
+                    "actual": actual,
                     "time_used": time_used_ms,
-                    "stderr": stderr or "",
+                    "stderr": "",
                     "cpu_time": metrics.get('cpu_time', time_used_ms),
                     "memory": metrics.get('memory', 0),
                     "output_size": metrics.get('output_size', 0),
                     "exit_code": metrics.get('exit_code'),
                     "signal": metrics.get('signal'),
                 }
-            actual = output or ""
-            passed = checker.check(actual, expected, tc.input_data)
-            return {
-                "passed": passed,
-                "status": "AC" if passed else "WA",
-                "expected": expected,
-                "actual": actual,
-                "time_used": time_used_ms,
-                "stderr": "",
-                "cpu_time": metrics.get('cpu_time', time_used_ms),
-                "memory": metrics.get('memory', 0),
-                "output_size": metrics.get('output_size', 0),
-                "exit_code": metrics.get('exit_code'),
-                "signal": metrics.get('signal'),
-            }
 
-        if not self._transition_contest(
-            submission_id, attempt_id, COMPILED, RUNNING,
-            execution_started_at=contest_now(),
-        ):
-            program.close()
-            return True
+            if not self._transition_contest(
+                submission_id, attempt_id, COMPILED, RUNNING,
+                execution_started_at=contest_now(),
+            ):
+                return True
 
-        # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
-        # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
-        from services.contest_packages import OutputChecker
-        checker = None
-        try:
+            # 顺序判题：与生成测试用例时的运行环境一致（单进程、独占 CPU 时间片），
+            # 避免多用例并行争抢 CPU 导致参考代码在正式比赛时限内被判 TLE。
+            from services.contest_packages import OutputChecker
             checker = OutputChecker(package['checker_config'])
+            resources.callback(checker.close)
             details = []
             for tc in testcases:
                 result = _judge_one(tc)
                 details.append(result)
                 if is_acm and not result['passed']:
                     break
-        finally:
-            if checker is not None:
-                checker.close()
-            if program is not None:
-                program.close()
 
         execution_finished_at = contest_now()
         total_cpu_time = sum(d.get('cpu_time', 0) or 0 for d in details)

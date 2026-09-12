@@ -1,33 +1,48 @@
 name: Backend reliability and isolation
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+concurrency:
+  group: reliability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   backend:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: webapi/fastapi_of_letcoing
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13'
-      - run: sudo apt-get update && sudo apt-get install -y redis-server postgresql openjdk-17-jdk
+      - run: sudo apt-get update && sudo apt-get install -y redis-server postgresql openjdk-17-jdk prometheus
+      - run: promtool check rules deploy/alerts.yaml && promtool test rules deploy/alerts.test.yaml
       - run: pip install -r requirements-dev.txt
       - run: pip install pip-audit && pip-audit -r requirements.txt
       - run: echo "PG_BINDIR=$(pg_config --bindir)" >> "$GITHUB_ENV"
-      - run: python -m pytest -q
+      - run: python -m pytest -q --junitxml=backend-results.xml
       - run: docker build -f Dockerfile.sandbox -t letcoding-sandbox:local .
-      - run: python -m pytest tests/sandbox_integration.py -q
+      - run: python -m pytest tests/sandbox_integration.py -q --junitxml=sandbox-results.xml
       - run: docker build -t letcoding-api:local .
       - run: docker build -f Dockerfile.worker -t letcoding-worker:local .
+      - name: Preserve backend acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-acceptance-${{ github.sha }}
+          path: webapi/fastapi_of_letcoing/*-results.xml
+          retention-days: 14
   frontend-contract:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: webapp/letapp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -39,3 +54,16 @@ jobs:
       - run: node scripts/check-bundle.mjs
       - run: node scripts/check-production.mjs
       - run: npx playwright test
+
+  release-gate:
+    name: Required release gate
+    needs: [backend, frontend-contract]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require all acceptance jobs
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          FRONTEND_RESULT: ${{ needs.frontend-contract.result }}
+        run: test "$BACKEND_RESULT" = success && test "$FRONTEND_RESULT" = success

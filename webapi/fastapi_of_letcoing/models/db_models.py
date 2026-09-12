@@ -575,6 +575,11 @@ class Judgement(BaseModel):
     batch_id = IntegerField(null=True)
 
 
+class JuryMFAState(BaseModel):
+    user = ForeignKeyField(User, primary_key=True, on_delete='CASCADE')
+    last_counter = BigIntegerField(default=-1)
+
+
 class ContestAudit(BaseModel):
     contest = ForeignKeyField(Contest)
     actor = ForeignKeyField(User)
@@ -696,7 +701,7 @@ class LearnBrowsingHistory(BaseModel):
 # ============================================================
 
 # 所有已注册模型的列表（用于表创建和删除操作）
-MODELS = [User, UserJudgeStats, RankingProjectionState, AuthSession, OAuthGrant, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
+MODELS = [User, JuryMFAState, UserJudgeStats, RankingProjectionState, AuthSession, OAuthGrant, Problem, Testcase, Submission, UserCode, Favorite, Announcement,
           Contest, ContestRole, ContestTeam, ContestTeamMember, ContestParticipant, Discussion, DiscussionReply, DiscussionLike, DiscussionReplyLike,
           ContestProblem, ContestTestcase, ContestPackage, RejudgeBatch, ContestSubmission, Judgement,
           ContestAudit, ContestEvent, ContestClarification, ContestScoreboardSnapshot,
@@ -1076,6 +1081,7 @@ _SCHEMA_MIGRATIONS = [
         "UPDATE contests SET scoreboard_requested_version=GREATEST(scoreboard_requested_version,COALESCE((SELECT MAX(s.scoreboard_version) FROM contest_scoreboard_snapshots s WHERE s.contest_id=contests.id),0))+1 WHERE lifecycle_state NOT IN ('FINALIZED','CANCELLED');",
         "DELETE FROM contest_scoreboard_snapshots WHERE snapshot_kind='PUBLIC_FREEZE';",
     ]),
+    ('0021_production_controls', []),
 ]
 
 

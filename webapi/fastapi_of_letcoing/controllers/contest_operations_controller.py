@@ -78,6 +78,7 @@ class Roles(Resource):
         user = m.User.get_by_id(int(data['user_id']))
         with m.get_database().atomic():
             ops.lock_contest(contest_id)
+            ops.require(contest_id, actor, 'control')
             role, _ = m.ContestRole.get_or_create(contest=contest_id, user=user, defaults={'role': data['role']})
             role.role = data['role']; role.save()
             ops.audit(contest_id, actor, 'role.update', data.get('reason'), {'user_id': user.id, 'role': role.role})
@@ -115,7 +116,7 @@ class RejudgeReview(Resource):
         data = body()
         if data.get('action') not in {'apply', 'cancel'}:
             raise ValueError('action 必须为 apply 或 cancel')
-        batch = ops.apply_rejudge(batch_id, actor, data.get('reason'), cancel=data['action'] == 'cancel')
+        batch = ops.apply_rejudge(batch_id, actor, data.get('reason'), cancel=data['action'] == 'cancel', password=data.get('password'), totp=data.get('totp'))
         return {'state': batch.state}, 200
 
 
@@ -126,7 +127,7 @@ class Override(Resource):
     def post(self, contest_id, submission_id):
         data = body()
         result = ops.override_judgement(contest_id, submission_id, _get_current_user(),
-            data.get('verdict'), data.get('reason'), data.get('password'))
+            data.get('verdict'), data.get('reason'), data.get('password'), data.get('totp'))
         return {'submission_id': result.id, 'status': result.status}, 200
 
 
@@ -162,6 +163,7 @@ class ClarificationAnswer(Resource):
         data = body()
         with m.get_database().atomic():
             ops.lock_contest(contest_id)
+            ops.require(contest_id, actor, 'jury')
             question = m.ContestClarification.get(m.ContestClarification.id == question_id,
                 m.ContestClarification.contest == contest_id)
             if data.get('action') == 'claim':
@@ -246,6 +248,7 @@ class Rules(Resource):
             raise ValueError('比赛限制或罚时无效')
         with m.get_database().atomic():
             contest = ops.lock_contest(contest_id)
+            ops.require(contest_id, actor, 'control')
             if contest.lifecycle_state not in {'DRAFT', 'READY'}:
                 raise ValueError('发布后比赛规则已锁定')
             contest.allowed_languages = json.dumps(sorted(set(languages)))

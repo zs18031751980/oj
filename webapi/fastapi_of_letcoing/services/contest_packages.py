@@ -1,4 +1,5 @@
 """内容寻址题包和确定性检查器。题包包含秘密，只在裁判/Worker 边界使用。"""
+from contextlib import ExitStack
 import hashlib
 import json
 import math
@@ -152,6 +153,7 @@ def stage_package(problem_id, actor, data, reason):
     digest = hashlib.sha256(payload.encode()).hexdigest()
     with m.get_database().atomic():
         lock_contest(problem.contest_id)
+        require(problem.contest_id, actor, 'package')
         m.ContestPackage.insert(digest=digest, problem=problem, payload=payload,
             actor_id=actor.id, validation_state='PENDING').on_conflict_ignore().execute()
         audit(problem.contest_id, actor, 'package.stage', reason, {'digest': digest})
@@ -165,46 +167,42 @@ def validate_staged_package(digest):
     if package.validation_state not in {'PENDING', 'RUNNING'}:
         return
     package.validation_state = 'RUNNING'; package.save()
-    programs = []
-    checker = None
     try:
-        data = load_package(digest)
-        if os.environ.get('APP_ENV') == 'production' and data['runtime_image'] != os.environ.get('JUDGE_SANDBOX_IMAGE'):
-            raise ValueError('验证镜像与题包不一致')
-        checker = OutputChecker(data['checker_config'])
-        def prepare(spec):
-            program, error, _ = _prepare_program(spec['code'], spec['language'])
-            if error or program is None:
-                raise ValueError('题包程序编译失败')
-            programs.append(program)
-            return program
-        reference = prepare({'code': data['reference'], 'language': data['language']})
-        validator = prepare(data['validator']) if data.get('validator') else None
-        for case in data['cases']:
-            if validator:
-                _, error, _, _ = validator.run(case['input_data'], 2, 256)
-                if error or validator.last_metrics['exit_code'] != 0:
-                    raise ValueError('输入验证器拒绝测试数据')
-            actual, error, _, _ = reference.run(case['input_data'], *runtime_limits(data, data['language']))
-            if error or not checker.check(actual or '', case['expected_output'], case['input_data']):
-                raise ValueError('标准程序未通过全部测试')
-        for spec in data.get('known_wrong', []):
-            wrong = prepare(spec)
-            rejected = False
+        with ExitStack() as resources:
+            data = load_package(digest)
+            if os.environ.get('APP_ENV') == 'production' and data['runtime_image'] != os.environ.get('JUDGE_SANDBOX_IMAGE'):
+                raise ValueError('验证镜像与题包不一致')
+            checker = OutputChecker(data['checker_config'])
+            resources.callback(checker.close)
+            def prepare(spec: dict):
+                program, error, _ = _prepare_program(spec['code'], spec['language'])
+                if program is not None:
+                    resources.callback(program.close)
+                if error or program is None:
+                    raise ValueError('题包程序编译失败')
+                return program
+            reference = prepare({'code': data['reference'], 'language': data['language']})
+            validator = prepare(data['validator']) if data.get('validator') else None
             for case in data['cases']:
-                actual, error, _, _ = wrong.run(case['input_data'], *runtime_limits(data, spec['language']))
+                if validator:
+                    _, error, _, _ = validator.run(case['input_data'], 2, 256)
+                    if error or validator.last_metrics['exit_code'] != 0:
+                        raise ValueError('输入验证器拒绝测试数据')
+                actual, error, _, _ = reference.run(case['input_data'], *runtime_limits(data, data['language']))
                 if error or not checker.check(actual or '', case['expected_output'], case['input_data']):
-                    rejected = True; break
-            if not rejected:
-                raise ValueError('已知错误程序未被拒绝')
+                    raise ValueError('标准程序未通过全部测试')
+            for spec in data.get('known_wrong', []):
+                wrong = prepare(spec)
+                rejected = False
+                for case in data['cases']:
+                    actual, error, _, _ = wrong.run(case['input_data'], *runtime_limits(data, spec['language']))
+                    if error or not checker.check(actual or '', case['expected_output'], case['input_data']):
+                        rejected = True; break
+                if not rejected:
+                    raise ValueError('已知错误程序未被拒绝')
         package.validation_state, package.validation_error = 'VALID', None
     except Exception as exc:
         package.validation_state, package.validation_error = 'INVALID', str(exc)[:500]
-    finally:
-        if checker:
-            checker.close()
-        for program in programs:
-            program.close()
     package.save(only=[ContestPackage.validation_state, ContestPackage.validation_error])
 
 
@@ -215,6 +213,7 @@ def activate_package(digest, actor, reason):
     require(package.problem.contest_id, actor, 'control')
     with m.get_database().atomic():
         lock_contest(package.problem.contest_id)
+        require(package.problem.contest_id, actor, 'control')
         package = m.ContestPackage.get_by_id(digest)
         if package.validation_state != 'VALID':
             raise ValueError('题包尚未验证通过')

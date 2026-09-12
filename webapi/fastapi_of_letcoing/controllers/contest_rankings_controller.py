@@ -79,6 +79,23 @@ def _wall_delta_minutes(a, b):
         return 0
 
 
+def _ordered_submission_rows(query, received):
+    """受理时间 + ID 游标分页，限制驱动和 Python 单批驻留记录数。"""
+    last_time, last_id = None, None
+    while True:
+        page = query.where(received.is_null(False))
+        if last_id is not None:
+            page = page.where((received > last_time) | ((received == last_time) & (ContestSubmission.id > last_id)))
+        rows = list(page.order_by(received, ContestSubmission.id).limit(500).iterator())
+        if not rows:
+            return
+        yield from rows
+        last_time = rows[-1].received_at or rows[-1].submitted_at
+        last_id = rows[-1].id
+        if len(rows) < 500:
+            return
+
+
 def _compute_rankings(contest_id: int, cutoff_at=None, entry_ids=None):
     """根据比赛模式计算实时排行榜"""
     try:
@@ -142,7 +159,7 @@ def _compute_rankings(contest_id: int, cutoff_at=None, entry_ids=None):
         if entry_ids is not None:
             affected_teams = [t.id for t in teams.values() if t.captain_id in entry_ids]
             submission_query = submission_query.where((ContestSubmission.user.in_(entry_ids)) | (ContestSubmission.team.in_(affected_teams)))
-        submissions = [
+        submissions = (
             {
                 'id': submission.id,
                 'entry_id': teams[submission.team_id].captain_id if submission.team_id in teams else submission.user_id,
@@ -151,8 +168,8 @@ def _compute_rankings(contest_id: int, cutoff_at=None, entry_ids=None):
                 'verdict': submission.verdict or submission.status,
                 'received_at': submission.received_at or submission.submitted_at,
             }
-            for submission in submission_query
-        ]
+            for submission in _ordered_submission_rows(submission_query, received)
+        )
         scored_rows = compute_acm_scoreboard(
             entries=entries,
             problem_indexes=problem_indexes,
@@ -160,6 +177,7 @@ def _compute_rankings(contest_id: int, cutoff_at=None, entry_ids=None):
             start_at=contest_start,
             penalty_minutes=penalty_minutes,
             cutoff_at=cutoff_at,
+            presorted=True,
         )
         rankings = []
         for row in scored_rows:
@@ -342,7 +360,7 @@ def _save_public_snapshot(contest: Contest, data: dict, event_cursor=0) -> None:
     (ContestScoreboardSnapshot.insert(contest=contest, snapshot_kind='PUBLIC_FREEZE',
         payload=payload, scoreboard_version=contest.scoreboard_requested_version, event_cursor=event_cursor).on_conflict(
             conflict_target=(ContestScoreboardSnapshot.contest, ContestScoreboardSnapshot.snapshot_kind),
-            update={ContestScoreboardSnapshot.payload: payload, ContestScoreboardSnapshot.event_cursor: event_cursor,
+            update={ContestScoreboardSnapshot.updated_at: datetime.now(), ContestScoreboardSnapshot.payload: payload, ContestScoreboardSnapshot.event_cursor: event_cursor,
                     ContestScoreboardSnapshot.scoreboard_version: contest.scoreboard_requested_version}).execute())
 
 
@@ -360,6 +378,7 @@ def _save_live_projection(contest: Contest, data: dict, event_cursor=0) -> None:
             ContestScoreboardSnapshot.snapshot_kind,
         ),
         update={
+            ContestScoreboardSnapshot.updated_at: datetime.now(),
             ContestScoreboardSnapshot.payload: payload,
             ContestScoreboardSnapshot.event_cursor: event_cursor,
             ContestScoreboardSnapshot.scoreboard_version:
@@ -383,22 +402,21 @@ def _merge_entries(previous, changes):
     return result
 
 
-def refresh_live_projection(contest_id: int) -> bool:
-    """只重算发生变化的参赛实体；版本校验保证原子发布。"""
+def _projection_data(contest_id):
     from models.db_models import ContestEvent
     from peewee import fn
     contest = Contest.get_by_id(contest_id)
     if contest.lifecycle_state in {'CANCELLED', 'FINALIZED'}:
-        return False
-    version = contest.scoreboard_requested_version
+        return None
     live = ContestScoreboardSnapshot.get_or_none(ContestScoreboardSnapshot.contest == contest,
         ContestScoreboardSnapshot.snapshot_kind == 'LIVE')
     cursor = ContestEvent.select(fn.MAX(ContestEvent.id)).where(ContestEvent.contest == contest).scalar() or 0
     changed_ids = None
     if live and 'oi' not in (contest.contest_type or '').lower():
         events = list(ContestEvent.select().where(ContestEvent.contest == contest,
-            ContestEvent.id > live.event_cursor, ContestEvent.id <= cursor))
-        if events and all(e.kind in {'submission', 'judgement'} for e in events):
+            ContestEvent.id > live.event_cursor, ContestEvent.id <= cursor)
+            .order_by(ContestEvent.id).limit(1001))
+        if events and len(events) <= 1000 and all(e.kind in {'submission', 'judgement'} for e in events):
             submission_ids = [json.loads(e.payload).get('submission_id') for e in events]
             teams = {t.id: t.captain_id for t in ContestTeam.select().where(ContestTeam.contest == contest)}
             changed_ids = {teams.get(r.team_id, r.user_id) for r in ContestSubmission.select(
@@ -415,25 +433,68 @@ def refresh_live_projection(contest_id: int) -> bool:
         public = _compute_rankings(contest_id, cutoff_at=contest.freeze_time, entry_ids=selected)
         if selected is not None:
             public = _merge_entries(json.loads(prior.payload), public)
-    with get_database().atomic():
+    return contest, data, public, cursor
+
+
+def refresh_live_projection(contest_id: int) -> bool:
+    """PostgreSQL 快照读固定版本，短写事务发布；持续写入不使快照失效。"""
+    db = get_database()
+    postgres = db.__class__.__name__ != 'SqliteDatabase'
+    if postgres:
+        if db.in_transaction():
+            raise RuntimeError('projection must run outside a caller transaction')
+        with db.atomic():
+            db.execute_sql('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+            db.execute_sql("SET LOCAL statement_timeout='15s'")
+            db.execute_sql("SET LOCAL idle_in_transaction_session_timeout='30s'")
+            result = _projection_data(contest_id)
+    else:
+        result = _projection_data(contest_id)
+    if result is None:
+        return False
+    captured, data, public, cursor = result
+    with db.atomic():
         current = lock_contest(contest_id)
-        if (current.scoreboard_requested_version != version
-                or current.lifecycle_state in {'CANCELLED', 'FINALIZED'}):
+        if current.lifecycle_state in {'CANCELLED', 'FINALIZED'}:
             return False
-        _save_live_projection(current, data, cursor)
+        # SQLite 开发环境沿用乐观校验；生产读事务已保证单一 MVCC 视图。
+        if not postgres and current.scoreboard_requested_version != captured.scoreboard_requested_version:
+            return False
+        controls = ('lifecycle_state', 'freeze_time', 'thawed_at', 'start_time', 'end_time', 'contest_type')
+        if any(getattr(current, field) != getattr(captured, field) for field in controls):
+            return False
+        live = ContestScoreboardSnapshot.get_or_none(ContestScoreboardSnapshot.contest == current,
+            ContestScoreboardSnapshot.snapshot_kind == 'LIVE')
+        if live and live.scoreboard_version > captured.scoreboard_requested_version:
+            return False
+        if _contest_is_frozen(current) and public is None:
+            return False
+        _save_live_projection(captured, data, cursor)
         if public is not None:
-            _save_public_snapshot(current, public, cursor)
+            _save_public_snapshot(captured, public, cursor)
     return True
 
 
+_projection_cursor = 0
+
+
 def refresh_dirty_projections():
+    global _projection_cursor
     from peewee import JOIN, fn
     snapshot = ContestScoreboardSnapshot
+    from services.contest_operations import now as contest_now
+    missing_frozen = ((Contest.freeze_time <= contest_now()) & Contest.thawed_at.is_null()
+        & ~Contest.id.in_(snapshot.select(snapshot.contest).where(snapshot.snapshot_kind == 'PUBLIC_FREEZE')))
     rows = (Contest.select(Contest.id).join(snapshot, JOIN.LEFT_OUTER, on=(
         (snapshot.contest == Contest.id) & (snapshot.snapshot_kind == 'LIVE'))).where(
-        ((snapshot.id.is_null()) | (Contest.scoreboard_requested_version > fn.COALESCE(snapshot.scoreboard_version, 0)))
-        & (~Contest.lifecycle_state.in_(['CANCELLED', 'FINALIZED']))).limit(20))
-    for row in rows:
+        ((snapshot.id.is_null()) | (Contest.scoreboard_requested_version > fn.COALESCE(snapshot.scoreboard_version, 0)) | missing_frozen)
+        & (~Contest.lifecycle_state.in_(['CANCELLED', 'FINALIZED']))))
+    selected = list(rows.where(Contest.id > _projection_cursor).order_by(Contest.id).limit(20))
+    if not selected:
+        _projection_cursor = 0
+        selected = list(rows.order_by(Contest.id).limit(20))
+    for row in selected:
+        _projection_cursor = row.id
         db = get_database()
         if db.__class__.__name__ == 'SqliteDatabase':
             refresh_live_projection(row.id)

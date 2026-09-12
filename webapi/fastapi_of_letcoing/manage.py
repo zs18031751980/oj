@@ -8,15 +8,31 @@ from app_factory import create_app
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['migrate', 'seed', 'worker', 'set-role'])
+    parser.add_argument('command', choices=['migrate', 'seed', 'worker', 'set-role', 'audit-export', 'archive-outboxes'])
     parser.add_argument('--user-id', type=int)
     parser.add_argument('--role', choices=['member', 'staff', 'manager', 'provider'])
+    parser.add_argument('--directory')
+    parser.add_argument('--after', type=int, default=0)
+    parser.add_argument('--limit', type=int, default=500)
+    parser.add_argument('--retain-days', type=int, default=30)
+    parser.add_argument('--prune', action='store_true')
     args = parser.parse_args()
+    if args.command in {'audit-export', 'archive-outboxes'} and not args.directory:
+        parser.error('归档需要 --directory')
+    if args.retain_days < 7:
+        parser.error('最少保留七天')
     if args.command == 'set-role' and (not args.user_id or not args.role):
         parser.error('set-role 必须提供 --user-id 和 --role')
     app = create_app()
     with app.app_context():
-        if args.command == 'migrate':
+        if args.command in {'audit-export', 'archive-outboxes'}:
+            from services.retention import export_audit, archive_outboxes
+            from datetime import datetime, timedelta
+            import json
+            result = (export_audit(args.directory, args.after, args.limit) if args.command == 'audit-export'
+                else archive_outboxes(args.directory, datetime.now()-timedelta(days=args.retain_days), args.limit, args.prune))
+            print(json.dumps(result))
+        elif args.command == 'migrate':
             from models.db_models import run_schema_migrations
             run_schema_migrations()
         elif args.command == 'set-role':
@@ -40,7 +56,9 @@ def main():
             stopped.wait()
             worker = get_judge_worker()
             if worker:
-                worker.stop()
+                if not worker.stop(timeout=30):
+                    # 进程退出后由租约过期与 attempt 栅栏恢复，禁止提前重新投递活动任务。
+                    raise SystemExit(1)
 
 
 if __name__ == '__main__':

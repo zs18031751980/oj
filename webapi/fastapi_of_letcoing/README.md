@@ -30,3 +30,5 @@ python3 -m venv .venv
 - `/metrics` 需要独立 `METRICS_TOKEN` Bearer 凭证，应仅由内部监控访问。
 - OAuth 浏览器回调只携带一次性 code；`POST /auth/exchange` 结合浏览器会话兑换令牌。
 - 提交记录仅本人及 manager 可查询；响应不返回隐藏测试输入或答案。
+
+生产保障、迁移与验收要求：[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md)。

@@ -12,12 +12,17 @@ def register_metrics(app):
     latency = Histogram('letcoding_http_duration_seconds', 'HTTP latency', ['route'], registry=registry,
                         buckets=(.01, .05, .1, .25, .5, 1, 2, 5, 15, 30))
 
+    lock_wait = Histogram('letcoding_contest_lock_wait_seconds', 'Contest row lock acquisition duration',
+        registry=registry, buckets=(.001, .005, .01, .05, .1, .5, 1, 2, 5, 15))
+
     @app.after_request
     def count(response):
         import time
         route = str(request.url_rule or 'unmatched')
         requests.labels(request.method, route, str(response.status_code)).inc()
         latency.labels(route).observe(time.monotonic() - getattr(g, 'request_started', time.monotonic()))
+        if hasattr(g, 'contest_lock_wait'):
+            lock_wait.observe(g.contest_lock_wait)
         return response
 
     @app.get('/metrics')
@@ -44,7 +49,21 @@ def register_metrics(app):
                     body += f'letcoding_queue_length{{queue="{queue}",state="{state}"}} {value}\n'.encode()
                 value = cache._client.zcard(queue + ':retry')
                 body += f'letcoding_queue_length{{queue="{queue}",state="retry"}} {value}\n'.encode()
-            alive = sum(bool((cache.get(key) or {}).get('alive')) for key in cache._client.scan_iter('judge:worker:*', count=100))
+            from services.contest_metrics import POOLS, judge_histogram_text
+            body += judge_histogram_text(cache)
+            workers = [cache.get(key) or {} for key in cache._client.scan_iter('judge:worker:*', count=100)]
+            alive = sum(bool(worker.get('alive')) for worker in workers)
+            for pool in POOLS:
+                available = [w for w in workers if w.get('alive') and w.get('pool', 'all') == pool]
+                body += f'letcoding_worker_slots{{pool="{pool}",state="alive"}} {len(available)}\n'.encode()
+                body += f'letcoding_worker_slots{{pool="{pool}",state="idle"}} {sum(not w.get("active_job") and not w.get("draining") for w in available)}\n'.encode()
+                body += f'letcoding_worker_slots{{pool="{pool}",state="accepting"}} {sum(not w.get("draining") for w in available)}\n'.encode()
+                body += f'letcoding_worker_slots{{pool="{pool}",state="draining"}} {sum(bool(w.get("draining")) for w in available)}\n'.encode()
+                body += f'letcoding_projection_consecutive_failures{{pool="{pool}"}} {max((w.get("projection_consecutive_failures", 0) for w in available), default=0)}\n'.encode()
+            audit = [w for w in workers if w.get('alive') and w.get('audit_enabled')]
+            body += f'letcoding_audit_exporters {len(audit)}\n'.encode()
+            body += f'letcoding_audit_last_success_unix {max((w.get("audit_last_success_unix", 0) for w in audit), default=0)}\n'.encode()
+            body += f'letcoding_audit_consecutive_failures {max((w.get("audit_consecutive_failures", 0) for w in audit), default=0)}\n'.encode()
             body += f'letcoding_workers_alive {alive}\nletcoding_dependency_up{{dependency="redis"}} 1\n'.encode()
         except Exception:
             body += b'letcoding_dependency_up{dependency="redis"} 0\n'
@@ -59,7 +78,7 @@ def register_metrics(app):
                 body += f'letcoding_outbox_pending{{queue="{queue}"}} {count}\nletcoding_outbox_oldest_seconds{{queue="{queue}"}} {age}\n'.encode()
             from services.contest_metrics import competition_health
             health = competition_health()
-            for name in ('waiting', 'oldest_wait_seconds', 'projection_version_lag', 'unresolved_system_errors'):
+            for name in ('waiting', 'oldest_wait_seconds', 'projection_version_lag', 'projection_stale_seconds', 'unresolved_system_errors'):
                 body += f'letcoding_contest_{name} {health[name]}\n'.encode()
             for stage, values in health['stages'].items():
                 body += f'letcoding_contest_stage_samples{{stage="{stage}"}} {values["samples"]}\n'.encode()
@@ -68,4 +87,31 @@ def register_metrics(app):
             body += b'letcoding_dependency_up{dependency="postgres"} 1\n'
         except Exception:
             body += b'letcoding_dependency_up{dependency="postgres"} 0\n'
+        body += backup_metrics_text()
         return Response(body, content_type='text/plain; version=0.0.4; charset=utf-8')
+
+
+def backup_metrics_text() -> bytes:
+    """可选挂载 manifest；没有状态不能被解释成备份年龄为零。"""
+    import json
+    import time
+    import math
+    from pathlib import Path
+    path = os.environ.get('BACKUP_MANIFEST_FILE')
+    if not path:
+        return b'letcoding_backup_monitor_enabled 0\n'
+    body = b'letcoding_backup_monitor_enabled 1\n'
+    try:
+        with Path(path).open() as stream:
+            value = json.loads(stream.read(4*1024*1024))
+        if not isinstance(value, dict):
+            raise ValueError('backup manifest must be an object')
+        timestamp = value['snapshot_at_unix'] if 'snapshot_at_unix' in value else value['created_at_unix']
+        if type(timestamp) not in (int, float):
+            raise ValueError('backup timestamp must be numeric')
+        created = float(timestamp)
+        if not math.isfinite(created) or created <= 0 or created > time.time()+60:
+            raise ValueError('invalid backup timestamp')
+        return body + f'letcoding_backup_status_up 1\nletcoding_backup_age_seconds {max(0, time.time()-created)}\n'.encode()
+    except (OSError, ValueError, TypeError, KeyError):
+        return body + b'letcoding_backup_status_up 0\n'

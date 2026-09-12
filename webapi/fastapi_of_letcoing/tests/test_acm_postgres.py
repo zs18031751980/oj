@@ -21,8 +21,10 @@ def test_projection_does_not_block_submission_writes(postgres):
             assert executor.submit(writer).result(timeout=3) == 1
         return compute(*args, **kwargs)
     with patch.object(ranks, '_compute_rankings', side_effect=concurrent_compute):
-        assert ranks.refresh_live_projection(contest.id) is False
-    assert not m.ContestScoreboardSnapshot.select().exists()
+        assert ranks.refresh_live_projection(contest.id) is True
+    snapshot = m.ContestScoreboardSnapshot.get(m.ContestScoreboardSnapshot.snapshot_kind == 'LIVE')
+    assert snapshot.scoreboard_version == 0
+    assert m.Contest.get_by_id(contest.id).scoreboard_requested_version > 0
 
 
 def test_only_one_rejudge_batch_can_replace_same_original_revision(postgres):

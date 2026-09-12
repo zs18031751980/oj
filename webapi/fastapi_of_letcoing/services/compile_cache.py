@@ -20,9 +20,13 @@ def _restore(entry, workdir, key):
     if entry.is_symlink():
         return None
     metadata = json.loads((entry / 'manifest.json').read_text())
-    if metadata['key'] != key:
+    if not isinstance(metadata, dict) or metadata.get('key') != key:
         return None
-    if not 1 <= len(metadata['files']) <= 256:
+    files, command = metadata.get('files'), metadata.get('command')
+    if not isinstance(files, dict) or not 1 <= len(files) <= 256:
+        return None
+    if not isinstance(command, list) or not command or any(
+            not isinstance(part, str) or not part or '\0' in part for part in command):
         return None
     for relative, digest in metadata['files'].items():
         path = entry / relative
@@ -98,15 +102,20 @@ def prepare_cached(code, language, compile_timeout=20.):
         if work_root:
             Path(work_root).mkdir(parents=True, exist_ok=True)
         workdir = tempfile.mkdtemp(prefix='letcoding-cached-', dir=work_root)
+        transferred = False
         try:
-            command = _restore(entry, workdir, key)
-        except (OSError, ValueError, KeyError, TypeError):
-            command = None
-        if command:
-            program = PreparedProgram(command, workdir, language)
-            program.cache_hit = True
-            return program, None, None
-        shutil.rmtree(workdir, ignore_errors=True)
+            try:
+                command = _restore(entry, workdir, key)
+            except (OSError, ValueError, KeyError, TypeError):
+                command = None
+            if command:
+                program = PreparedProgram(command, workdir, language)
+                program.cache_hit = True
+                transferred = True
+                return program, None, None
+        finally:
+            if not transferred:
+                shutil.rmtree(workdir, ignore_errors=True)
         program, error, stderr = _prepare_program(code, language, compile_timeout)
         if program:
             program.cache_hit = False

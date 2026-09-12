@@ -85,3 +85,36 @@ def test_compilation_and_execution_are_isolated(language, source):
     stdout, error, _, _ = run(source, language, memory=256, timeout=5)
     assert error is None
     assert stdout.strip() == '42'
+
+
+def test_disk_and_process_limits_and_descendant_cleanup():
+    before = set(subprocess.run(['docker', 'ps', '-aq', '--filter', 'name=letcoding-job-'],
+        check=True, capture_output=True, text=True).stdout.split())
+    disk = '''import os
+try:
+    with open('/tmp/large', 'wb') as f:
+        for _ in range(80): f.write(b'x'*1048576)
+    print('unbounded')
+except OSError:
+    print('bounded')
+'''
+    stdout, error, _, _ = run(disk, memory=384)
+    assert error is None and stdout.strip() == 'bounded'
+    forks = '''import os, time
+children = []
+try:
+    for _ in range(180):
+        pid = os.fork()
+        if pid == 0:
+            os.close(1); os.close(2)
+            time.sleep(60)
+            os._exit(0)
+        children.append(pid)
+except OSError:
+    print('bounded', flush=True)
+'''
+    stdout, error, _, _ = run(forks, memory=512, timeout=3)
+    assert error is None and stdout.strip() == 'bounded'
+    after = set(subprocess.run(['docker', 'ps', '-aq', '--filter', 'name=letcoding-job-'],
+        check=True, capture_output=True, text=True).stdout.split())
+    assert after <= before, 'sandbox containers or descendants survived cleanup'

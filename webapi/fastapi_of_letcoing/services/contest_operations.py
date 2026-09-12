@@ -1,5 +1,6 @@
 """比赛控制、版本化复判、队伍和裁判答疑。所有写入保留审计或事件。"""
 import json
+import os
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
@@ -14,6 +15,9 @@ def now():
 
 def allowed(contest_id, actor, capability):
     if not actor:
+        return False
+    actor = m.User.get_or_none(m.User.id == actor.id)
+    if not actor or not actor.is_active:
         return False
     if actor.role == 'manager':
         return True
@@ -48,6 +52,7 @@ def thaw_contest(contest_id, actor, reason):
     require(contest_id, actor, 'control')
     with m.get_database().atomic():
         contest = lock_contest(contest_id)
+        require(contest_id, actor, 'control')
         if contest.lifecycle_state in {'DRAFT', 'READY', 'CANCELLED'}:
             raise ValueError('比赛当前状态不能解封')
         if not contest.thawed_at:
@@ -67,6 +72,7 @@ def create_rejudge(contest_id, actor, submission_ids, reason):
     reason = text_field(reason)
     with m.get_database().atomic():
         contest = lock_contest(contest_id)
+        require(contest_id, actor, 'rejudge')
         if contest.lifecycle_state in {'DRAFT', 'READY', 'CANCELLED'}:
             raise ValueError('当前比赛不可复判')
         if contest.lifecycle_state == 'FINALIZED':
@@ -106,7 +112,7 @@ def archive_judgement(submission, batch_id=None):
         package_digest=submission.package_digest, batch_id=batch_id)
 
 
-def apply_rejudge(batch_id, actor, reason, cancel=False):
+def apply_rejudge(batch_id, actor, reason, cancel=False, password=None, totp=None):
     batch = m.RejudgeBatch.get_by_id(batch_id)
     require(batch.contest_id, actor, 'rejudge')
     with m.get_database().atomic():
@@ -119,6 +125,15 @@ def apply_rejudge(batch_id, actor, reason, cancel=False):
         if contest.lifecycle_state == 'FINALIZED':
             require(contest.id, actor, 'control')
         candidates = list(m.ContestSubmission.select().where(m.ContestSubmission.rejudge_batch == batch))
+        threshold = int(os.environ.get('CONTEST_DUAL_REVIEW_MIN', '50' if os.environ.get('APP_ENV') == 'production' else '0'))
+        if not 0 <= threshold <= 500:
+            raise ValueError('双人复核阈值必须为 0 至 500')
+        if threshold > 0 and not cancel and (len(candidates) >= threshold or contest.lifecycle_state == 'FINALIZED'):
+            if batch.actor_id == actor.id:
+                raise PermissionError('敏感复判需要另一名裁判独立审核')
+        if not cancel and os.environ.get('JURY_REQUIRE_MFA', '0') == '1':
+            reauthenticate_jury(actor, password, totp)
+        require(contest.id, actor, 'rejudge')
         valid = {'AC', 'WA', 'CE', 'TLE', 'MLE', 'OLE', 'RE', 'SIGSEGV', 'SIGSYS', 'Partial'}
         if not cancel and any(c.status not in valid for c in candidates):
             raise ValueError('候选结果未完成或包含系统错误')
@@ -172,6 +187,7 @@ def create_team(contest_id, actor, name, member_ids):
         raise ValueError('成员编号无效')
     with m.get_database().atomic():
         contest = lock_contest(contest_id)
+        require(contest_id, actor, 'control')
         if contest.start_time and now() >= contest.start_time:
             raise ValueError('开赛后不能变更队伍')
         if contest.lifecycle_state in {'CANCELLED', 'FINALIZED'}:
@@ -208,6 +224,7 @@ def answer_clarification(question_id, actor, answer, broadcast=False):
     require(question.contest_id, actor, 'jury')
     with m.get_database().atomic():
         lock_contest(question.contest_id)
+        require(question.contest_id, actor, 'jury')
         question = m.ContestClarification.get_by_id(question_id)
         if question.claimed_by and question.claimed_by != actor.id:
             raise ValueError('问题由另一裁判认领')
@@ -235,15 +252,62 @@ def events_for(contest_id, actor, cursor, limit=100):
     return [{'id': e.id, 'type': e.kind, 'data': json.loads(e.payload)} for e in rows.order_by(m.ContestEvent.id).limit(min(max(1, limit), 200))]
 
 
-def override_judgement(contest_id, submission_id, actor, verdict, reason, password):
-    require(contest_id, actor, 'control')
+def verify_jury_totp(actor, code, timestamp=None):
+    """密钥由部署 Secret 注入；只持久化已消费时间步，跨进程阻止重放。"""
+    import base64
+    import hashlib
+    import hmac
+    import struct
+    import time
+    try:
+        secret = json.loads(os.environ.get('JURY_TOTP_SECRETS', '{}'))[str(actor.id)]
+        key = base64.b32decode(secret, casefold=True)
+        if len(key) < 20 or not isinstance(code, str) or len(code) != 6 or not code.isascii() or not code.isdigit():
+            raise ValueError()
+        current = int(time.time() if timestamp is None else timestamp) // 30
+        matched = None
+        for counter in (current, current-1, current+1):
+            if counter < 0:
+                continue
+            digest = hmac.new(key, struct.pack('>Q', counter), hashlib.sha1).digest()
+            offset = digest[-1] & 15
+            value = (struct.unpack('>I', digest[offset:offset+4])[0] & 0x7fffffff) % 1000000
+            if hmac.compare_digest(f'{value:06d}', code):
+                matched = counter
+        if matched is None:
+            raise ValueError()
+    except (KeyError, ValueError, TypeError):
+        raise PermissionError('裁判动态验证码无效或未配置') from None
+    with m.get_database().atomic():
+        state, _ = m.JuryMFAState.get_or_create(user=actor.id)
+        if m.JuryMFAState.update(last_counter=matched).where(
+                m.JuryMFAState.user == actor.id, m.JuryMFAState.last_counter < matched).execute() != 1:
+            raise PermissionError('裁判动态验证码已使用')
+
+
+def reauthenticate_jury(actor, password=None, totp=None):
     from werkzeug.security import check_password_hash
-    if not isinstance(password, str) or not actor.password_hash or not check_password_hash(actor.password_hash, password):
-        raise PermissionError('人工改判需要本地裁判账号重新认证')
+    actor = m.User.get_by_id(actor.id)
+    configured = str(actor.id) in json.loads(os.environ.get('JURY_TOTP_SECRETS', '{}'))
+    required = os.environ.get('JURY_REQUIRE_MFA', '0') == '1'
+    if configured or required:
+        verify_jury_totp(actor, totp)
+    # SSO 账号可使用已登录会话 + 独立 TOTP；本地账号仍需当前密码。
+    if actor.password_hash:
+        if not isinstance(password, str) or not check_password_hash(actor.password_hash, password):
+            raise PermissionError('裁判密码重新认证失败')
+    elif not configured:
+        raise PermissionError('人工改判需要本地密码或预配置的动态验证码')
+
+
+def override_judgement(contest_id, submission_id, actor, verdict, reason, password, totp=None):
+    require(contest_id, actor, 'control')
+    reauthenticate_jury(actor, password, totp)
     if verdict not in {'AC', 'WA', 'CE', 'TLE', 'MLE', 'OLE', 'RE'}:
         raise ValueError('无效的人工判定')
     with m.get_database().atomic():
         contest = lock_contest(contest_id)
+        require(contest_id, actor, 'control')
         if contest.lifecycle_state in {'DRAFT', 'READY', 'CANCELLED', 'FINALIZED'}:
             raise ValueError('当前比赛状态禁止改判')
         submission = m.ContestSubmission.get(m.ContestSubmission.id == submission_id,

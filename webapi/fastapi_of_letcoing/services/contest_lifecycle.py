@@ -42,4 +42,11 @@ def lock_contest(contest_id):
     query = Contest.select().where(Contest.id == contest_id)
     if get_database().__class__.__name__ != 'SqliteDatabase':
         query = query.for_update()
-    return query.get()
+    import time
+    from flask import g, has_request_context
+    started = time.monotonic()
+    try:
+        return query.get()
+    finally:
+        if has_request_context():
+            g.contest_lock_wait = getattr(g, 'contest_lock_wait', 0.) + time.monotonic()-started

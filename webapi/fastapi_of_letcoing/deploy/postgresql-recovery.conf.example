@@ -1,0 +1,14 @@
+# 由 DBA 合并到实际主库配置；WAL 目录必须是独立、受控、足够容量的持久存储。
+# 路径仅是示例，不会由本项目自动应用。
+wal_level = replica
+archive_mode = on
+archive_command = '/usr/bin/python3 /opt/letcoding/deploy/archive_wal.py "%p" /srv/letcoding-wal'
+archive_timeout = '60s'
+# archive_timeout 不是 RPO 保证。需要按归档延迟/存储故障演练确定恢复点。
+# 要求已确认提交零丢失时，应配置并验收同步副本及故障切换策略。
+
+# 以下仅用于独立物理恢复实例；不要直接添加到运行中的主库。
+# restore_command = 'cp /srv/letcoding-wal/%f %p'
+# recovery_target_time = '2026-09-12 12:00:00+00'
+# recovery_target_action = 'pause'
+# 在已恢复基础备份的独立 PGDATA 内创建 recovery.signal 后启动恢复实例。

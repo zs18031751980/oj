@@ -1,10 +1,12 @@
 # 在独立判题主机部署，绝不与 API 共用 Docker socket。
 services:
   worker:
-    image: letcoding-worker:local
+    image: "${WORKER_IMAGE:?Set immutable Worker image digest}"
+    command: [sh, -c, 'python deploy/check_release.py --role worker && exec python manage.py worker']
     restart: unless-stopped
     env_file: ../.env.worker.production
     environment:
+      WORKER_IMAGE: "${WORKER_IMAGE:?Set immutable Worker image digest}"
       JUDGE_BACKEND: docker
       JUDGE_WORK_ROOT: /var/lib/letcoding/jobs
       JUDGE_SANDBOX_IMAGE: "${JUDGE_SANDBOX_IMAGE:?Pin the exact sandbox image digest}"

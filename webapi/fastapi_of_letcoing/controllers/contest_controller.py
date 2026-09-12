@@ -2,7 +2,7 @@ from services.contest_lifecycle import transactional, lock_contest
 import json
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
-from flask import request
+from flask import g, request
 from flask_restx import Namespace, Resource, fields
 from models.db_models import (
     Contest, ContestParticipant, User, ContestProblem, ContestTestcase, ContestSubmission,
@@ -92,6 +92,24 @@ def _parse_dt(value):
         return dt
     except Exception:
         return None
+
+
+def _contest_submission_replay(contest_id, owner, key, problem_id, language, code):
+    """同一请求的重取先于额度和时间限制；同键异内容明确拒绝。"""
+    if not key:
+        return None
+    existing = ContestSubmission.select().where(
+        ContestSubmission.contest == contest_id, owner,
+        ContestSubmission.contest_eligible == True,
+        ContestSubmission.idempotency_key == key,
+    ).first()
+    if existing is None:
+        return None
+    if (existing.contest_problem_id != problem_id or existing.language != language or existing.code != code):
+        return {'error': '幂等键已用于不同提交'}, 409
+    return {'submission_id': existing.id, 'job_id': existing.job_id,
+        'attempt_id': existing.attempt_id, 'status': existing.status,
+        'idempotent_replay': True}, 202
 
 
 def _contest_time_error(contest, received_at=None):
@@ -546,22 +564,9 @@ class ContestProblemSubmitController(Resource):
         idempotency_key = request.headers.get('Idempotency-Key', '').strip() or None
         if idempotency_key and len(idempotency_key) > 128:
             return {'error': '幂等键过长'}, 400
-        if idempotency_key:
-            existing = ContestSubmission.select().where(
-                ContestSubmission.contest == contest,
-                owner,
-                ContestSubmission.idempotency_key == idempotency_key,
-            ).first()
-            if existing:
-                if (existing.contest_problem_id != problem.id or existing.language != language or existing.code != code):
-                    return {'error': '幂等键已用于不同提交'}, 409
-                return {
-                    'submission_id': existing.id,
-                    'job_id': existing.job_id,
-                    'attempt_id': existing.attempt_id,
-                    'status': existing.status,
-                    'idempotent_replay': True,
-                }, 202
+        replay = _contest_submission_replay(contest_id, owner, idempotency_key, problem.id, language, code)
+        if replay is not None:
+            return replay
 
         redis_service = inject(IRedisService)
         job_id = uuid4().hex
@@ -577,21 +582,26 @@ class ContestProblemSubmitController(Resource):
         try:
             with get_database().atomic():
                 contest = lock_contest(contest_id)
+                current_user = User.get_or_none(User.id == user.id)
+                if not current_user or not current_user.is_active or not _require_participant(contest, current_user):
+                    return {'error': '参赛身份已失效，请重新确认账号和报名状态'}, 403
+                member = ContestTeamMember.get_or_none(ContestTeamMember.contest == contest_id, ContestTeamMember.user == user.id)
+                owner = (ContestSubmission.team == member.team_id) if member else (ContestSubmission.user == user.id)
+                replay = _contest_submission_replay(contest_id, owner, idempotency_key, problem_id, language, code)
+                if replay is not None:
+                    return replay
                 time_error = _contest_time_error(contest, received_at)
                 if time_error:
                     return {'error': time_error}, 409
-                from services.contest_operations import entry_user
-                entry_id = entry_user(contest_id, user.id)
-                member = ContestTeamMember.get_or_none(ContestTeamMember.contest == contest_id, ContestTeamMember.user == user.id)
-                if get_database().__class__.__name__ != 'SqliteDatabase':
-                    User.select().where(User.id == entry_id).for_update().get()
+                entry_id = member.team.captain_id if member else user.id
+                # 比赛行锁已串行化本场额度检查，避免再锁全局用户行。
+                problem = ContestProblem.get_by_id(problem_id)
                 from services.judge_state import TERMINAL_STATES
-                owner = (ContestSubmission.team == member.team_id) if member else (ContestSubmission.user == user.id)
                 active = ContestSubmission.select().where(owner, ContestSubmission.contest == contest,
                     ContestSubmission.contest_eligible == True,
                     ~ContestSubmission.status.in_(list(TERMINAL_STATES))).count()
                 if active >= contest.active_submission_limit:
-                    return {'error': '最多同时处理 3 个比赛提交'}, 429, {'Retry-After': '5'}
+                    return {'error': f'最多同时处理 {contest.active_submission_limit} 个比赛提交'}, 429, {'Retry-After': '5'}
                 from services.contest_packages import publish_package, canonical
                 import hashlib
                 if not problem.package_digest:
@@ -623,24 +633,15 @@ class ContestProblemSubmitController(Resource):
                 emit(contest_id, 'submission', {'submission_id': submission.id, 'entry_id': entry_id}, 'jury')
         except Exception:
             # 并发重试可能由唯一幂等索引先完成写入；把它视为同一提交。
-            if idempotency_key:
-                existing = ContestSubmission.select().where(
-                    ContestSubmission.contest == contest,
-                    owner,
-                    ContestSubmission.idempotency_key == idempotency_key,
-                ).first()
-                if existing:
-                    if (existing.contest_problem_id != problem.id or existing.language != language or existing.code != code):
-                        return {'error': '幂等键已用于不同提交'}, 409
-                    return {
-                        'submission_id': existing.id,
-                        'job_id': existing.job_id,
-                        'attempt_id': existing.attempt_id,
-                        'status': existing.status,
-                        'idempotent_replay': True,
-                    }, 202
+            replay = _contest_submission_replay(contest_id, owner, idempotency_key, problem_id, language, code)
+            if replay is not None:
+                return replay
             return {'error': '提交记录暂时无法保存，请稍后重试'}, 503
         submission_id = submission.id
+        import logging
+        logging.getLogger('letcoding.requests').info(
+            'submission_accepted request_id=%s submission_id=%s job_id=%s attempt_id=%s',
+            getattr(g, 'request_id', ''), submission_id, job_id, submission.attempt_id)
 
         # 数据库已持久化事实与 outbox；即时投递失败也由 Worker 后续补偿，不能丢比赛提交。
         dispatched = dispatch_outbox_entry(redis_service, outbox)
