@@ -103,7 +103,8 @@ const categories = computed<CategoryOption[]>(() => {
       seen.set(p.category, p.categoryLabel || categoryDisplayName(p.category));
     }
   }
-  return Array.from(seen, ([key, label]) => ({ key, label }));
+  return Array.from(seen, ([key, label]) => ({ key, label }))
+    .filter(({ label }) => label.trim() !== '1');
 });
 
 const filteredProblems = computed(() => {
